@@ -114,7 +114,6 @@
                         <configuration>
                             <transformers>
                                 <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
-                                    <!-- APUNTA A TU MAIN FALSO -->
                                     <mainClass>com.entidaddesconocida.monte_erp.Launcher</mainClass>
                                 </transformer>
                             </transformers>
