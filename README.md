@@ -99,9 +99,11 @@ docker run -d \
   -e MYSQL_PASSWORD=erp_pass \
   -v monte_erp_data:/var/lib/mysql \
   mysql:8.0
-```
+``` 
 
 # Conectarse al contenedor con el cliente MySQL
 `docker exec -it monte_erp_mysql mysql -u erp_user -p monte_erp`
 
 ---
+
+
