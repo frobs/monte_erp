@@ -6,7 +6,6 @@ import com.entidaddesconocida.monte_erp.infrastructure.config.DatabaseConnection
 import javafx.event.ActionEvent;
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
-import javafx.scene.Node;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.scene.control.Alert;
@@ -89,10 +88,10 @@ public class MainController {
     }
 
     @FXML
-    private void onSignOut(ActionEvent event) throws IOException {
+    private void onSignOut() throws IOException {
         FXMLLoader loader = new FXMLLoader(MainController.class.getResource(LOGIN_VIEW));
         Parent root = loader.load();
-        Stage stage = (Stage) ((Node) event.getSource()).getScene().getWindow();
+        Stage stage = (Stage) usernameLabel.getScene().getWindow();
         stage.setTitle("Monte ERP · Iniciar sesión");
         stage.setScene(new Scene(root, LOGIN_WIDTH, LOGIN_HEIGHT));
         stage.centerOnScreen();

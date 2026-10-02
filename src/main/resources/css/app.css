@@ -20,6 +20,12 @@
     -fx-text-fill: #1f2a44;
 }
 
+.white-title {
+    -fx-font-size: 24px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #fdfdfd;
+}
+
 .subtitle {
     -fx-font-size: 13px;
     -fx-text-fill: #64748b;
@@ -113,6 +119,40 @@
     -fx-padding: 4 10 4 10;
 }
 
+/* ---------- Session dropdown (topbar) ---------- */
+.session-menu {
+    -fx-background-color: transparent;
+    -fx-background-insets: 0;
+    -fx-text-fill: #2563eb;
+    -fx-border-color: #2563eb;
+    -fx-border-radius: 8;
+    -fx-background-radius: 8;
+    -fx-padding: 6 10 6 14;
+    -fx-font-size: 13px;
+    -fx-cursor: hand;
+}
+
+.session-menu:hover, .session-menu:showing {
+    -fx-background-color: rgba(37, 99, 235, 0.10);
+}
+
+.session-menu > .arrow-button > .arrow {
+    -fx-background-color: #2563eb;
+}
+
+.session-menu > .label {
+    -fx-text-fill: #2563eb;
+}
+
+.session-menu-item {
+    -fx-padding: 8 20 8 18;
+    -fx-font-size: 13px;
+}
+
+.session-menu-item:focused {
+    -fx-background-color: rgba(37, 99, 235, 0.12);
+}
+
 .module-button {
     -fx-background-color: #ffffff;
     -fx-text-fill: #1f2a44;
@@ -126,6 +166,21 @@
 
 .module-button:hover {
     -fx-background-color: #eff6ff;
+}
+
+.admin-module-button {
+    -fx-background-color: #b35f1b;
+    -fx-text-fill: #1f2a44;
+    -fx-font-size: 14px;
+    -fx-background-radius: 10;
+    -fx-padding: 18 26 18 26;
+    -fx-min-width: 190;
+    -fx-cursor: hand;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.15), 10, 0.1, 0, 3);
+}
+
+.admin-module-button:hover {
+    -fx-background-color: #b35f1b;
 }
 
 .admin-module {

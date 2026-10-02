@@ -3,6 +3,8 @@
 <?import javafx.geometry.Insets?>
 <?import javafx.scene.control.Button?>
 <?import javafx.scene.control.Label?>
+<?import javafx.scene.control.MenuButton?>
+<?import javafx.scene.control.MenuItem?>
 <?import javafx.scene.layout.BorderPane?>
 <?import javafx.scene.layout.HBox?>
 <?import javafx.scene.layout.Region?>
@@ -25,7 +27,12 @@
             <Label text="Usuario:" styleClass="topbar-caption"/>
             <Label fx:id="usernameLabel" styleClass="topbar-value"/>
             <Label fx:id="roleLabel" styleClass="role-badge"/>
-            <Button text="Cerrar sesión" onAction="#onSignOut" styleClass="secondary-button"/>
+            <MenuButton fx:id="sessionMenuButton" text="Sesión" styleClass="session-menu">
+                <items>
+                    <MenuItem text="Cerrar sesión" onAction="#onSignOut" styleClass="session-menu-item"/>
+                    <MenuItem text="Salir" onAction="#onExit" styleClass="session-menu-item"/>
+                </items>
+            </MenuButton>
         </HBox>
     </top>
 
@@ -35,7 +42,7 @@
                 <Insets top="28.0" right="28.0" bottom="28.0" left="28.0"/>
             </padding>
 
-            <Label fx:id="welcomeLabel" styleClass="title"/>
+            <Label fx:id="welcomeLabel" styleClass="white-title"/>
             <Label styleClass="subtitle" wrapText="true"
                    text="Selecciona un módulo. Solo se muestran las opciones permitidas para tu rol."/>
 
@@ -48,8 +55,7 @@
                 <Button text="Pedidos" onAction="#onPendingModule" styleClass="module-button"/>
                 <Button text="Stock" onAction="#onPendingModule" styleClass="module-button"/>
                 <Button fx:id="manageUsersButton" text="Gestión de usuarios"
-                        onAction="#onManageUsers" styleClass="module-button admin-module"/>
-                <Button text="Salir" onAction="#onExit" styleClass="module-button"/>
+                        onAction="#onManageUsers" styleClass="admin-module-button"/>
             </TilePane>
         </VBox>
     </center>
