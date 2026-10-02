@@ -1,7 +1,7 @@
 package com.entidaddesconocida.monte_erp.infrastructure.config;
 
+import com.entidaddesconocida.monte_erp.domain.model.User;
 import com.entidaddesconocida.monte_erp.infrastructure.UserRepository;
-import com.entidaddesconocida.monte_erp.domain.model.Usuario;
 import com.entidaddesconocida.monte_erp.security.PasswordHasher;
 
 import org.junit.jupiter.api.AfterEach;
@@ -20,96 +20,95 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 /**
- * Verifica contra la base de datos real (contenedor {@code monte_erp_mysql}) el
- * flujo de autenticación de RF-01: migraciones aplicadas, usuarios sembrados y
- * contraseñas verificables.
+ * Checks the RF-01 authentication flow against the real database (the
+ * {@code monte_erp_mysql} container): migrations applied, seeded users and
+ * verifiable passwords.
  *
- * <p>Si MySQL no está disponible, las pruebas se marcan como omitidas en lugar
- * de fallar: {@code ./mvnw test} debe poder ejecutarse sin la base de datos
- * arrancada.</p>
+ * <p>When MySQL is unavailable the tests are reported as skipped instead of
+ * failing: {@code ./mvnw test} must be runnable without the database up.</p>
  */
 class DataSeederTest {
 
-    private static final String LOGIN_TEMPORAL = "test_rf01_usuario";
+    private static final String TEMPORARY_USERNAME = "test_rf01_user";
 
     @BeforeAll
-    static void prepararBaseDeDatos() {
-        assumeTrue(baseDeDatosDisponible(), "MySQL no disponible: pruebas de integración omitidas");
+    static void prepareDatabase() {
+        assumeTrue(databaseIsAvailable(), "MySQL unavailable: integration tests skipped");
         try {
             MigrationRunner.migrate();
             DataSeeder.seed();
         } catch (Exception e) {
-            assumeTrue(false, "No se pudo preparar la base de datos: " + e.getMessage());
+            assumeTrue(false, "Could not prepare the database: " + e.getMessage());
         }
     }
 
     @AfterEach
-    void limpiarUsuarioTemporal() throws SQLException {
+    void removeTemporaryUser() throws SQLException {
         try (PreparedStatement ps = DatabaseConnection.getConnection()
-                .prepareStatement("DELETE FROM USUARIO WHERE usuario = ?")) {
-            ps.setString(1, LOGIN_TEMPORAL);
+                .prepareStatement("DELETE FROM USER WHERE username = ?")) {
+            ps.setString(1, TEMPORARY_USERNAME);
             ps.executeUpdate();
         }
     }
 
     @Test
-    @DisplayName("admin/admin123 y empleado/empleado123 inician sesión con su rol")
-    void usuariosSembradosPuedenIniciarSesion() throws SQLException {
+    @DisplayName("admin/admin123 and employee/employee123 sign in with their role")
+    void seededUsersCanSignIn() throws SQLException {
         UserRepository userRepository = new UserRepository();
 
-        Usuario admin = userRepository.buscarPorUsuario(DataSeeder.ADMIN_USUARIO);
-        assertNotNull(admin, "El seed debe crear el usuario admin");
+        User admin = userRepository.findByUsername(DataSeeder.ADMIN_USERNAME);
+        assertNotNull(admin, "the seed must create the admin user");
         assertTrue(PasswordHasher.verify(DataSeeder.ADMIN_PASSWORD, admin.getPasswordHash()));
-        assertTrue(admin.esAdmin());
-        assertTrue(admin.isActivo());
+        assertTrue(admin.isAdmin());
+        assertTrue(admin.isActive());
 
-        Usuario empleado = userRepository.buscarPorUsuario(DataSeeder.EMPLEADO_USUARIO);
-        assertNotNull(empleado, "El seed debe crear el usuario empleado");
-        assertTrue(PasswordHasher.verify(DataSeeder.EMPLEADO_PASSWORD, empleado.getPasswordHash()));
-        assertFalse(empleado.esAdmin());
-        assertEquals(Usuario.ROL_EMPLEADO, empleado.getRol());
+        User employee = userRepository.findByUsername(DataSeeder.EMPLOYEE_USERNAME);
+        assertNotNull(employee, "the seed must create the employee user");
+        assertTrue(PasswordHasher.verify(DataSeeder.EMPLOYEE_PASSWORD, employee.getPasswordHash()));
+        assertFalse(employee.isAdmin());
+        assertEquals(User.ROLE_EMPLOYEE, employee.getRole());
     }
 
     @Test
-    @DisplayName("La contraseña errónea se rechaza y el hash no está en claro")
-    void contrasenaErroneaNoAutentica() throws SQLException {
-        Usuario admin = new UserRepository().buscarPorUsuario(DataSeeder.ADMIN_USUARIO);
+    @DisplayName("A wrong password is rejected and the hash is never stored in clear text")
+    void wrongPasswordDoesNotAuthenticate() throws SQLException {
+        User admin = new UserRepository().findByUsername(DataSeeder.ADMIN_USERNAME);
         assertNotNull(admin);
-        assertFalse(PasswordHasher.verify("contrasena-incorrecta", admin.getPasswordHash()));
+        assertFalse(PasswordHasher.verify("wrong-password", admin.getPasswordHash()));
         assertFalse(admin.getPasswordHash().contains(DataSeeder.ADMIN_PASSWORD),
-                "password_hash no debe contener la contraseña en claro");
+                "password_hash must not contain the password in clear text");
     }
 
     @Test
-    @DisplayName("Un usuario inexistente devuelve null")
-    void usuarioInexistente() throws SQLException {
-        assertNull(new UserRepository().buscarPorUsuario("no_existe_este_usuario"));
+    @DisplayName("An unknown user returns null")
+    void unknownUserReturnsNull() throws SQLException {
+        assertNull(new UserRepository().findByUsername("this_user_does_not_exist"));
     }
 
     @Test
-    @DisplayName("Un usuario desactivado conserva su hash pero queda inactivo (baja lógica)")
-    void usuarioDesactivadoNoPuedeIniciarSesion() throws SQLException {
+    @DisplayName("A deactivated user keeps its hash but can no longer sign in (logical deletion)")
+    void deactivatedUserCannotSignIn() throws SQLException {
         UserRepository userRepository = new UserRepository();
 
-        Usuario temporal = new Usuario("Usuario de prueba", LOGIN_TEMPORAL,
-                PasswordHasher.hash("temporal123"), Usuario.ROL_EMPLEADO, true);
-        userRepository.insertar(temporal);
-        assertTrue(temporal.getId() > 0, "El alta debe devolver el id generado");
+        User temporary = new User("Temporary test user", TEMPORARY_USERNAME,
+                PasswordHasher.hash("temporary123"), User.ROLE_EMPLOYEE, true);
+        userRepository.insert(temporary);
+        assertTrue(temporary.getId() > 0, "insert must return the generated id");
 
-        Usuario recuperado = userRepository.buscarPorUsuario(LOGIN_TEMPORAL);
-        assertNotNull(recuperado);
-        assertTrue(recuperado.isActivo());
+        User retrieved = userRepository.findByUsername(TEMPORARY_USERNAME);
+        assertNotNull(retrieved);
+        assertTrue(retrieved.isActive());
 
-        userRepository.desactivar(recuperado.getId());
+        userRepository.deactivate(retrieved.getId());
 
-        Usuario desactivado = userRepository.buscarPorUsuario(LOGIN_TEMPORAL);
-        assertNotNull(desactivado, "La baja es lógica: la fila no se borra");
-        assertFalse(desactivado.isActivo(), "Tras desactivar, activo debe ser 0");
-        assertFalse(desactivado.isActivo() && PasswordHasher.verify("temporal123", desactivado.getPasswordHash()),
-                "El login debe rechazarse para un usuario desactivado");
+        User deactivated = userRepository.findByUsername(TEMPORARY_USERNAME);
+        assertNotNull(deactivated, "deletion is logical: the row is not removed");
+        assertFalse(deactivated.isActive(), "after deactivating, active must be 0");
+        assertFalse(deactivated.isActive() && PasswordHasher.verify("temporary123", deactivated.getPasswordHash()),
+                "sign in must be rejected for a deactivated user");
     }
 
-    private static boolean baseDeDatosDisponible() {
+    private static boolean databaseIsAvailable() {
         try {
             DatabaseConnection.getConnection();
             return true;

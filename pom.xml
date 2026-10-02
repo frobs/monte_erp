@@ -85,8 +85,8 @@
                 </exclusion>
             </exclusions>
         </dependency>
-        <!-- Driver JDBC de MySQL. El JAR no trae module-info.class: su nombre de
-             módulo automático se deriva del artefacto (mysql.connector.j). -->
+        <!-- MySQL JDBC driver. The JAR ships no module-info.class: its automatic
+             module name is derived from the artifact name (mysql.connector.j). -->
         <dependency>
             <groupId>com.mysql</groupId>
             <artifactId>mysql-connector-j</artifactId>
@@ -133,8 +133,8 @@
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>3.5.2</version>
                 <configuration>
-                    <!-- Los tests se ejecutan en el classpath: el módulo no necesita
-                         declarar lectura de JUnit en module-info.java. -->
+                    <!-- Tests run on the classpath: the module does not need to
+                         declare a read edge to JUnit in module-info.java. -->
                     <useModulePath>false</useModulePath>
                 </configuration>
             </plugin>
@@ -157,7 +157,7 @@
                         <id>default-cli</id>
                         <configuration>
                             <mainClass>
-                                com.entidaddesconocida.monte_erp/com.entidaddesconocida.monte_erp.HelloApplication
+                                com.entidaddesconocida.monte_erp/com.entidaddesconocida.monte_erp.MonteErpApplication
                             </mainClass>
                             <launcher>app</launcher>
                             <jlinkZipName>app</jlinkZipName>

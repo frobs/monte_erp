@@ -9,16 +9,16 @@ import java.security.spec.InvalidKeySpecException;
 import java.util.Base64;
 
 /**
- * Hash y verificación de contraseñas con PBKDF2-HMAC-SHA256 (solo JDK, sin
- * dependencias externas).
+ * Password hashing and verification with PBKDF2-HMAC-SHA256 (JDK only, no
+ * external dependencies).
  *
- * <p>Formato almacenado, autodescriptivo para poder cambiar los parámetros en
- * el futuro sin invalidar los hashes existentes:</p>
+ * <p>Stored format, self describing so the parameters can be changed in the
+ * future without invalidating the existing hashes:</p>
  *
- * <pre>pbkdf2-sha256$&lt;iteraciones&gt;$&lt;salt en Base64&gt;$&lt;clave en Base64&gt;</pre>
+ * <pre>pbkdf2-sha256$&lt;iterations&gt;$&lt;salt in Base64&gt;$&lt;key in Base64&gt;</pre>
  *
- * <p>La comparación usa {@link MessageDigest#isEqual} (tiempo constante) para no
- * filtrar información por temporización.</p>
+ * <p>The comparison uses {@link MessageDigest#isEqual} (constant time) so no
+ * information leaks through timing.</p>
  */
 public final class PasswordHasher {
 
@@ -31,17 +31,17 @@ public final class PasswordHasher {
     private static final SecureRandom RANDOM = new SecureRandom();
 
     private PasswordHasher() {
-        // Utilidad: no se instancia.
+        // Utility class: never instantiated.
     }
 
     /**
-     * Genera el hash de una contraseña con un salt aleatorio nuevo.
+     * Hashes a password with a brand new random salt.
      *
-     * @throws IllegalArgumentException si la contraseña es nula o vacía
+     * @throws IllegalArgumentException when the password is null or empty
      */
     public static String hash(String password) {
         if (password == null || password.isEmpty()) {
-            throw new IllegalArgumentException("La contraseña no puede estar vacía");
+            throw new IllegalArgumentException("Password must not be empty");
         }
         byte[] salt = new byte[SALT_BYTES];
         RANDOM.nextBytes(salt);
@@ -52,10 +52,10 @@ public final class PasswordHasher {
     }
 
     /**
-     * Comprueba una contraseña contra un hash almacenado.
+     * Checks a password against a stored hash.
      *
-     * @return {@code true} solo si la contraseña es correcta; {@code false} ante
-     *         formatos desconocidos o corruptos (nunca lanza excepción)
+     * @return {@code true} only when the password is correct; {@code false} for
+     *         unknown or corrupted formats (never throws)
      */
     public static boolean verify(String password, String storedHash) {
         if (password == null || storedHash == null || storedHash.isBlank()) {
@@ -84,7 +84,7 @@ public final class PasswordHasher {
         try {
             return SecretKeyFactory.getInstance(ALGORITHM).generateSecret(spec).getEncoded();
         } catch (NoSuchAlgorithmException | InvalidKeySpecException e) {
-            throw new IllegalStateException("No se pudo calcular el hash PBKDF2", e);
+            throw new IllegalStateException("Could not compute the PBKDF2 hash", e);
         } finally {
             spec.clearPassword();
         }

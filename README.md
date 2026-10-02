@@ -17,11 +17,11 @@ Aplicación de escritorio ERP construida con **Java 25** y **JavaFX 21**, gestio
 
 ## Requisitos previos
 
-| Herramienta   | Versión mínima | Instalación                                                |
-|---------------|----------------|--------------------------------------------------------------|
-| JDK           | 25             | [Oracle JDK](https://www.oracle.com/java/technologies/downloads/) o [OpenJDK](https://openjdk.org/) |
-| Maven         | 3.9+           | [Maven download](https://maven.apache.org/download.cgi) o usar el wrapper `./mvnw` incluido |
-| Docker        | 24+            | [Docker Desktop](https://www.docker.com/products/docker-desktop/) |
+| Herramienta     | Versión mínima   | Instalación                                                                                         |
+| --------------- | ---------------- | --------------------------------------------------------------------------------------------------- |
+| JDK             | 25               | [Oracle JDK](https://www.oracle.com/java/technologies/downloads/) o [OpenJDK](https://openjdk.org/) |
+| Maven           | 3.9+             | [Maven download](https://maven.apache.org/download.cgi) o usar el wrapper `./mvnw` incluido         |
+| Docker          | 24+              | [Docker Desktop](https://www.docker.com/products/docker-desktop/)                                   |
 
 > **Nota:** El proyecto incluye el wrapper de Maven (`mvnw` / `mvnw.cmd`), por lo que **no es necesario instalar Maven** globalmente. Basta con tener el JDK.
 
@@ -34,14 +34,23 @@ monte_erp/
 ├── pom.xml                  # Configuración Maven y dependencias
 ├── mvnw / mvnw.cmd          # Maven Wrapper (no requiere Maven global)
 ├── src/
-│   └── main/
-│       ├── java/
-│       │   ├── module-info.java
-│       │   └── com/entidaddesconocida/monte_erp/
-│       │       ├── Launcher.java            # Punto de entrada (main)
-│       │       ├── HelloApplication.java    # JavaFX Application
-│       │       └── HelloController.java     # Controlador FXML
-│       └── resources/
+│   ├── main/
+│   │   ├── java/
+│   │   │   ├── module-info.java
+│   │   │   └── com/entidaddesconocida/monte_erp/
+│   │   │       ├── Launcher.java                  # Punto de entrada (main)
+│   │   │       ├── MonteErpApplication.java       # JavaFX Application
+│   │   │       ├── controller/                    # LoginController, MainController
+│   │   │       ├── domain/model/                  # User
+│   │   │       ├── infrastructure/                # UserRepository
+│   │   │       │   └── config/                    # DatabaseConnection, MigrationRunner, DataSeeder
+│   │   │       └── security/                      # PasswordHasher
+│   │   └── resources/
+│   │       ├── application.properties             # URL, usuario y contraseña de la BD
+│   │       ├── css/app.css                        # Estilos de la interfaz
+│   │       ├── db/migration/V1__schema.sql        # Migración: esquema completo
+│   │       └── fxml/                              # login.fxml, main.fxml
+│   └── test/java/...                              # Pruebas JUnit 5 (unitarias + integración)
 └── target/                  # Artefactos generados (tras compilar)
 ```
 
@@ -59,10 +68,10 @@ El proyecto usa el **maven-shade-plugin** para generar un JAR con todas las depe
 
 Esto genera dos archivos en `target/`:
 
-| Archivo                              | Descripción                          |
-|--------------------------------------|--------------------------------------|
-| `monte_erp-1.0-SNAPSHOT.jar`         | **Fat JAR** — contiene todo lo necesario para ejecutar |
-| `original-monte_erp-1.0-SNAPSHOT.jar`| JAR original sin dependencias (no usar directamente) |
+| Archivo                                | Descripción                                            |
+| -------------------------------------- | ------------------------------------------------------ |
+| `monte_erp-1.0-SNAPSHOT.jar`           | **Fat JAR** — contiene todo lo necesario para ejecutar |
+| `original-monte_erp-1.0-SNAPSHOT.jar`  | JAR original sin dependencias (no usar directamente)   |
 
 ### Ejecutar los tests
 
@@ -101,9 +110,73 @@ docker run -d \
   mysql:8.0
 ``` 
 
-# Conectarse al contenedor con el cliente MySQL
-`docker exec -it monte_erp_mysql mysql -u erp_user -p monte_erp`
+### Conectarse al contenedor con el cliente MySQL
+
+```bash
+docker exec -it monte_erp_mysql mysql -u erp_user -p monte_erp
+```
 
 ---
+
+## Conexión de la aplicación a MySQL
+
+La conexión se configura en `src/main/resources/application.properties`:
+
+| Propiedad       | Valor por defecto                                | Descripción                  |
+| --------------- | ------------------------------------------------ | ---------------------------- |
+| `db.url`        | `jdbc:mysql://localhost:3306/monte_erp?...`      | URL JDBC de la base de datos |
+| `db.user`       | `erp_user`                                       | Usuario de la base de datos  |
+| `db.password`   | `erp_pass`                                       | Contraseña del usuario       |
+
+`DatabaseConnection` (paquete `infrastructure/config`) es el único punto que lee
+ese fichero y reparte la conexión compartida al resto de la aplicación.
+
+### Migraciones
+
+Los scripts `.sql` versionados viven en `src/main/resources/db/migration` y
+siguen la convención `V<n>__<descripcion>.sql`. Al arrancar, `MigrationRunner`
+aplica en orden los que estén pendientes y registra cada uno en la tabla de
+control `schema_migrations`, por lo que arrancar la aplicación varias veces no
+repite trabajo. Para cambiar el esquema basta con añadir `V2__<descripcion>.sql`.
+
+Esquema creado por `V1__schema.sql` (10 tablas):
+
+| Tabla                 | Contenido                                                       |
+| --------------------- | --------------------------------------------------------------- |
+| `CATEGORY`            | Categorías de producto                                          |
+| `SUPPLIER`            | Proveedores                                                     |
+| `PRODUCT`             | Productos (el stock no es un campo: se calcula desde sus lotes) |
+| `PURCHASE`            | Compras a proveedores                                           |
+| `STOCK`               | Lotes de stock, uno por producto y compra                       |
+| `CUSTOMER`            | Clientes                                                        |
+| `SALES_ORDER`         | Pedidos de cliente (`ORDER` es palabra reservada en MySQL)      |
+| `SALES_ORDER_LINE`    | Líneas de pedido                                                |
+| `STOCK_ISSUE`         | Consumo de lotes por línea (reparto FIFO)                       |
+| `USER`                | Usuarios del sistema                                            |
+
+### Usuarios iniciales
+
+`DataSeeder` crea estos usuarios si todavía no existen. Las contraseñas se
+guardan hasheadas con PBKDF2 (nunca en claro):
+
+| Usuario      | Contraseña      | Rol          | Acceso                                            |
+| ------------ | --------------- | ------------ | ------------------------------------------------- |
+| `admin`      | `admin123`      | `admin`      | Todos los módulos, incluida "Gestión de usuarios" |
+| `employee`   | `employee123`   | `employee`   | Módulos básicos                                   |
+
+### Pruebas
+
+```bash
+./mvnw test
+```
+
+Las pruebas de integración (`DataSeederTest`) se ejecutan contra la base de datos
+real; si MySQL no está arrancado se marcan como omitidas en lugar de fallar.
+
+### Convención de idiomas
+
+Los identificadores, el Javadoc y los registros de log están en inglés; los
+textos que ve el usuario (etiquetas, mensajes y títulos de ventana) están en
+español.
 
 

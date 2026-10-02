@@ -9,21 +9,21 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Pruebas del motor de migraciones: división de scripts, nombres de versión y
- * descubrimiento de los ficheros {@code .sql}.
+ * Tests for the migration engine: script splitting, version names and discovery
+ * of the {@code .sql} files.
  */
 class MigrationRunnerTest {
 
     @Test
-    @DisplayName("Las sentencias se separan por ';' ignorando comentarios")
-    void divideSentencias() {
+    @DisplayName("Statements are split on ';' while ignoring comments")
+    void splitsStatements() {
         String script = """
-                -- comentario de cabecera
+                -- header comment
                 CREATE TABLE A (id INT);
-                /* comentario
-                   multilínea */
+                /* multi
+                   line comment */
                 INSERT INTO A (id) VALUES (1);
-                INSERT INTO A (id) VALUES (2) # comentario al final
+                INSERT INTO A (id) VALUES (2) # trailing comment
                 """;
         List<String> statements = MigrationRunner.splitStatements(script);
         assertEquals(3, statements.size(), statements.toString());
@@ -32,34 +32,34 @@ class MigrationRunnerTest {
     }
 
     @Test
-    @DisplayName("Un ';' dentro de un literal no separa sentencias")
-    void respetaLiterales() {
+    @DisplayName("A ';' inside a literal does not split statements")
+    void respectsLiterals() {
         List<String> statements = MigrationRunner.splitStatements(
-                "INSERT INTO A (t) VALUES ('uno;dos'); SELECT 'it''s ok';");
+                "INSERT INTO A (t) VALUES ('one;two'); SELECT 'it''s ok';");
         assertEquals(2, statements.size(), statements.toString());
-        assertEquals("INSERT INTO A (t) VALUES ('uno;dos')", statements.get(0));
+        assertEquals("INSERT INTO A (t) VALUES ('one;two')", statements.get(0));
         assertEquals("SELECT 'it''s ok'", statements.get(1));
     }
 
     @Test
-    @DisplayName("La última sentencia se recoge aunque no termine en ';'")
-    void ultimaSentenciaSinPuntoYComa() {
+    @DisplayName("The last statement is collected even without a trailing ';'")
+    void lastStatementWithoutSemicolon() {
         assertEquals(1, MigrationRunner.splitStatements("SELECT 1").size());
-        assertEquals(0, MigrationRunner.splitStatements("-- solo un comentario").size());
+        assertEquals(0, MigrationRunner.splitStatements("-- only a comment").size());
     }
 
     @Test
-    @DisplayName("versionOf() extrae la versión de la convención V<n>__<nombre>.sql")
-    void extraeVersion() {
+    @DisplayName("versionOf() extracts the version from the V<n>__<name>.sql convention")
+    void extractsVersion() {
         assertEquals("V1", MigrationRunner.versionOf("V1__schema.sql"));
-        assertEquals("V10", MigrationRunner.versionOf("V10__pedidos.sql"));
-        assertEquals("V2", MigrationRunner.versionOf("V2__datos.sql"));
+        assertEquals("V10", MigrationRunner.versionOf("V10__sales_orders.sql"));
+        assertEquals("V2", MigrationRunner.versionOf("V2__seed_data.sql"));
     }
 
     @Test
-    @DisplayName("Se descubre el script V1 del classpath (explotado o dentro de un JAR)")
-    void descubreScripts() throws Exception {
+    @DisplayName("The V1 script is discovered on the classpath (exploded or inside a JAR)")
+    void discoversScripts() throws Exception {
         List<String> scripts = MigrationRunner.discoverScripts();
-        assertTrue(scripts.contains("V1__schema.sql"), "scripts encontrados: " + scripts);
+        assertTrue(scripts.contains("V1__schema.sql"), "scripts found: " + scripts);
     }
 }

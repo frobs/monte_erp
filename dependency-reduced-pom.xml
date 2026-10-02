@@ -49,7 +49,7 @@
           <execution>
             <id>default-cli</id>
             <configuration>
-              <mainClass>com.entidaddesconocida.monte_erp/com.entidaddesconocida.monte_erp.HelloApplication</mainClass>
+              <mainClass>com.entidaddesconocida.monte_erp/com.entidaddesconocida.monte_erp.MonteErpApplication</mainClass>
               <launcher>app</launcher>
               <jlinkZipName>app</jlinkZipName>
               <jlinkImageName>app</jlinkImageName>

@@ -1,7 +1,7 @@
 package com.entidaddesconocida.monte_erp.controller;
 
+import com.entidaddesconocida.monte_erp.domain.model.User;
 import com.entidaddesconocida.monte_erp.infrastructure.UserRepository;
-import com.entidaddesconocida.monte_erp.domain.model.Usuario;
 import com.entidaddesconocida.monte_erp.security.PasswordHasher;
 
 import javafx.event.ActionEvent;
@@ -21,22 +21,27 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
- * Controlador de la pantalla de inicio de sesión (RF-01).
+ * Controller of the sign-in screen (RF-01).
  *
- * <p>Valida las credenciales contra {@code USUARIO}, rechaza los usuarios
- * desactivados y abre la pantalla principal pasándole el usuario autenticado.
- * Sin lógica de negocio: toda la persistencia se delega en {@link UserRepository}.</p>
+ * <p>Validates the credentials against the {@code USER} table, rejects the
+ * deactivated users and opens the main screen handing the authenticated user
+ * over to it. No business logic: all persistence is delegated to
+ * {@link UserRepository}.</p>
+ *
+ * <p>Language convention: identifiers, Javadoc and log records are written in
+ * English, while every text the end user can read (labels, messages, window
+ * titles) is written in Spanish.</p>
  */
 public class LoginController {
 
     private static final Logger LOGGER = Logger.getLogger(LoginController.class.getName());
 
-    private static final String VISTA_PRINCIPAL = "/fxml/main.fxml";
-    private static final double ANCHO_PRINCIPAL = 1000;
-    private static final double ALTO_PRINCIPAL = 660;
+    private static final String MAIN_VIEW = "/fxml/main.fxml";
+    private static final double MAIN_WIDTH = 1000;
+    private static final double MAIN_HEIGHT = 660;
 
     @FXML
-    private TextField usuarioField;
+    private TextField usernameField;
 
     @FXML
     private PasswordField passwordField;
@@ -48,68 +53,70 @@ public class LoginController {
 
     @FXML
     private void initialize() {
-        ocultarError();
+        hideError();
     }
 
     @FXML
     private void onLogin(ActionEvent event) {
-        String login = usuarioField.getText() == null ? "" : usuarioField.getText().trim();
+        String username = usernameField.getText() == null ? "" : usernameField.getText().trim();
         String password = passwordField.getText() == null ? "" : passwordField.getText();
 
-        if (login.isEmpty() || password.isEmpty()) {
-            mostrarError("Introduce usuario y contraseña.");
+        if (username.isEmpty() || password.isEmpty()) {
+            showError("Introduce usuario y contraseña.");
             return;
         }
 
         try {
-            Usuario usuario = userRepository.buscarPorUsuario(login);
+            User user = userRepository.findByUsername(username);
 
-            if (usuario == null || !PasswordHasher.verify(password, usuario.getPasswordHash())) {
-                mostrarError("Usuario o contraseña incorrectos.");
+            // Same message for an unknown user and a wrong password: whether the
+            // login name exists is never revealed.
+            if (user == null || !PasswordHasher.verify(password, user.getPasswordHash())) {
+                showError("Usuario o contraseña incorrectos.");
                 passwordField.clear();
                 passwordField.requestFocus();
                 return;
             }
-            if (!usuario.isActivo()) {
-                mostrarError("El usuario está desactivado. Contacta con un administrador.");
+            if (!user.isActive()) {
+                showError("El usuario está desactivado. Contacta con un administrador.");
                 return;
             }
 
-            abrirPantallaPrincipal(event, usuario);
+            openMainView(event, user);
         } catch (SQLException e) {
-            LOGGER.log(Level.SEVERE, "Error de base de datos durante el login", e);
-            mostrarError("No se pudo conectar con la base de datos. Revisa que MySQL esté arrancado.");
+            LOGGER.log(Level.SEVERE, "Database error during sign in", e);
+            showError("No se pudo conectar con la base de datos. Comprueba que MySQL esté arrancado.");
         } catch (IOException e) {
-            LOGGER.log(Level.SEVERE, "No se pudo cargar " + VISTA_PRINCIPAL, e);
-            mostrarError("No se pudo abrir la pantalla principal.");
+            LOGGER.log(Level.SEVERE, "Could not load " + MAIN_VIEW, e);
+            showError("No se pudo abrir la ventana principal.");
         }
     }
 
     @FXML
-    private void onSalir() {
-        Stage stage = (Stage) usuarioField.getScene().getWindow();
+    private void onExit() {
+        Stage stage = (Stage) usernameField.getScene().getWindow();
         stage.close();
     }
 
-    private void abrirPantallaPrincipal(ActionEvent event, Usuario usuario) throws IOException {
-        FXMLLoader loader = new FXMLLoader(LoginController.class.getResource(VISTA_PRINCIPAL));
+    private void openMainView(ActionEvent event, User user) throws IOException {
+        FXMLLoader loader = new FXMLLoader(LoginController.class.getResource(MAIN_VIEW));
         Parent root = loader.load();
         MainController controller = loader.getController();
-        controller.setUsuario(usuario);
+        controller.setUser(user);
 
         Stage stage = (Stage) ((Node) event.getSource()).getScene().getWindow();
-        stage.setTitle("Monte ERP · " + usuario.getNombre() + " (" + usuario.getRolEtiqueta() + ")");
-        stage.setScene(new Scene(root, ANCHO_PRINCIPAL, ALTO_PRINCIPAL));
+        stage.setTitle("Monte ERP · " + user.getName() + " (" + user.getRoleLabel() + ")");
+        stage.setScene(new Scene(root, MAIN_WIDTH, MAIN_HEIGHT));
         stage.centerOnScreen();
     }
 
-    private void mostrarError(String mensaje) {
-        errorLabel.setText(mensaje);
+    private void showError(String message) {
+        errorLabel.setText(message);
         errorLabel.setVisible(true);
         errorLabel.setManaged(true);
     }
 
-    private void ocultarError() {
+    private void hideError() {
         errorLabel.setText("");
         errorLabel.setVisible(false);
         errorLabel.setManaged(false);

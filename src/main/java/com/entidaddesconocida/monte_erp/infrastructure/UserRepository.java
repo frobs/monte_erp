@@ -1,7 +1,7 @@
 package com.entidaddesconocida.monte_erp.infrastructure;
 
+import com.entidaddesconocida.monte_erp.domain.model.User;
 import com.entidaddesconocida.monte_erp.infrastructure.config.DatabaseConnection;
-import com.entidaddesconocida.monte_erp.domain.model.Usuario;
 
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -11,101 +11,101 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Acceso a datos de la tabla {@code USUARIO}.
+ * Data access for the {@code USER} table.
  *
- * <p>Sin lógica de negocio: solo traduce entre {@link Usuario} y las filas de la
- * tabla. La baja de usuarios es lógica ({@link #desactivar(int)}), tal y como
- * exige el diagrama E-R.</p>
+ * <p>No business logic: it only translates between {@link User} and the table
+ * rows. Deleting a user is logical ({@link #deactivate(int)}), as required by
+ * the E-R diagram.</p>
  */
 public class UserRepository {
 
-    private static final String COLUMNS = "id, nombre, usuario, password_hash, rol, activo";
-    private static final String SELECT_ALL = "SELECT " + COLUMNS + " FROM USUARIO";
+    private static final String COLUMNS = "id, name, username, password_hash, role, active";
+    private static final String SELECT_ALL = "SELECT " + COLUMNS + " FROM USER";
 
     /**
-     * Busca un usuario por su login (campo único {@code usuario}).
+     * Looks a user up by its login name (unique column {@code username}).
      *
-     * @return el usuario encontrado o {@code null} si no existe
+     * @return the matching user, or {@code null} when it does not exist
      */
-    public Usuario buscarPorUsuario(String usuario) throws SQLException {
-        String sql = SELECT_ALL + " WHERE usuario = ?";
+    public User findByUsername(String username) throws SQLException {
+        String sql = SELECT_ALL + " WHERE username = ?";
         try (PreparedStatement ps = DatabaseConnection.getConnection().prepareStatement(sql)) {
-            ps.setString(1, usuario);
+            ps.setString(1, username);
             try (ResultSet rs = ps.executeQuery()) {
                 return rs.next() ? map(rs) : null;
             }
         }
     }
 
-    /** Devuelve todos los usuarios ordenados por login. */
-    public List<Usuario> listar() throws SQLException {
-        List<Usuario> usuarios = new ArrayList<>();
+    /** Returns every user, ordered by login name. */
+    public List<User> findAll() throws SQLException {
+        List<User> users = new ArrayList<>();
         try (Statement statement = DatabaseConnection.getConnection().createStatement();
-             ResultSet rs = statement.executeQuery(SELECT_ALL + " ORDER BY usuario")) {
+             ResultSet rs = statement.executeQuery(SELECT_ALL + " ORDER BY username")) {
             while (rs.next()) {
-                usuarios.add(map(rs));
+                users.add(map(rs));
             }
         }
-        return usuarios;
+        return users;
     }
 
     /**
-     * Inserta un usuario nuevo (alta).
+     * Inserts a new user.
      *
-     * @return el identificador generado, que además se asigna al objeto
+     * @return the generated identifier, which is also assigned to the object
      */
-    public int insertar(Usuario usuario) throws SQLException {
-        String sql = "INSERT INTO USUARIO (nombre, usuario, password_hash, rol, activo) VALUES (?, ?, ?, ?, ?)";
+    public int insert(User user) throws SQLException {
+        String sql = "INSERT INTO USER (name, username, password_hash, role, active) VALUES (?, ?, ?, ?, ?)";
         try (PreparedStatement ps = DatabaseConnection.getConnection()
                 .prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
-            ps.setString(1, usuario.getNombre());
-            ps.setString(2, usuario.getUsuario());
-            ps.setString(3, usuario.getPasswordHash());
-            ps.setString(4, usuario.getRol());
-            ps.setBoolean(5, usuario.isActivo());
+            ps.setString(1, user.getName());
+            ps.setString(2, user.getUsername());
+            ps.setString(3, user.getPasswordHash());
+            ps.setString(4, user.getRole());
+            ps.setBoolean(5, user.isActive());
             ps.executeUpdate();
             try (ResultSet keys = ps.getGeneratedKeys()) {
                 int id = keys.next() ? keys.getInt(1) : 0;
-                usuario.setId(id);
+                user.setId(id);
                 return id;
             }
         }
     }
 
-    /** Actualiza todos los campos modificables de un usuario existente (edición). */
-    public void actualizar(Usuario usuario) throws SQLException {
-        String sql = "UPDATE USUARIO SET nombre = ?, usuario = ?, password_hash = ?, rol = ?, activo = ? WHERE id = ?";
+    /** Updates every editable field of an existing user. */
+    public void update(User user) throws SQLException {
+        String sql = "UPDATE USER SET name = ?, username = ?, password_hash = ?, role = ?, active = ? WHERE id = ?";
         try (PreparedStatement ps = DatabaseConnection.getConnection().prepareStatement(sql)) {
-            ps.setString(1, usuario.getNombre());
-            ps.setString(2, usuario.getUsuario());
-            ps.setString(3, usuario.getPasswordHash());
-            ps.setString(4, usuario.getRol());
-            ps.setBoolean(5, usuario.isActivo());
-            ps.setInt(6, usuario.getId());
+            ps.setString(1, user.getName());
+            ps.setString(2, user.getUsername());
+            ps.setString(3, user.getPasswordHash());
+            ps.setString(4, user.getRole());
+            ps.setBoolean(5, user.isActive());
+            ps.setInt(6, user.getId());
             ps.executeUpdate();
         }
     }
 
     /**
-     * Baja lógica del usuario: pasa {@code activo} a 0 sin borrar la fila, para
-     * no romper las claves foráneas de compras y pedidos ya registrados.
+     * Logical deletion: sets {@code active} to 0 without removing the row, so
+     * the foreign keys of the purchases and orders already recorded stay valid.
      */
-    public void desactivar(int id) throws SQLException {
+    public void deactivate(int id) throws SQLException {
         try (PreparedStatement ps = DatabaseConnection.getConnection()
-                .prepareStatement("UPDATE USUARIO SET activo = 0 WHERE id = ?")) {
+                .prepareStatement("UPDATE USER SET active = 0 WHERE id = ?")) {
             ps.setInt(1, id);
             ps.executeUpdate();
         }
     }
 
-    private Usuario map(ResultSet rs) throws SQLException {
-        Usuario usuario = new Usuario();
-        usuario.setId(rs.getInt("id"));
-        usuario.setNombre(rs.getString("nombre"));
-        usuario.setUsuario(rs.getString("usuario"));
-        usuario.setPasswordHash(rs.getString("password_hash"));
-        usuario.setRol(rs.getString("rol"));
-        usuario.setActivo(rs.getBoolean("activo"));
-        return usuario;
+    private User map(ResultSet rs) throws SQLException {
+        User user = new User();
+        user.setId(rs.getInt("id"));
+        user.setName(rs.getString("name"));
+        user.setUsername(rs.getString("username"));
+        user.setPasswordHash(rs.getString("password_hash"));
+        user.setRole(rs.getString("role"));
+        user.setActive(rs.getBoolean("active"));
+        return user;
     }
 }

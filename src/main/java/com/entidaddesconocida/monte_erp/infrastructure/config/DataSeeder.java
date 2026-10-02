@@ -1,55 +1,56 @@
 package com.entidaddesconocida.monte_erp.infrastructure.config;
 
+import com.entidaddesconocida.monte_erp.domain.model.User;
 import com.entidaddesconocida.monte_erp.infrastructure.UserRepository;
-import com.entidaddesconocida.monte_erp.domain.model.Usuario;
 import com.entidaddesconocida.monte_erp.security.PasswordHasher;
 
 import java.sql.SQLException;
 
 /**
- * Datos mínimos que la aplicación necesita para poder iniciar sesión.
+ * Minimum data the application needs in order to sign in.
  *
- * <p>Se hace en Java (y no en un script SQL) para que los hashes se generen con
- * el mismo {@link PasswordHasher} que después los verifica: un hash escrito a
- * mano sería imposible de generar sin el salt y podría quedar desincronizado.</p>
+ * <p>It is done in Java (rather than in a SQL script) so the hashes are produced
+ * by the same {@link PasswordHasher} that later verifies them: a hand written
+ * hash could not be generated without the salt and could end up out of sync.</p>
  *
- * <p>Es idempotente: solo inserta el usuario si su login no existe todavía, así
- * que arrancar la aplicación varias veces no duplica filas ni pisa contraseñas
- * que el administrador haya cambiado.</p>
+ * <p>It is idempotent: a user is only inserted when its login name does not
+ * exist yet, so starting the application several times neither duplicates rows
+ * nor overwrites passwords that an administrator may have changed.</p>
  */
 public final class DataSeeder {
 
-    /** Credenciales de desarrollo, documentadas en el plan del proyecto. */
-    public static final String ADMIN_USUARIO = "admin";
+    /** Development credentials, documented in the project plan. */
+    public static final String ADMIN_USERNAME = "admin";
     public static final String ADMIN_PASSWORD = "admin123";
-    public static final String EMPLEADO_USUARIO = "empleado";
-    public static final String EMPLEADO_PASSWORD = "empleado123";
+    public static final String EMPLOYEE_USERNAME = "employee";
+    public static final String EMPLOYEE_PASSWORD = "employee123";
 
-    private static final UserRepository USUARIO_DAO = new UserRepository();
+    private static final UserRepository USER_REPOSITORY = new UserRepository();
 
     private DataSeeder() {
-        // Utilidad: no se instancia.
+        // Utility class: never instantiated.
     }
 
     /**
-     * Crea los usuarios iniciales que falten.
+     * Creates whichever initial users are missing.
      *
-     * @return número de usuarios creados
+     * @return the number of users created
      */
     public static int seed() throws SQLException {
-        int creados = 0;
-        creados += crearSiNoExiste("Administrador", ADMIN_USUARIO, ADMIN_PASSWORD, Usuario.ROL_ADMIN);
-        creados += crearSiNoExiste("Empleado de mostrador", EMPLEADO_USUARIO, EMPLEADO_PASSWORD, Usuario.ROL_EMPLEADO);
-        return creados;
+        int created = 0;
+        // Display names are user facing, so they are written in Spanish.
+        created += createIfNotExists("Administrador", ADMIN_USERNAME, ADMIN_PASSWORD, User.ROLE_ADMIN);
+        created += createIfNotExists("Empleado de mostrador", EMPLOYEE_USERNAME, EMPLOYEE_PASSWORD, User.ROLE_EMPLOYEE);
+        return created;
     }
 
-    private static int crearSiNoExiste(String nombre, String login, String password, String rol)
+    private static int createIfNotExists(String name, String username, String password, String role)
             throws SQLException {
-        if (USUARIO_DAO.buscarPorUsuario(login) != null) {
+        if (USER_REPOSITORY.findByUsername(username) != null) {
             return 0;
         }
-        Usuario usuario = new Usuario(nombre, login, PasswordHasher.hash(password), rol, true);
-        USUARIO_DAO.insertar(usuario);
+        User user = new User(name, username, PasswordHasher.hash(password), role, true);
+        USER_REPOSITORY.insert(user);
         return 1;
     }
 }

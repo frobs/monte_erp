@@ -8,12 +8,12 @@ import java.sql.SQLException;
 import java.util.Properties;
 
 /**
- * Punto único de conexión JDBC de la aplicación (patrón singleton).
+ * Single JDBC connection point for the application (singleton).
  *
- * <p>La configuración (URL, usuario y contraseña) se lee de
- * {@code /application.properties} en el classpath, tal y como fija el
- * diagrama de clases. Si la conexión se ha cerrado o se ha caído, se vuelve a
- * abrir de forma transparente.</p>
+ * <p>The configuration (URL, user and password) is read from
+ * {@code /application.properties} on the classpath, as stated by the class
+ * diagram. If the connection has been closed or has dropped, it is reopened
+ * transparently.</p>
  */
 public final class DatabaseConnection {
 
@@ -26,13 +26,13 @@ public final class DatabaseConnection {
     private static String password;
 
     private DatabaseConnection() {
-        // Utilidad: no se instancia.
+        // Utility class: never instantiated.
     }
 
     /**
-     * Devuelve la conexión compartida, abriéndola si aún no existe.
+     * Returns the shared connection, opening it when it does not exist yet.
      *
-     * @throws SQLException si no se puede establecer la conexión
+     * @throws SQLException when the connection cannot be established
      */
     public static synchronized Connection getConnection() throws SQLException {
         if (connection == null || connection.isClosed()) {
@@ -44,7 +44,7 @@ public final class DatabaseConnection {
     }
 
     /**
-     * Cierra la conexión compartida (se invoca al terminar la aplicación).
+     * Closes the shared connection (called when the application shuts down).
      */
     public static synchronized void close() {
         if (connection == null) {
@@ -53,14 +53,14 @@ public final class DatabaseConnection {
         try {
             connection.close();
         } catch (SQLException e) {
-            // Cerrando: no hay nada útil que hacer con el error.
+            // Shutting down: there is nothing useful to do with the error.
         } finally {
             connection = null;
         }
     }
 
     /**
-     * URL JDBC configurada (útil para mostrar el entorno en la interfaz).
+     * Configured JDBC URL (handy to display the environment in the interface).
      */
     public static synchronized String getUrl() {
         if (url == null) {
@@ -76,11 +76,11 @@ public final class DatabaseConnection {
         Properties properties = new Properties();
         try (InputStream in = DatabaseConnection.class.getResourceAsStream(CONFIG_RESOURCE)) {
             if (in == null) {
-                throw new IllegalStateException("No se encontró " + CONFIG_RESOURCE + " en el classpath");
+                throw new IllegalStateException("Resource not found on the classpath: " + CONFIG_RESOURCE);
             }
             properties.load(in);
         } catch (IOException e) {
-            throw new IllegalStateException("No se pudo leer " + CONFIG_RESOURCE, e);
+            throw new IllegalStateException("Could not read " + CONFIG_RESOURCE, e);
         }
         url = require(properties, "db.url");
         user = properties.getProperty("db.user", "").trim();
@@ -90,21 +90,21 @@ public final class DatabaseConnection {
     private static String require(Properties properties, String key) {
         String value = properties.getProperty(key);
         if (value == null || value.isBlank()) {
-            throw new IllegalStateException("Falta la propiedad '" + key + "' en " + CONFIG_RESOURCE);
+            throw new IllegalStateException("Missing property '" + key + "' in " + CONFIG_RESOURCE);
         }
         return value.trim();
     }
 
     /**
-     * Registra el driver de MySQL. Si no estuviera disponible, se propaga el
-     * error real al intentar conectar (DriverManager también lo descubre vía
-     * {@code ServiceLoader}, por lo que un fallo aquí no es definitivo).
+     * Registers the MySQL driver. When it is not available the real error is
+     * reported while connecting (DriverManager also discovers it through
+     * {@code ServiceLoader}, so a failure here is not final).
      */
     private static void loadDriver() {
         try {
             Class.forName(DRIVER_CLASS);
         } catch (ClassNotFoundException e) {
-            // Ignorado a propósito: DriverManager intentará el descubrimiento automático.
+            // Deliberately ignored: DriverManager will try automatic discovery.
         }
     }
 }

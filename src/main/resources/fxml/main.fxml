@@ -23,9 +23,9 @@
             <Label text="Monte ERP" styleClass="topbar-title"/>
             <Region HBox.hgrow="ALWAYS"/>
             <Label text="Usuario:" styleClass="topbar-caption"/>
-            <Label fx:id="usuarioLabel" styleClass="topbar-value"/>
-            <Label fx:id="rolLabel" styleClass="rol-badge"/>
-            <Button text="Cerrar sesión" onAction="#onCerrarSesion" styleClass="secondary-button"/>
+            <Label fx:id="usernameLabel" styleClass="topbar-value"/>
+            <Label fx:id="roleLabel" styleClass="role-badge"/>
+            <Button text="Cerrar sesión" onAction="#onSignOut" styleClass="secondary-button"/>
         </HBox>
     </top>
 
@@ -35,7 +35,7 @@
                 <Insets top="28.0" right="28.0" bottom="28.0" left="28.0"/>
             </padding>
 
-            <Label fx:id="bienvenidaLabel" styleClass="title-white"/>
+            <Label fx:id="welcomeLabel" styleClass="title"/>
             <Label styleClass="subtitle" wrapText="true"
                    text="Selecciona un módulo. Solo se muestran las opciones permitidas para tu rol."/>
 
@@ -43,13 +43,13 @@
                 <padding>
                     <Insets top="10.0"/>
                 </padding>
-                <Button text="Productos" onAction="#onModuloPendiente" styleClass="module-button"/>
-                <Button text="Compras" onAction="#onModuloPendiente" styleClass="module-button"/>
-                <Button text="Pedidos" onAction="#onModuloPendiente" styleClass="module-button"/>
-                <Button text="Stock" onAction="#onModuloPendiente" styleClass="module-button"/>
-                <Button fx:id="gestionUsuariosButton" text="Gestión de usuarios"
-                        onAction="#onGestionUsuarios" styleClass="module-button admin-module"/>
-                <Button text="Salir" onAction="#onSalir" styleClass="module-button"/>
+                <Button text="Productos" onAction="#onPendingModule" styleClass="module-button"/>
+                <Button text="Compras" onAction="#onPendingModule" styleClass="module-button"/>
+                <Button text="Pedidos" onAction="#onPendingModule" styleClass="module-button"/>
+                <Button text="Stock" onAction="#onPendingModule" styleClass="module-button"/>
+                <Button fx:id="manageUsersButton" text="Gestión de usuarios"
+                        onAction="#onManageUsers" styleClass="module-button admin-module"/>
+                <Button text="Salir" onAction="#onExit" styleClass="module-button"/>
             </TilePane>
         </VBox>
     </center>
@@ -59,7 +59,7 @@
             <padding>
                 <Insets top="8.0" right="18.0" bottom="8.0" left="18.0"/>
             </padding>
-            <Label fx:id="dbLabel" styleClass="statusbar-text"/>
+            <Label fx:id="databaseLabel" styleClass="statusbar-text"/>
         </HBox>
     </bottom>
 </BorderPane>

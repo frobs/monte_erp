@@ -22,30 +22,30 @@ import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
 
 /**
- * Aplicador de migraciones SQL ligero (sin dependencias externas).
+ * Lightweight SQL migration runner (no external dependencies).
  *
- * <p>Los scripts viven en {@code /db/migration} siguiendo la convención
- * {@code V<numero>__<descripcion>.sql}. Al arrancar se aplican en orden los que
- * todavía no estén registrados en la tabla de control {@code schema_migrations},
- * de modo que la aplicación es idempotente: arrancar dos veces no repite
- * trabajo.</p>
+ * <p>The scripts live in {@code /db/migration} following the
+ * {@code V<number>__<description>.sql} convention. On startup the scripts that
+ * are not registered yet in the {@code schema_migrations} control table are
+ * applied in order, so the application is idempotent: starting it twice does not
+ * repeat any work.</p>
  *
- * <p>Se localizan los scripts tanto en el classpath explotado
- * ({@code target/classes}) como dentro de un JAR, para que funcione igual con
- * {@code javafx:run} y con el fat JAR generado por el shade plugin.</p>
+ * <p>Scripts are located both in an exploded classpath ({@code target/classes})
+ * and inside a JAR, so the same code works with {@code javafx:run} and with the
+ * fat JAR produced by the shade plugin.</p>
  *
- * <p><b>Nota transaccional:</b> cada script se ejecuta dentro de una
- * transacción, pero MySQL provoca un <i>commit implícito</i> en cada sentencia
- * DDL, por lo que la atomicidad real de una migración de esquema depende de
- * cada script. El registro en {@code schema_migrations} sí es transaccional
- * respecto a la última sentencia aplicada.</p>
+ * <p><b>Transaction note:</b> every script runs inside a transaction, but MySQL
+ * performs an <i>implicit commit</i> on each DDL statement, so the real atomicity
+ * of a schema migration depends on the script itself. The row logged in
+ * {@code schema_migrations} is transactional with respect to the last statement
+ * applied.</p>
  */
 public final class MigrationRunner {
 
-    /** Directorio del classpath donde se publican los scripts. */
+    /** Classpath directory holding the published scripts. */
     public static final String MIGRATION_DIR = "db/migration";
 
-    /** Tabla de control de migraciones aplicadas. */
+    /** Control table listing the migrations already applied. */
     public static final String MIGRATIONS_TABLE = "schema_migrations";
 
     private static final String CREATE_MIGRATIONS_TABLE = """
@@ -58,20 +58,20 @@ public final class MigrationRunner {
             """.formatted(MIGRATIONS_TABLE);
 
     private MigrationRunner() {
-        // Utilidad: no se instancia.
+        // Utility class: never instantiated.
     }
 
     /**
-     * Aplica las migraciones pendientes.
+     * Applies the pending migrations.
      *
-     * @return número de scripts aplicados en esta ejecución
-     * @throws SQLException si falla alguna sentencia
-     * @throws IOException  si no se pueden leer los scripts
+     * @return the number of scripts applied during this run
+     * @throws SQLException when a statement fails
+     * @throws IOException  when the scripts cannot be read
      */
     public static int migrate() throws SQLException, IOException {
         List<String> scripts = discoverScripts();
         if (scripts.isEmpty()) {
-            throw new IllegalStateException("No se encontró ningún script .sql en /" + MIGRATION_DIR);
+            throw new IllegalStateException("No .sql script found in /" + MIGRATION_DIR);
         }
 
         Connection connection = DatabaseConnection.getConnection();
@@ -91,7 +91,7 @@ public final class MigrationRunner {
     }
 
     /**
-     * Versiones ya registradas en {@code schema_migrations}.
+     * Versions already registered in {@code schema_migrations}.
      */
     static Set<String> appliedVersions(Connection connection) throws SQLException {
         Set<String> versions = new HashSet<>();
@@ -138,9 +138,9 @@ public final class MigrationRunner {
     }
 
     /**
-     * Localiza los scripts {@code .sql} del directorio de migraciones, tanto en
-     * un classpath explotado como dentro de un JAR, y los devuelve ordenados por
-     * número de versión.
+     * Locates the {@code .sql} scripts of the migration directory, either on an
+     * exploded classpath or inside a JAR, and returns them ordered by version
+     * number.
      */
     static List<String> discoverScripts() throws IOException {
         URL directory = MigrationRunner.class.getResource("/" + MIGRATION_DIR);
@@ -152,7 +152,7 @@ public final class MigrationRunner {
             switch (directory.getProtocol()) {
                 case "file" -> collectFromDirectory(directory, scripts);
                 case "jar" -> collectFromJar(directory, scripts);
-                default -> throw new IOException("Protocolo no soportado para /"
+                default -> throw new IOException("Unsupported protocol for /"
                         + MIGRATION_DIR + ": " + directory);
             }
         }
@@ -194,14 +194,14 @@ public final class MigrationRunner {
     private static String readResource(String resource) throws IOException {
         try (InputStream in = MigrationRunner.class.getResourceAsStream("/" + resource)) {
             if (in == null) {
-                throw new IOException("Recurso no encontrado en el classpath: /" + resource);
+                throw new IOException("Resource not found on the classpath: /" + resource);
             }
             return new String(in.readAllBytes(), StandardCharsets.UTF_8);
         }
     }
 
     /**
-     * Versión registrada para un script: {@code V1__schema.sql -> V1}.
+     * Version registered for a script: {@code V1__schema.sql -> V1}.
      */
     static String versionOf(String script) {
         String name = script.toLowerCase().endsWith(".sql")
@@ -211,7 +211,7 @@ public final class MigrationRunner {
         return separator > 0 ? name.substring(0, separator) : name;
     }
 
-    /** Orden por número de versión y, a igualdad, alfabético. */
+    /** Order by version number and, when equal, alphabetically. */
     private static final Comparator<String> MIGRATION_ORDER =
             Comparator.comparingInt(MigrationRunner::versionNumber).thenComparing(Comparator.naturalOrder());
 
@@ -236,8 +236,8 @@ public final class MigrationRunner {
     }
 
     /**
-     * Divide un script en sentencias por {@code ;} respetando comentarios
-     * ({@code --}, {@code #} y {@code /* *\/}) y literales entrecomillados.
+     * Splits a script into statements on {@code ;}, honouring comments
+     * ({@code --}, {@code #} and slash-star blocks) and quoted literals.
      */
     static List<String> splitStatements(String script) {
         List<String> statements = new ArrayList<>();
@@ -286,7 +286,7 @@ public final class MigrationRunner {
                 }
             }
             if (c == '\'' && !inDouble) {
-                if (inSingle && next == '\'') { // '' escapado dentro de un literal
+                if (inSingle && next == '\'') { // '' escaped inside a literal
                     current.append(c).append(next);
                     i++;
                     continue;

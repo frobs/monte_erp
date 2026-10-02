@@ -1,16 +1,17 @@
 /**
- * Módulo principal de Monte ERP.
+ * Main module of Monte ERP.
  *
- * <p>Notas de módulos:</p>
+ * <p>Module notes:</p>
  * <ul>
- *   <li>{@code java.sql} es necesario para JDBC (conexión, DAO y migraciones).</li>
- *   <li>{@code mysql.connector.j} es el nombre real del módulo del driver de
- *       MySQL: el JAR {@code mysql-connector-j} no incluye {@code module-info.class}
- *       ni {@code Automatic-Module-Name}, así que el nombre se deriva del nombre
- *       del artefacto. (El plan mencionaba {@code com.mysql.cj}, que es solo el
- *       {@code Bundle-SymbolicName} de OSGi del propio JAR.)</li>
- *   <li>El paquete {@code controller} se abre a {@code javafx.fxml} para que el
- *       {@code FXMLLoader} pueda inyectar los campos {@code @FXML}.</li>
+ *   <li>{@code java.sql} is required for JDBC (connection, repository and
+ *       migrations).</li>
+ *   <li>{@code mysql.connector.j} is the real module name of the MySQL driver:
+ *       the {@code mysql-connector-j} JAR ships neither {@code module-info.class}
+ *       nor {@code Automatic-Module-Name}, so the name is derived from the
+ *       artifact name. (The plan mentioned {@code com.mysql.cj}, which is only
+ *       the OSGi {@code Bundle-SymbolicName} of that JAR.)</li>
+ *   <li>The {@code controller} package is opened to {@code javafx.fxml} so the
+ *       {@code FXMLLoader} can inject the {@code @FXML} fields.</li>
  * </ul>
  */
 module com.entidaddesconocida.monte_erp {

@@ -1,120 +1,126 @@
 -- =====================================================================
--- V1__schema.sql · Esquema inicial de Monte ERP
--- Tablas del diagrama E-R (docs/03-diagrama-er.md).
--- Motor InnoDB (transaccional, necesario para las FK) y utf8mb4.
--- Claves foráneas con ON DELETE RESTRICT: no se borra una categoría con
--- productos, ni un producto ya comprado o vendido.
--- Las reglas de negocio no expresables en DDL (reparto FIFO, suma de
--- salidas igual a la cantidad de la línea, ...) se validan en la aplicación.
+-- V1__schema.sql · Initial schema for Monte ERP
+-- Tables from the E-R diagram (docs/03-diagrama-er.md).
+-- InnoDB engine (transactional, required for the foreign keys) and utf8mb4.
+-- Foreign keys use ON DELETE RESTRICT: a category holding products cannot be
+-- deleted, neither can a product that has already been purchased or sold.
+-- Business rules that DDL cannot express (FIFO allocation, the sum of stock
+-- issues matching the order line quantity, ...) are validated by the application.
 -- =====================================================================
 
-CREATE TABLE IF NOT EXISTS CATEGORIA (
+CREATE TABLE IF NOT EXISTS CATEGORY (
     id          INT AUTO_INCREMENT PRIMARY KEY,
-    nombre      VARCHAR(100) NOT NULL,
-    descripcion VARCHAR(255) NULL,
-    CONSTRAINT uq_categoria_nombre UNIQUE (nombre)
+    name        VARCHAR(100) NOT NULL,
+    description VARCHAR(255) NULL,
+    CONSTRAINT uq_category_name UNIQUE (name)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
 
-CREATE TABLE IF NOT EXISTS PROVEEDOR (
-    id       INT AUTO_INCREMENT PRIMARY KEY,
-    nombre   VARCHAR(100) NOT NULL,
-    telefono VARCHAR(20)  NULL,
-    email    VARCHAR(100) NULL
+CREATE TABLE IF NOT EXISTS SUPPLIER (
+    id    INT AUTO_INCREMENT PRIMARY KEY,
+    name  VARCHAR(100) NOT NULL,
+    phone VARCHAR(20)  NULL,
+    email VARCHAR(100) NULL
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
 
-CREATE TABLE IF NOT EXISTS USUARIO (
+CREATE TABLE IF NOT EXISTS USER (
     id            INT AUTO_INCREMENT PRIMARY KEY,
-    nombre        VARCHAR(100) NOT NULL,
-    usuario       VARCHAR(50)  NOT NULL,
+    name          VARCHAR(100) NOT NULL,
+    username      VARCHAR(50)  NOT NULL,
     password_hash VARCHAR(255) NOT NULL,
-    rol           ENUM ('admin', 'empleado') NOT NULL DEFAULT 'empleado',
-    activo        TINYINT(1)   NOT NULL DEFAULT 1,
-    CONSTRAINT uq_usuario_usuario UNIQUE (usuario)
+    role          ENUM ('admin', 'employee') NOT NULL DEFAULT 'employee',
+    active        TINYINT(1)   NOT NULL DEFAULT 1,
+    CONSTRAINT uq_user_username UNIQUE (username)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
 
-CREATE TABLE IF NOT EXISTS PRODUCTO (
-    id           INT AUTO_INCREMENT PRIMARY KEY,
-    nombre       VARCHAR(100)   NOT NULL,
-    sku          VARCHAR(50)    NOT NULL,
-    descripcion  VARCHAR(255)   NULL,
-    precio       DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
-    stock_minimo INT            NOT NULL DEFAULT 0,
-    id_categoria INT            NOT NULL,
-    id_proveedor INT            NOT NULL,
-    CONSTRAINT uq_producto_sku UNIQUE (sku),
-    CONSTRAINT fk_producto_categoria FOREIGN KEY (id_categoria) REFERENCES CATEGORIA (id) ON DELETE RESTRICT,
-    CONSTRAINT fk_producto_proveedor FOREIGN KEY (id_proveedor) REFERENCES PROVEEDOR (id) ON DELETE RESTRICT,
-    CONSTRAINT chk_producto_precio CHECK (precio >= 0),
-    CONSTRAINT chk_producto_stock_minimo CHECK (stock_minimo >= 0)
+CREATE TABLE IF NOT EXISTS PRODUCT (
+    id          INT AUTO_INCREMENT PRIMARY KEY,
+    name        VARCHAR(100)   NOT NULL,
+    sku         VARCHAR(50)    NOT NULL,
+    description VARCHAR(255)   NULL,
+    price       DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
+    min_stock   INT            NOT NULL DEFAULT 0,
+    category_id INT            NOT NULL,
+    supplier_id INT            NOT NULL,
+    CONSTRAINT uq_product_sku UNIQUE (sku),
+    CONSTRAINT fk_product_category FOREIGN KEY (category_id) REFERENCES CATEGORY (id) ON DELETE RESTRICT,
+    CONSTRAINT fk_product_supplier FOREIGN KEY (supplier_id) REFERENCES SUPPLIER (id) ON DELETE RESTRICT,
+    CONSTRAINT chk_product_price CHECK (price >= 0),
+    CONSTRAINT chk_product_min_stock CHECK (min_stock >= 0)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
 
-CREATE TABLE IF NOT EXISTS COMPRA (
-    id           INT AUTO_INCREMENT PRIMARY KEY,
-    fecha        DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    estado       ENUM ('pendiente', 'recibida', 'cancelada') NOT NULL DEFAULT 'pendiente',
-    total        DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
-    id_proveedor INT            NOT NULL,
-    id_usuario   INT            NOT NULL,
-    CONSTRAINT fk_compra_proveedor FOREIGN KEY (id_proveedor) REFERENCES PROVEEDOR (id) ON DELETE RESTRICT,
-    CONSTRAINT fk_compra_usuario FOREIGN KEY (id_usuario) REFERENCES USUARIO (id) ON DELETE RESTRICT,
-    CONSTRAINT chk_compra_total CHECK (total >= 0)
+CREATE TABLE IF NOT EXISTS PURCHASE (
+    id            INT AUTO_INCREMENT PRIMARY KEY,
+    purchase_date DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    status        ENUM ('pending', 'received', 'cancelled') NOT NULL DEFAULT 'pending',
+    total         DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
+    supplier_id   INT            NOT NULL,
+    user_id       INT            NOT NULL,
+    CONSTRAINT fk_purchase_supplier FOREIGN KEY (supplier_id) REFERENCES SUPPLIER (id) ON DELETE RESTRICT,
+    CONSTRAINT fk_purchase_user FOREIGN KEY (user_id) REFERENCES USER (id) ON DELETE RESTRICT,
+    CONSTRAINT chk_purchase_total CHECK (total >= 0)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
 
+-- STOCK holds the individual lots: a product has one or more lots, each one
+-- coming from a purchase with its own purchase price.
 CREATE TABLE IF NOT EXISTS STOCK (
-    id                   INT AUTO_INCREMENT PRIMARY KEY,
-    cantidad_inicial     INT            NOT NULL,
-    cantidad_disponible  INT            NOT NULL,
-    precio_compra        DECIMAL(10, 2) NOT NULL,
-    fecha_entrada        DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    id_producto          INT            NOT NULL,
-    id_compra            INT            NOT NULL,
-    CONSTRAINT fk_stock_producto FOREIGN KEY (id_producto) REFERENCES PRODUCTO (id) ON DELETE RESTRICT,
-    CONSTRAINT fk_stock_compra FOREIGN KEY (id_compra) REFERENCES COMPRA (id) ON DELETE RESTRICT,
-    CONSTRAINT chk_stock_cantidad_inicial CHECK (cantidad_inicial > 0),
-    CONSTRAINT chk_stock_cantidad_disponible CHECK (cantidad_disponible >= 0),
-    CONSTRAINT chk_stock_no_excede_inicial CHECK (cantidad_disponible <= cantidad_inicial),
-    CONSTRAINT chk_stock_precio_compra CHECK (precio_compra >= 0),
-    INDEX idx_stock_producto_fecha (id_producto, fecha_entrada)
+    id                 INT AUTO_INCREMENT PRIMARY KEY,
+    initial_quantity   INT            NOT NULL,
+    available_quantity INT            NOT NULL,
+    purchase_price     DECIMAL(10, 2) NOT NULL,
+    entry_date         DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    product_id         INT            NOT NULL,
+    purchase_id        INT            NOT NULL,
+    CONSTRAINT fk_stock_product FOREIGN KEY (product_id) REFERENCES PRODUCT (id) ON DELETE RESTRICT,
+    CONSTRAINT fk_stock_purchase FOREIGN KEY (purchase_id) REFERENCES PURCHASE (id) ON DELETE RESTRICT,
+    CONSTRAINT chk_stock_initial_quantity CHECK (initial_quantity > 0),
+    CONSTRAINT chk_stock_available_quantity CHECK (available_quantity >= 0),
+    CONSTRAINT chk_stock_not_exceed_initial CHECK (available_quantity <= initial_quantity),
+    CONSTRAINT chk_stock_purchase_price CHECK (purchase_price >= 0),
+    INDEX idx_stock_product_date (product_id, entry_date)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
 
-CREATE TABLE IF NOT EXISTS CLIENTE (
-    id        INT AUTO_INCREMENT PRIMARY KEY,
-    nombre    VARCHAR(100) NOT NULL,
-    telefono  VARCHAR(20)  NULL,
-    email     VARCHAR(100) NULL,
-    direccion VARCHAR(255) NULL
+CREATE TABLE IF NOT EXISTS CUSTOMER (
+    id      INT AUTO_INCREMENT PRIMARY KEY,
+    name    VARCHAR(100) NOT NULL,
+    phone   VARCHAR(20)  NULL,
+    email   VARCHAR(100) NULL,
+    address VARCHAR(255) NULL
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
 
-CREATE TABLE IF NOT EXISTS PEDIDO (
-    id         INT AUTO_INCREMENT PRIMARY KEY,
-    fecha      DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    estado     ENUM ('pendiente', 'enviado', 'entregado', 'cancelado') NOT NULL DEFAULT 'pendiente',
-    total      DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
-    id_cliente INT            NOT NULL,
-    id_usuario INT            NOT NULL,
-    CONSTRAINT fk_pedido_cliente FOREIGN KEY (id_cliente) REFERENCES CLIENTE (id) ON DELETE RESTRICT,
-    CONSTRAINT fk_pedido_usuario FOREIGN KEY (id_usuario) REFERENCES USUARIO (id) ON DELETE RESTRICT,
-    CONSTRAINT chk_pedido_total CHECK (total >= 0)
+-- NOTE: the customer order is called SALES_ORDER because ORDER is a reserved
+-- word in MySQL and would have to be quoted in every single query.
+CREATE TABLE IF NOT EXISTS SALES_ORDER (
+    id          INT AUTO_INCREMENT PRIMARY KEY,
+    order_date  DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    status      ENUM ('pending', 'shipped', 'delivered', 'cancelled') NOT NULL DEFAULT 'pending',
+    total       DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
+    customer_id INT            NOT NULL,
+    user_id     INT            NOT NULL,
+    CONSTRAINT fk_sales_order_customer FOREIGN KEY (customer_id) REFERENCES CUSTOMER (id) ON DELETE RESTRICT,
+    CONSTRAINT fk_sales_order_user FOREIGN KEY (user_id) REFERENCES USER (id) ON DELETE RESTRICT,
+    CONSTRAINT chk_sales_order_total CHECK (total >= 0)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
 
-CREATE TABLE IF NOT EXISTS LINEA_PEDIDO (
-    id              INT AUTO_INCREMENT PRIMARY KEY,
-    cantidad        INT            NOT NULL,
-    precio_unitario DECIMAL(10, 2) NOT NULL,
-    id_pedido       INT            NOT NULL,
-    id_producto     INT            NOT NULL,
-    CONSTRAINT fk_linea_pedido_pedido FOREIGN KEY (id_pedido) REFERENCES PEDIDO (id) ON DELETE RESTRICT,
-    CONSTRAINT fk_linea_pedido_producto FOREIGN KEY (id_producto) REFERENCES PRODUCTO (id) ON DELETE RESTRICT,
-    CONSTRAINT chk_linea_pedido_cantidad CHECK (cantidad > 0),
-    CONSTRAINT chk_linea_pedido_precio CHECK (precio_unitario >= 0)
+CREATE TABLE IF NOT EXISTS SALES_ORDER_LINE (
+    id             INT AUTO_INCREMENT PRIMARY KEY,
+    quantity       INT            NOT NULL,
+    unit_price     DECIMAL(10, 2) NOT NULL,
+    sales_order_id INT            NOT NULL,
+    product_id     INT            NOT NULL,
+    CONSTRAINT fk_sales_order_line_order FOREIGN KEY (sales_order_id) REFERENCES SALES_ORDER (id) ON DELETE RESTRICT,
+    CONSTRAINT fk_sales_order_line_product FOREIGN KEY (product_id) REFERENCES PRODUCT (id) ON DELETE RESTRICT,
+    CONSTRAINT chk_sales_order_line_quantity CHECK (quantity > 0),
+    CONSTRAINT chk_sales_order_line_unit_price CHECK (unit_price >= 0)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
 
-CREATE TABLE IF NOT EXISTS SALIDA_STOCK (
-    id               INT AUTO_INCREMENT PRIMARY KEY,
-    cantidad         INT NOT NULL,
-    id_linea_pedido  INT NOT NULL,
-    id_stock         INT NOT NULL,
-    CONSTRAINT fk_salida_stock_linea FOREIGN KEY (id_linea_pedido) REFERENCES LINEA_PEDIDO (id) ON DELETE RESTRICT,
-    CONSTRAINT fk_salida_stock_stock FOREIGN KEY (id_stock) REFERENCES STOCK (id) ON DELETE RESTRICT,
-    CONSTRAINT chk_salida_stock_cantidad CHECK (cantidad > 0)
+-- One order line may be served from several lots (FIFO), so each row records
+-- how many units were taken from one specific lot.
+CREATE TABLE IF NOT EXISTS STOCK_ISSUE (
+    id                  INT AUTO_INCREMENT PRIMARY KEY,
+    quantity            INT NOT NULL,
+    sales_order_line_id INT NOT NULL,
+    stock_id            INT NOT NULL,
+    CONSTRAINT fk_stock_issue_line FOREIGN KEY (sales_order_line_id) REFERENCES SALES_ORDER_LINE (id) ON DELETE RESTRICT,
+    CONSTRAINT fk_stock_issue_stock FOREIGN KEY (stock_id) REFERENCES STOCK (id) ON DELETE RESTRICT,
+    CONSTRAINT chk_stock_issue_quantity CHECK (quantity > 0)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;

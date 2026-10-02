@@ -9,21 +9,21 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Pruebas del hash de contraseñas: es la pieza crítica de RF-01, así que se
- * verifica que ningún camino devuelve {@code true} por accidente.
+ * Password hashing tests: it is the critical piece of RF-01, so the suite checks
+ * that no code path returns {@code true} by accident.
  */
 class PasswordHasherTest {
 
     @Test
-    @DisplayName("hash() y verify() son coherentes para la contraseña correcta")
-    void hashYVerifyCoherentes() {
+    @DisplayName("hash() and verify() agree for the correct password")
+    void hashAndVerifyAgree() {
         String hash = PasswordHasher.hash("admin123");
         assertTrue(PasswordHasher.verify("admin123", hash));
     }
 
     @Test
-    @DisplayName("La contraseña incorrecta se rechaza")
-    void contrasenaIncorrecta() {
+    @DisplayName("A wrong password is rejected")
+    void wrongPasswordIsRejected() {
         String hash = PasswordHasher.hash("admin123");
         assertFalse(PasswordHasher.verify("admin124", hash));
         assertFalse(PasswordHasher.verify("Admin123", hash));
@@ -31,29 +31,29 @@ class PasswordHasherTest {
     }
 
     @Test
-    @DisplayName("El hash usa PBKDF2-HMAC-SHA256 con salt aleatorio y no contiene la contraseña")
-    void hashNoRevelaLaContrasena() {
+    @DisplayName("The hash uses PBKDF2-HMAC-SHA256 with a random salt and hides the password")
+    void hashDoesNotRevealThePassword() {
         String hash = PasswordHasher.hash("admin123");
-        assertTrue(hash.startsWith("pbkdf2-sha256$210000$"), "formato esperado: " + hash);
-        assertFalse(hash.contains("admin123"), "el hash no debe contener la contraseña en claro");
-        assertNotEquals(hash, PasswordHasher.hash("admin123"), "dos hashes iguales => salt no aleatorio");
+        assertTrue(hash.startsWith("pbkdf2-sha256$210000$"), "expected format: " + hash);
+        assertFalse(hash.contains("admin123"), "the hash must not contain the password in clear text");
+        assertNotEquals(hash, PasswordHasher.hash("admin123"), "two equal hashes => the salt is not random");
     }
 
     @Test
-    @DisplayName("Un hash corrupto o de formato desconocido se rechaza sin lanzar excepción")
-    void hashCorrupto() {
+    @DisplayName("A corrupted or unknown hash format is rejected without throwing")
+    void corruptedHashIsRejected() {
         assertFalse(PasswordHasher.verify("admin123", null));
         assertFalse(PasswordHasher.verify("admin123", ""));
-        assertFalse(PasswordHasher.verify("admin123", "texto-en-claro-admin123"));
-        assertFalse(PasswordHasher.verify("admin123", "pbkdf2-sha256$210000$no-base64!$tampoco"));
-        assertFalse(PasswordHasher.verify("admin123", "otro-formato$210000$c2FsdA==$a2V5"));
+        assertFalse(PasswordHasher.verify("admin123", "plain-text-admin123"));
+        assertFalse(PasswordHasher.verify("admin123", "pbkdf2-sha256$210000$not-base64!$neither"));
+        assertFalse(PasswordHasher.verify("admin123", "other-format$210000$c2FsdA==$a2V5"));
         assertFalse(PasswordHasher.verify("admin123", "pbkdf2-sha256$0$c2FsdA==$a2V5"));
         assertTrue(PasswordHasher.verify("admin123", PasswordHasher.hash("admin123")));
     }
 
     @Test
-    @DisplayName("No se permite calcular el hash de una contraseña vacía")
-    void contrasenaVaciaEnHash() {
+    @DisplayName("Hashing an empty password is not allowed")
+    void emptyPasswordIsRejectedWhenHashing() {
         assertThrows(IllegalArgumentException.class, () -> PasswordHasher.hash(null));
         assertThrows(IllegalArgumentException.class, () -> PasswordHasher.hash(""));
     }
