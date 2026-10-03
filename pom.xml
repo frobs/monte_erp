@@ -104,6 +104,24 @@
             <version>${junit.version}</version>
             <scope>test</scope>
         </dependency>
+        <dependency>
+            <groupId>de.saxsys</groupId>
+            <artifactId>mvvmfx</artifactId>
+            <version>1.8.0</version>
+        </dependency>
+        <!-- slf4j-api 1.7.12 (transitiva de mvvmfx) no declara Automatic-Module-Name;
+             se fija 1.7.36 (org.slf4j) y se añade el puente a java.util.logging para
+             que los logs de mvvmFX salgan por el mismo Logger del proyecto. -->
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
+            <version>1.7.36</version>
+        </dependency>
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-jdk14</artifactId>
+            <version>1.7.36</version>
+        </dependency>
     </dependencies>
 
     <build>

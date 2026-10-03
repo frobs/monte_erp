@@ -9,8 +9,8 @@
 <?import javafx.scene.layout.VBox?>
 
 <StackPane xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1"
-           fx:controller="com.entidaddesconocida.monte_erp.controller.LoginController"
-           stylesheets="@../css/app.css"
+           fx:controller="com.entidaddesconocida.monte_erp.view.LoginView"
+           stylesheets="@../../../../css/app.css"
            styleClass="root-pane"
            prefWidth="460.0" prefHeight="480.0">
 

@@ -40,16 +40,22 @@ monte_erp/
 │   │   │   └── com/entidaddesconocida/monte_erp/
 │   │   │       ├── Launcher.java                  # Punto de entrada (main)
 │   │   │       ├── MonteErpApplication.java       # JavaFX Application
-│   │   │       ├── controller/                    # LoginController, MainController
-│   │   │       ├── domain/model/                  # User
-│   │   │       ├── infrastructure/                # UserRepository
+│   │   │       ├── app/                           # AppContext, AppShell, SessionState, SceneNavigator
+│   │   │       ├── view/                          # LoginView, MainView (code-behind FXML)
+│   │   │       ├── viewmodel/                     # LoginViewModel, MainViewModel
+│   │   │       ├── domain/
+│   │   │       │   ├── model/                     # User
+│   │   │       │   └── repository/                # UserRepository (interfaz de puerto)
+│   │   │       ├── infrastructure/                # MySqlUserRepository (implementación JDBC)
 │   │   │       │   └── config/                    # DatabaseConnection, MigrationRunner, DataSeeder
 │   │   │       └── security/                      # PasswordHasher
 │   │   └── resources/
 │   │       ├── application.properties             # URL, usuario y contraseña de la BD
 │   │       ├── css/app.css                        # Estilos de la interfaz
 │   │       ├── db/migration/V1__schema.sql        # Migración: esquema completo
-│   │       └── fxml/                              # login.fxml, main.fxml
+│   │       └── com/entidaddesconocida/monte_erp/view/
+│   │           ├── LoginView.fxml                 # vista de login (mismo paquete que LoginView)
+│   │           └── MainView.fxml                  # vista principal (mismo paquete que MainView)
 │   └── test/java/...                              # Pruebas JUnit 5 (unitarias + integración)
 └── target/                  # Artefactos generados (tras compilar)
 ```

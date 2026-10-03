@@ -1,0 +1,88 @@
+package com.entidaddesconocida.monte_erp.app;
+
+import com.entidaddesconocida.monte_erp.domain.model.User;
+import com.entidaddesconocida.monte_erp.security.PasswordHasher;
+import com.entidaddesconocida.monte_erp.view.LoginView;
+import com.entidaddesconocida.monte_erp.view.MainView;
+import com.entidaddesconocida.monte_erp.viewmodel.LoginViewModel;
+import com.entidaddesconocida.monte_erp.viewmodel.MainViewModel;
+import com.entidaddesconocida.monte_erp.viewmodel.support.FakeUserRepository;
+
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+/**
+ * Unit tests for the composition root {@link AppContext}.
+ *
+ * <p>No JavaFX toolkit: only the container wiring and the session rule are
+ * checked.</p>
+ */
+class AppContextTest {
+
+    @Test
+    @DisplayName("Tipo sin binding lanza IllegalArgumentException con mensaje explícito")
+    void missingBindingThrowsExplicitError() {
+        AppContext context = AppContext.production(new SessionState(), new AppShell(new SessionState()));
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+                () -> context.create(Object.class));
+        assertTrue(ex.getMessage().contains("No hay binding para"));
+    }
+
+    @Test
+    @DisplayName("create(LoginViewModel) devuelve un VM construido con el repositorio inyectado")
+    void loginViewModelIsCreatedWithRepository() {
+        SessionState session = new SessionState();
+        AppShell shell = new AppShell(session);
+        FakeUserRepository repo = new FakeUserRepository();
+        AppContext context = new AppContext(session, shell, repo, "jdbc:test");
+
+        LoginViewModel vm = (LoginViewModel) context.create(LoginViewModel.class);
+        assertNotNull(vm);
+    }
+
+    @Test
+    @DisplayName("create(MainViewModel) sin sesión falla con IllegalStateException")
+    void mainViewModelWithoutSessionFails() {
+        SessionState session = new SessionState();
+        AppShell shell = new AppShell(session);
+        FakeUserRepository repo = new FakeUserRepository();
+        AppContext context = new AppContext(session, shell, repo, "jdbc:test");
+
+        IllegalStateException ex = assertThrows(IllegalStateException.class,
+                () -> context.create(MainViewModel.class));
+        assertEquals("No hay sesión iniciada", ex.getMessage());
+    }
+
+    @Test
+    @DisplayName("create(MainViewModel) con sesión devuelve VM con datos del usuario")
+    void mainViewModelWithSessionSucceeds() {
+        SessionState session = new SessionState();
+        session.signIn(new User("Ana", "ana", PasswordHasher.hash("ana123"), User.ROLE_ADMIN, true));
+        AppShell shell = new AppShell(session);
+        FakeUserRepository repo = new FakeUserRepository();
+        AppContext context = new AppContext(session, shell, repo, "jdbc:test");
+
+        MainViewModel vm = (MainViewModel) context.create(MainViewModel.class);
+        assertNotNull(vm);
+        assertEquals("Bienvenido/a, Ana", vm.welcomeProperty().get());
+        assertTrue(vm.adminProperty().get());
+        assertEquals("Base de datos: jdbc:test", vm.databaseProperty().get());
+    }
+
+    @Test
+    @DisplayName("Las vistas se crean como instancias nuevas (no null)")
+    void viewsAreCreated() {
+        SessionState session = new SessionState();
+        AppShell shell = new AppShell(session);
+        FakeUserRepository repo = new FakeUserRepository();
+        AppContext context = new AppContext(session, shell, repo, "jdbc:test");
+
+        assertNotNull(context.create(LoginView.class));
+        assertNotNull(context.create(MainView.class));
+    }
+}

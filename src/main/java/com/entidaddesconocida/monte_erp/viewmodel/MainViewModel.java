@@ -1,0 +1,54 @@
+package com.entidaddesconocida.monte_erp.viewmodel;
+
+import com.entidaddesconocida.monte_erp.domain.model.User;
+
+import de.saxsys.mvvmfx.ViewModel;
+
+import javafx.beans.property.ReadOnlyBooleanProperty;
+import javafx.beans.property.ReadOnlyBooleanWrapper;
+import javafx.beans.property.ReadOnlyStringProperty;
+import javafx.beans.property.ReadOnlyStringWrapper;
+
+/**
+ * ViewModel of the main screen.
+ *
+ * <p>Exposes read-only properties derived from the authenticated user and the
+ * application configuration. The View binds labels and visibility to these
+ * properties.</p>
+ */
+public class MainViewModel implements ViewModel {
+
+    private final ReadOnlyStringWrapper welcomeProperty = new ReadOnlyStringWrapper();
+    private final ReadOnlyStringWrapper usernameProperty = new ReadOnlyStringWrapper();
+    private final ReadOnlyStringWrapper roleLabelProperty = new ReadOnlyStringWrapper();
+    private final ReadOnlyBooleanWrapper adminProperty = new ReadOnlyBooleanWrapper();
+    private final ReadOnlyStringWrapper databaseProperty = new ReadOnlyStringWrapper();
+
+    public MainViewModel(User user, String databaseUrl) {
+        welcomeProperty.set("Bienvenido/a, " + user.getName());
+        usernameProperty.set(user.getUsername());
+        roleLabelProperty.set(user.getRoleLabel());
+        adminProperty.set(user.isAdmin());
+        databaseProperty.set("Base de datos: " + databaseUrl);
+    }
+
+    public ReadOnlyStringProperty welcomeProperty() {
+        return welcomeProperty.getReadOnlyProperty();
+    }
+
+    public ReadOnlyStringProperty usernameProperty() {
+        return usernameProperty.getReadOnlyProperty();
+    }
+
+    public ReadOnlyStringProperty roleLabelProperty() {
+        return roleLabelProperty.getReadOnlyProperty();
+    }
+
+    public ReadOnlyBooleanProperty adminProperty() {
+        return adminProperty.getReadOnlyProperty();
+    }
+
+    public ReadOnlyStringProperty databaseProperty() {
+        return databaseProperty.getReadOnlyProperty();
+    }
+}

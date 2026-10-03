@@ -12,8 +12,8 @@
 <?import javafx.scene.layout.VBox?>
 
 <BorderPane xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1"
-            fx:controller="com.entidaddesconocida.monte_erp.controller.MainController"
-            stylesheets="@../css/app.css"
+            fx:controller="com.entidaddesconocida.monte_erp.view.MainView"
+            stylesheets="@../../../../css/app.css"
             styleClass="root-pane"
             prefWidth="1000.0" prefHeight="660.0">
 

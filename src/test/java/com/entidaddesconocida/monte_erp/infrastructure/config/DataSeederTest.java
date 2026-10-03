@@ -1,7 +1,8 @@
 package com.entidaddesconocida.monte_erp.infrastructure.config;
 
 import com.entidaddesconocida.monte_erp.domain.model.User;
-import com.entidaddesconocida.monte_erp.infrastructure.UserRepository;
+import com.entidaddesconocida.monte_erp.domain.repository.UserRepository;
+import com.entidaddesconocida.monte_erp.infrastructure.MySqlUserRepository;
 import com.entidaddesconocida.monte_erp.security.PasswordHasher;
 
 import org.junit.jupiter.api.AfterEach;
@@ -54,7 +55,7 @@ class DataSeederTest {
     @Test
     @DisplayName("admin/admin123 and employee/employee123 sign in with their role")
     void seededUsersCanSignIn() throws SQLException {
-        UserRepository userRepository = new UserRepository();
+        UserRepository userRepository = new MySqlUserRepository();
 
         User admin = userRepository.findByUsername(DataSeeder.ADMIN_USERNAME);
         assertNotNull(admin, "the seed must create the admin user");
@@ -72,7 +73,7 @@ class DataSeederTest {
     @Test
     @DisplayName("A wrong password is rejected and the hash is never stored in clear text")
     void wrongPasswordDoesNotAuthenticate() throws SQLException {
-        User admin = new UserRepository().findByUsername(DataSeeder.ADMIN_USERNAME);
+        User admin = new MySqlUserRepository().findByUsername(DataSeeder.ADMIN_USERNAME);
         assertNotNull(admin);
         assertFalse(PasswordHasher.verify("wrong-password", admin.getPasswordHash()));
         assertFalse(admin.getPasswordHash().contains(DataSeeder.ADMIN_PASSWORD),
@@ -82,13 +83,13 @@ class DataSeederTest {
     @Test
     @DisplayName("An unknown user returns null")
     void unknownUserReturnsNull() throws SQLException {
-        assertNull(new UserRepository().findByUsername("this_user_does_not_exist"));
+        assertNull(new MySqlUserRepository().findByUsername("this_user_does_not_exist"));
     }
 
     @Test
     @DisplayName("A deactivated user keeps its hash but can no longer sign in (logical deletion)")
     void deactivatedUserCannotSignIn() throws SQLException {
-        UserRepository userRepository = new UserRepository();
+        UserRepository userRepository = new MySqlUserRepository();
 
         User temporary = new User("Temporary test user", TEMPORARY_USERNAME,
                 PasswordHasher.hash("temporary123"), User.ROLE_EMPLOYEE, true);
