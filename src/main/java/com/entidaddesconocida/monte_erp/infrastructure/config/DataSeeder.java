@@ -1,7 +1,8 @@
 package com.entidaddesconocida.monte_erp.infrastructure.config;
 
 import com.entidaddesconocida.monte_erp.domain.model.User;
-import com.entidaddesconocida.monte_erp.infrastructure.UserRepository;
+import com.entidaddesconocida.monte_erp.domain.repository.UserRepository;
+import com.entidaddesconocida.monte_erp.infrastructure.MySqlUserRepository;
 import com.entidaddesconocida.monte_erp.security.PasswordHasher;
 
 import java.sql.SQLException;
@@ -25,7 +26,7 @@ public final class DataSeeder {
     public static final String EMPLOYEE_USERNAME = "employee";
     public static final String EMPLOYEE_PASSWORD = "employee123";
 
-    private static final UserRepository USER_REPOSITORY = new UserRepository();
+    private static final UserRepository USER_REPOSITORY = new MySqlUserRepository();
 
     private DataSeeder() {
         // Utility class: never instantiated.

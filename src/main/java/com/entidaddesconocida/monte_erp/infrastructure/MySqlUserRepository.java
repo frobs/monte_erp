@@ -1,6 +1,7 @@
 package com.entidaddesconocida.monte_erp.infrastructure;
 
 import com.entidaddesconocida.monte_erp.domain.model.User;
+import com.entidaddesconocida.monte_erp.domain.repository.UserRepository;
 import com.entidaddesconocida.monte_erp.infrastructure.config.DatabaseConnection;
 
 import java.sql.PreparedStatement;
@@ -11,22 +12,18 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Data access for the {@code USER} table.
+ * JDBC implementation of {@link UserRepository} for the {@code USER} table.
  *
  * <p>No business logic: it only translates between {@link User} and the table
  * rows. Deleting a user is logical ({@link #deactivate(int)}), as required by
  * the E-R diagram.</p>
  */
-public class UserRepository {
+public class MySqlUserRepository implements UserRepository {
 
     private static final String COLUMNS = "id, name, username, password_hash, role, active";
     private static final String SELECT_ALL = "SELECT " + COLUMNS + " FROM USER";
 
-    /**
-     * Looks a user up by its login name (unique column {@code username}).
-     *
-     * @return the matching user, or {@code null} when it does not exist
-     */
+    @Override
     public User findByUsername(String username) throws SQLException {
         String sql = SELECT_ALL + " WHERE username = ?";
         try (PreparedStatement ps = DatabaseConnection.getConnection().prepareStatement(sql)) {
@@ -37,7 +34,7 @@ public class UserRepository {
         }
     }
 
-    /** Returns every user, ordered by login name. */
+    @Override
     public List<User> findAll() throws SQLException {
         List<User> users = new ArrayList<>();
         try (Statement statement = DatabaseConnection.getConnection().createStatement();
@@ -49,11 +46,7 @@ public class UserRepository {
         return users;
     }
 
-    /**
-     * Inserts a new user.
-     *
-     * @return the generated identifier, which is also assigned to the object
-     */
+    @Override
     public int insert(User user) throws SQLException {
         String sql = "INSERT INTO USER (name, username, password_hash, role, active) VALUES (?, ?, ?, ?, ?)";
         try (PreparedStatement ps = DatabaseConnection.getConnection()
@@ -72,7 +65,7 @@ public class UserRepository {
         }
     }
 
-    /** Updates every editable field of an existing user. */
+    @Override
     public void update(User user) throws SQLException {
         String sql = "UPDATE USER SET name = ?, username = ?, password_hash = ?, role = ?, active = ? WHERE id = ?";
         try (PreparedStatement ps = DatabaseConnection.getConnection().prepareStatement(sql)) {
@@ -86,10 +79,7 @@ public class UserRepository {
         }
     }
 
-    /**
-     * Logical deletion: sets {@code active} to 0 without removing the row, so
-     * the foreign keys of the purchases and orders already recorded stay valid.
-     */
+    @Override
     public void deactivate(int id) throws SQLException {
         try (PreparedStatement ps = DatabaseConnection.getConnection()
                 .prepareStatement("UPDATE USER SET active = 0 WHERE id = ?")) {
