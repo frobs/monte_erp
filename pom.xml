@@ -92,6 +92,14 @@
             <artifactId>mysql-connector-j</artifactId>
             <version>8.4.0</version>
         </dependency>
+        <!-- OS keyring access (Credential Manager / Keychain / Secret Service).
+             The JAR ships no module-info.class nor Automatic-Module-Name, so its
+             automatic module name is derived from the file name: java.keyring. -->
+        <dependency>
+            <groupId>com.github.javakeyring</groupId>
+            <artifactId>java-keyring</artifactId>
+            <version>1.0.4</version>
+        </dependency>
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter-api</artifactId>

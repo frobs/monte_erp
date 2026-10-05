@@ -1,11 +1,16 @@
 package com.entidaddesconocida.monte_erp.app;
 
 import com.entidaddesconocida.monte_erp.domain.model.User;
+import com.entidaddesconocida.monte_erp.infrastructure.config.DatabaseConfig;
+import com.entidaddesconocida.monte_erp.infrastructure.config.FakeCredentialStore;
 import com.entidaddesconocida.monte_erp.security.PasswordHasher;
 import com.entidaddesconocida.monte_erp.view.LoginView;
 import com.entidaddesconocida.monte_erp.view.MainView;
+import com.entidaddesconocida.monte_erp.view.SetupView;
 import com.entidaddesconocida.monte_erp.viewmodel.LoginViewModel;
 import com.entidaddesconocida.monte_erp.viewmodel.MainViewModel;
+import com.entidaddesconocida.monte_erp.viewmodel.SetupViewModel;
+import com.entidaddesconocida.monte_erp.viewmodel.support.FakeSetupService;
 import com.entidaddesconocida.monte_erp.viewmodel.support.FakeUserRepository;
 
 import org.junit.jupiter.api.DisplayName;
@@ -24,10 +29,17 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class AppContextTest {
 
+    private static AppContext context(SessionState session, AppShell shell) {
+        FakeUserRepository repo = new FakeUserRepository();
+        DatabaseConfig config = new DatabaseConfig(new FakeCredentialStore());
+        FakeSetupService setup = new FakeSetupService();
+        return new AppContext(session, shell, repo, config, setup, () -> "jdbc:test");
+    }
+
     @Test
     @DisplayName("Tipo sin binding lanza IllegalArgumentException con mensaje explícito")
     void missingBindingThrowsExplicitError() {
-        AppContext context = AppContext.production(new SessionState(), new AppShell(new SessionState()));
+        AppContext context = context(new SessionState(), new AppShell(new SessionState()));
         IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
                 () -> context.create(Object.class));
         assertTrue(ex.getMessage().contains("No hay binding para"));
@@ -36,11 +48,7 @@ class AppContextTest {
     @Test
     @DisplayName("create(LoginViewModel) devuelve un VM construido con el repositorio inyectado")
     void loginViewModelIsCreatedWithRepository() {
-        SessionState session = new SessionState();
-        AppShell shell = new AppShell(session);
-        FakeUserRepository repo = new FakeUserRepository();
-        AppContext context = new AppContext(session, shell, repo, "jdbc:test");
-
+        AppContext context = context(new SessionState(), new AppShell(new SessionState()));
         LoginViewModel vm = (LoginViewModel) context.create(LoginViewModel.class);
         assertNotNull(vm);
     }
@@ -48,11 +56,7 @@ class AppContextTest {
     @Test
     @DisplayName("create(MainViewModel) sin sesión falla con IllegalStateException")
     void mainViewModelWithoutSessionFails() {
-        SessionState session = new SessionState();
-        AppShell shell = new AppShell(session);
-        FakeUserRepository repo = new FakeUserRepository();
-        AppContext context = new AppContext(session, shell, repo, "jdbc:test");
-
+        AppContext context = context(new SessionState(), new AppShell(new SessionState()));
         IllegalStateException ex = assertThrows(IllegalStateException.class,
                 () -> context.create(MainViewModel.class));
         assertEquals("No hay sesión iniciada", ex.getMessage());
@@ -63,9 +67,7 @@ class AppContextTest {
     void mainViewModelWithSessionSucceeds() {
         SessionState session = new SessionState();
         session.signIn(new User("Ana", "ana", PasswordHasher.hash("ana123"), User.ROLE_ADMIN, true));
-        AppShell shell = new AppShell(session);
-        FakeUserRepository repo = new FakeUserRepository();
-        AppContext context = new AppContext(session, shell, repo, "jdbc:test");
+        AppContext context = context(session, new AppShell(session));
 
         MainViewModel vm = (MainViewModel) context.create(MainViewModel.class);
         assertNotNull(vm);
@@ -75,14 +77,19 @@ class AppContextTest {
     }
 
     @Test
+    @DisplayName("create(SetupViewModel) devuelve un VM con el servicio inyectado")
+    void setupViewModelIsCreatedWithService() {
+        AppContext context = context(new SessionState(), new AppShell(new SessionState()));
+        SetupViewModel vm = (SetupViewModel) context.create(SetupViewModel.class);
+        assertNotNull(vm);
+    }
+
+    @Test
     @DisplayName("Las vistas se crean como instancias nuevas (no null)")
     void viewsAreCreated() {
-        SessionState session = new SessionState();
-        AppShell shell = new AppShell(session);
-        FakeUserRepository repo = new FakeUserRepository();
-        AppContext context = new AppContext(session, shell, repo, "jdbc:test");
-
+        AppContext context = context(new SessionState(), new AppShell(new SessionState()));
         assertNotNull(context.create(LoginView.class));
         assertNotNull(context.create(MainView.class));
+        assertNotNull(context.create(SetupView.class));
     }
 }
