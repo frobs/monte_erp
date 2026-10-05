@@ -1,23 +1,20 @@
 package com.entidaddesconocida.monte_erp.infrastructure.config;
 
-import java.io.IOException;
-import java.io.InputStream;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
-import java.util.Properties;
 
 /**
  * Single JDBC connection point for the application (singleton).
  *
- * <p>The configuration (URL, user and password) is read from
- * {@code /application.properties} on the classpath, as stated by the class
- * diagram. If the connection has been closed or has dropped, it is reopened
+ * <p>The configuration is no longer read from the classpath: it is set through
+ * {@link #configure(String, String, String)} by {@link DatabaseSetupService}
+ * once the user has saved the URL (properties file) and the credentials (OS
+ * keyring). If the connection has been closed or has dropped, it is reopened
  * transparently.</p>
  */
 public final class DatabaseConnection {
 
-    private static final String CONFIG_RESOURCE = "/application.properties";
     private static final String DRIVER_CLASS = "com.mysql.cj.jdbc.Driver";
 
     private static Connection connection;
@@ -30,17 +27,46 @@ public final class DatabaseConnection {
     }
 
     /**
+     * Points the shared connection at the given settings. The previous
+     * connection, if any, is closed so the next {@link #getConnection()} opens a
+     * fresh one.
+     */
+    public static synchronized void configure(String url, String user, String password) {
+        close();
+        DatabaseConnection.url = url;
+        DatabaseConnection.user = user;
+        DatabaseConnection.password = password;
+    }
+
+    /**
      * Returns the shared connection, opening it when it does not exist yet.
      *
-     * @throws SQLException when the connection cannot be established
+     * @throws SQLException when the connection cannot be established or the
+     *                      configuration is missing
      */
     public static synchronized Connection getConnection() throws SQLException {
         if (connection == null || connection.isClosed()) {
-            loadConfiguration();
             loadDriver();
+            if (isBlank(url) || isBlank(user) || password == null || password.isEmpty()) {
+                throw new SQLException("La configuración de la base de datos no está disponible "
+                        + "(url, usuario o contraseña vacíos).");
+            }
             connection = DriverManager.getConnection(url, user, password);
         }
         return connection;
+    }
+
+    /**
+     * Verifies that the given settings can open a JDBC connection. The shared
+     * connection is left untouched.
+     *
+     * @throws SQLException when the connection cannot be established
+     */
+    public static void testConnection(String url, String user, String password) throws SQLException {
+        loadDriver();
+        try (Connection ignored = DriverManager.getConnection(url, user, password)) {
+            // Opened and closed successfully: the credentials are correct.
+        }
     }
 
     /**
@@ -63,36 +89,7 @@ public final class DatabaseConnection {
      * Configured JDBC URL (handy to display the environment in the interface).
      */
     public static synchronized String getUrl() {
-        if (url == null) {
-            loadConfiguration();
-        }
         return url;
-    }
-
-    private static void loadConfiguration() {
-        if (url != null) {
-            return;
-        }
-        Properties properties = new Properties();
-        try (InputStream in = DatabaseConnection.class.getResourceAsStream(CONFIG_RESOURCE)) {
-            if (in == null) {
-                throw new IllegalStateException("Resource not found on the classpath: " + CONFIG_RESOURCE);
-            }
-            properties.load(in);
-        } catch (IOException e) {
-            throw new IllegalStateException("Could not read " + CONFIG_RESOURCE, e);
-        }
-        url = require(properties, "db.url");
-        user = properties.getProperty("db.user", "").trim();
-        password = properties.getProperty("db.password", "");
-    }
-
-    private static String require(Properties properties, String key) {
-        String value = properties.getProperty(key);
-        if (value == null || value.isBlank()) {
-            throw new IllegalStateException("Missing property '" + key + "' in " + CONFIG_RESOURCE);
-        }
-        return value.trim();
     }
 
     /**
@@ -106,5 +103,9 @@ public final class DatabaseConnection {
         } catch (ClassNotFoundException e) {
             // Deliberately ignored: DriverManager will try automatic discovery.
         }
+    }
+
+    private static boolean isBlank(String value) {
+        return value == null || value.isBlank();
     }
 }
