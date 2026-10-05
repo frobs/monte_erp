@@ -8,6 +8,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * In-memory double of {@link UserRepository} for unit tests.
@@ -18,6 +19,7 @@ import java.util.Map;
 public class FakeUserRepository implements UserRepository {
 
     private final Map<String, User> users = new LinkedHashMap<>();
+    private final AtomicInteger nextId = new AtomicInteger(1);
     private boolean throwOnAccess;
 
     public FakeUserRepository withUser(User user) {
@@ -51,7 +53,7 @@ public class FakeUserRepository implements UserRepository {
     @Override
     public int insert(User user) throws SQLException {
         maybeThrow();
-        int id = users.size() + 1;
+        int id = nextId.getAndIncrement();
         user.setId(id);
         users.put(user.getUsername(), user);
         return id;

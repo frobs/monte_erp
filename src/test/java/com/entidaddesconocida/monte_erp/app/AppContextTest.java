@@ -2,6 +2,7 @@ package com.entidaddesconocida.monte_erp.app;
 
 import com.entidaddesconocida.monte_erp.domain.model.User;
 import com.entidaddesconocida.monte_erp.infrastructure.config.DatabaseConfig;
+import com.entidaddesconocida.monte_erp.infrastructure.config.DatabaseUrl;
 import com.entidaddesconocida.monte_erp.infrastructure.config.FakeCredentialStore;
 import com.entidaddesconocida.monte_erp.security.PasswordHasher;
 import com.entidaddesconocida.monte_erp.view.LoginView;
@@ -33,7 +34,7 @@ class AppContextTest {
         FakeUserRepository repo = new FakeUserRepository();
         DatabaseConfig config = new DatabaseConfig(new FakeCredentialStore());
         FakeSetupService setup = new FakeSetupService();
-        return new AppContext(session, shell, repo, config, setup, () -> "jdbc:test");
+        return new AppContext(session, shell, repo, config, setup, () -> new DatabaseUrl("jdbc:test"));
     }
 
     @Test

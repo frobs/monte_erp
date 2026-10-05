@@ -1,6 +1,7 @@
 package com.entidaddesconocida.monte_erp.viewmodel;
 
 import com.entidaddesconocida.monte_erp.domain.model.User;
+import com.entidaddesconocida.monte_erp.infrastructure.config.DatabaseUrl;
 
 import de.saxsys.mvvmfx.ViewModel;
 
@@ -24,12 +25,12 @@ public class MainViewModel implements ViewModel {
     private final ReadOnlyBooleanWrapper adminProperty = new ReadOnlyBooleanWrapper();
     private final ReadOnlyStringWrapper databaseProperty = new ReadOnlyStringWrapper();
 
-    public MainViewModel(User user, String databaseUrl) {
+    public MainViewModel(User user, DatabaseUrl databaseUrl) {
         welcomeProperty.set("Bienvenido/a, " + user.getName());
         usernameProperty.set(user.getUsername());
         roleLabelProperty.set(user.getRoleLabel());
         adminProperty.set(user.isAdmin());
-        databaseProperty.set("Base de datos: " + databaseUrl);
+        databaseProperty.set("Base de datos: " + databaseUrl.value());
     }
 
     public ReadOnlyStringProperty welcomeProperty() {

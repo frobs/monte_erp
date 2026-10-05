@@ -102,6 +102,13 @@ public final class DatabaseSetupService implements SetupService {
             current = current.getCause();
         }
         String message = current.getMessage();
-        return message == null || message.isBlank() ? current.getClass().getSimpleName() : message;
+        if (message == null || message.isBlank()) {
+            return current.getClass().getSimpleName();
+        }
+        // Avoid exposing file paths, SQL fragments or network details in user-facing messages.
+        String sanitized = message
+                .replaceAll("([A-Za-z]:)?[/\\\\][^\\s]*", "[ruta]")
+                .replaceAll("\\b\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}(:\\d+)?\\b", "[red]");
+        return sanitized.length() > 200 ? sanitized.substring(0, 200) + "..." : sanitized;
     }
 }

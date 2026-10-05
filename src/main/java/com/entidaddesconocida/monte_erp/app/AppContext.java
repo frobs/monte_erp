@@ -3,6 +3,7 @@ package com.entidaddesconocida.monte_erp.app;
 import com.entidaddesconocida.monte_erp.domain.repository.UserRepository;
 import com.entidaddesconocida.monte_erp.domain.service.SetupService;
 import com.entidaddesconocida.monte_erp.infrastructure.config.DatabaseConfig;
+import com.entidaddesconocida.monte_erp.infrastructure.config.DatabaseUrl;
 import com.entidaddesconocida.monte_erp.view.LoginView;
 import com.entidaddesconocida.monte_erp.view.MainView;
 import com.entidaddesconocida.monte_erp.view.SetupView;
@@ -37,12 +38,12 @@ public final class AppContext {
 
     public AppContext(SessionState session, AppShell appShell, UserRepository userRepository,
                       DatabaseConfig databaseConfig, SetupService setupService,
-                      Supplier<String> databaseUrl) {
+                      Supplier<DatabaseUrl> databaseUrl) {
         // Stateless resources: single instance for the whole application.
         bind(UserRepository.class, () -> userRepository);
         bind(DatabaseConfig.class, () -> databaseConfig);
         bind(SetupService.class, () -> setupService);
-        bind(String.class, databaseUrl); // configuration (current JDBC URL)
+        bind(DatabaseUrl.class, databaseUrl); // configuration (current JDBC URL)
 
         // Views (code-behind of the FXML): mvvmFX asks here. ALWAYS fresh instances.
         bind(LoginView.class, () -> new LoginView(appShell));

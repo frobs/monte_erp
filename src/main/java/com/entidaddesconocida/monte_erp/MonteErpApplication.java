@@ -9,6 +9,7 @@ import com.entidaddesconocida.monte_erp.domain.service.SetupService;
 import com.entidaddesconocida.monte_erp.infrastructure.MySqlUserRepository;
 import com.entidaddesconocida.monte_erp.infrastructure.config.DatabaseConfig;
 import com.entidaddesconocida.monte_erp.infrastructure.config.DatabaseConnection;
+import com.entidaddesconocida.monte_erp.infrastructure.config.DatabaseUrl;
 import com.entidaddesconocida.monte_erp.infrastructure.config.DatabaseSetupService;
 import com.entidaddesconocida.monte_erp.infrastructure.config.KeyringCredentialStore;
 import com.entidaddesconocida.monte_erp.infrastructure.config.MigrationRunner;
@@ -43,7 +44,7 @@ public class MonteErpApplication extends Application {
         SessionState session = new SessionState();
         AppShell appShell = new AppShell(session);
         AppContext context = new AppContext(session, appShell, userRepository, databaseConfig,
-                setupService, DatabaseConnection::getUrl);
+                setupService, () -> new DatabaseUrl(DatabaseConnection.getUrl()));
 
         MvvmFX.setCustomDependencyInjector(context::create);
         appShell.setStage(stage);
