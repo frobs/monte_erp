@@ -38,6 +38,7 @@ module com.entidaddesconocida.monte_erp {
 
     requires java.sql;
     requires mysql.connector.j;
+    requires java.keyring;
 
     requires de.saxsys.mvvmfx;
 

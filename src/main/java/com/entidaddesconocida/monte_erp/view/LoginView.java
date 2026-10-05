@@ -63,6 +63,11 @@ public class LoginView implements FxmlView<LoginViewModel> {
     }
 
     @FXML
+    private void onChangeDatabaseConfig() {
+        appShell.showSetup(false);
+    }
+
+    @FXML
     private void onExit() {
         appShell.exit();
     }

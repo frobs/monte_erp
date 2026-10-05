@@ -1,12 +1,14 @@
 package com.entidaddesconocida.monte_erp.app;
 
 import com.entidaddesconocida.monte_erp.domain.repository.UserRepository;
-import com.entidaddesconocida.monte_erp.infrastructure.MySqlUserRepository;
-import com.entidaddesconocida.monte_erp.infrastructure.config.DatabaseConnection;
+import com.entidaddesconocida.monte_erp.domain.service.SetupService;
+import com.entidaddesconocida.monte_erp.infrastructure.config.DatabaseConfig;
 import com.entidaddesconocida.monte_erp.view.LoginView;
 import com.entidaddesconocida.monte_erp.view.MainView;
+import com.entidaddesconocida.monte_erp.view.SetupView;
 import com.entidaddesconocida.monte_erp.viewmodel.LoginViewModel;
 import com.entidaddesconocida.monte_erp.viewmodel.MainViewModel;
+import com.entidaddesconocida.monte_erp.viewmodel.SetupViewModel;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -15,14 +17,15 @@ import java.util.function.Supplier;
 /**
  * Composition root and lightweight dependency-injection container.
  *
- * <p>This is the <strong>only</strong> place in the application that creates
- * the dependency chain with {@code new}. Every other class receives its
- * collaborators through constructor injection.</p>
+ * <p>The dependency chain is created in {@code MonteErpApplication} (the
+ * composition root) and passed here through constructor injection; this class
+ * only wires the mvvmFX bindings. Every other class receives its collaborators
+ * through constructor injection.</p>
  *
  * <p>Convention:</p>
  * <ul>
- *   <li>Stateless resources (repository, configuration strings) are bound as
- *       singleton instances.</li>
+ *   <li>Stateless resources (repositories, configuration) are bound as singleton
+ *       instances.</li>
  *   <li>Views and ViewModels are bound with factories ({@link Supplier}) so
  *       each view load gets a fresh instance. Binding an instance directly
  *       would make two loads of the same view share state → subtle bug.</li>
@@ -33,23 +36,25 @@ public final class AppContext {
     private final Map<Class<?>, Supplier<?>> bindings = new HashMap<>();
 
     public AppContext(SessionState session, AppShell appShell, UserRepository userRepository,
-                      String databaseUrl) {
+                      DatabaseConfig databaseConfig, SetupService setupService,
+                      Supplier<String> databaseUrl) {
         // Stateless resources: single instance for the whole application.
         bind(UserRepository.class, () -> userRepository);
-        bind(String.class, () -> databaseUrl); // configuration
+        bind(DatabaseConfig.class, () -> databaseConfig);
+        bind(SetupService.class, () -> setupService);
+        bind(String.class, databaseUrl); // configuration (current JDBC URL)
 
         // Views (code-behind of the FXML): mvvmFX asks here. ALWAYS fresh instances.
         bind(LoginView.class, () -> new LoginView(appShell));
         bind(MainView.class, () -> new MainView(appShell));
+        bind(SetupView.class, () -> new SetupView(appShell));
 
         // ViewModels: constructor injection, one new instance per view load.
         bind(LoginViewModel.class, () -> new LoginViewModel(userRepository));
-        bind(MainViewModel.class, () -> new MainViewModel(session.requireCurrentUser(), databaseUrl));
-    }
-
-    /** Wiring of production: real JDBC implementation and project configuration. */
-    public static AppContext production(SessionState session, AppShell appShell) {
-        return new AppContext(session, appShell, new MySqlUserRepository(), DatabaseConnection.getUrl());
+        bind(MainViewModel.class,
+                () -> new MainViewModel(session.requireCurrentUser(), databaseUrl.get()));
+        bind(SetupViewModel.class,
+                () -> new SetupViewModel(setupService, appShell.isOnboarding()));
     }
 
     /** Callback registered in mvvmFX via {@link de.saxsys.mvvmfx.MvvmFX#setCustomDependencyInjector}. */

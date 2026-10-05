@@ -14,6 +14,8 @@ public final class SceneNavigator {
 
     public static final double LOGIN_WIDTH = 460;
     public static final double LOGIN_HEIGHT = 480;
+    public static final double SETUP_WIDTH = 560;
+    public static final double SETUP_HEIGHT = 660;
     public static final double MAIN_WIDTH = 1000;
     public static final double MAIN_HEIGHT = 660;
 

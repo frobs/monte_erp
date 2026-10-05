@@ -40,6 +40,9 @@
         <Button fx:id="loginButton" text="Iniciar sesión" onAction="#onLogin" defaultButton="true"
                 maxWidth="Infinity" styleClass="primary-button"/>
 
+        <Button text="Cambiar configuración de base de datos" onAction="#onChangeDatabaseConfig"
+                maxWidth="Infinity" styleClass="secondary-button"/>
+
         <Button text="Salir" onAction="#onExit" cancelButton="true"
                 maxWidth="Infinity" styleClass="secondary-button"/>
     </VBox>
