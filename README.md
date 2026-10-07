@@ -41,13 +41,13 @@ monte_erp/
 │   │   │       ├── Launcher.java                  # Punto de entrada (main)
 │   │   │       ├── MonteErpApplication.java       # JavaFX Application
 │   │   │       ├── app/                           # AppContext, AppShell, SessionState, SceneNavigator
-│   │   │       ├── view/                          # LoginView, MainView (code-behind FXML)
-│   │   │       ├── viewmodel/                     # LoginViewModel, MainViewModel
+│   │   │       ├── view/                          # LoginView, SetupView, MainView, UsersView (code-behind FXML)
+│   │   │       ├── viewmodel/                     # LoginViewModel, SetupViewModel, MainViewModel, UsersViewModel
 │   │   │       ├── domain/
 │   │   │       │   ├── model/                     # User
 │   │   │       │   └── repository/                # UserRepository (interfaz de puerto)
 │   │   │       ├── infrastructure/                # MySqlUserRepository (implementación JDBC)
-│   │   │       │   └── config/                    # DatabaseConnection, MigrationRunner, DataSeeder
+│   │   │       │   └── config/                    # DatabaseConnection, DatabaseConfig, DatabaseSetupService, MigrationRunner
 │   │   │       └── security/                      # PasswordHasher
 │   │   └── resources/
 │   │       ├── application.properties             # URL, usuario y contraseña de la BD
@@ -55,7 +55,9 @@ monte_erp/
 │   │       ├── db/migration/V1__schema.sql        # Migración: esquema completo
 │   │       └── com/entidaddesconocida/monte_erp/view/
 │   │           ├── LoginView.fxml                 # vista de login (mismo paquete que LoginView)
-│   │           └── MainView.fxml                  # vista principal (mismo paquete que MainView)
+│   │           ├── SetupView.fxml                 # vista de configuración de BD
+│   │           ├── MainView.fxml                  # vista principal (mismo paquete que MainView)
+│   │           └── UsersView.fxml                 # vista de gestión de usuarios (RF-02)
 │   └── test/java/...                              # Pruebas JUnit 5 (unitarias + integración)
 └── target/                  # Artefactos generados (tras compilar)
 ```
@@ -162,13 +164,10 @@ Esquema creado por `V1__schema.sql` (10 tablas):
 
 ### Usuarios iniciales
 
-`DataSeeder` crea estos usuarios si todavía no existen. Las contraseñas se
-guardan hasheadas con PBKDF2 (nunca en claro):
-
-| Usuario      | Contraseña      | Rol          | Acceso                                            |
-| ------------ | --------------- | ------------ | ------------------------------------------------- |
-| `admin`      | `admin123`      | `admin`      | Todos los módulos, incluida "Gestión de usuarios" |
-| `employee`   | `employee123`   | `employee`   | Módulos básicos                                   |
+En la primera ejecución la app abre la pantalla de
+configuración y pide crear el **usuario administrador** (nombre, usuario y
+contraseña). La contraseña se guarda hasheada con PBKDF2 (nunca en claro). El
+resto de usuarios se dan de alta desde "Gestión de usuarios" (RF-02).
 
 ### Pruebas
 
@@ -176,8 +175,8 @@ guardan hasheadas con PBKDF2 (nunca en claro):
 ./mvnw test
 ```
 
-Las pruebas de integración (`DataSeederTest`) se ejecutan contra la base de datos
-real; si MySQL no está arrancado se marcan como omitidas en lugar de fallar.
+Todos los tests son unitarios (fakes en memoria y ficheros temporales): no
+necesitan MySQL ni el toolkit de JavaFX.
 
 ### Convención de idiomas
 

@@ -7,9 +7,11 @@ import com.entidaddesconocida.monte_erp.infrastructure.config.DatabaseUrl;
 import com.entidaddesconocida.monte_erp.view.LoginView;
 import com.entidaddesconocida.monte_erp.view.MainView;
 import com.entidaddesconocida.monte_erp.view.SetupView;
+import com.entidaddesconocida.monte_erp.view.UsersView;
 import com.entidaddesconocida.monte_erp.viewmodel.LoginViewModel;
 import com.entidaddesconocida.monte_erp.viewmodel.MainViewModel;
 import com.entidaddesconocida.monte_erp.viewmodel.SetupViewModel;
+import com.entidaddesconocida.monte_erp.viewmodel.UsersViewModel;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -49,11 +51,14 @@ public final class AppContext {
         bind(LoginView.class, () -> new LoginView(appShell));
         bind(MainView.class, () -> new MainView(appShell));
         bind(SetupView.class, () -> new SetupView(appShell));
+        bind(UsersView.class, () -> new UsersView(appShell));
 
         // ViewModels: constructor injection, one new instance per view load.
         bind(LoginViewModel.class, () -> new LoginViewModel(userRepository));
         bind(MainViewModel.class,
                 () -> new MainViewModel(session.requireCurrentUser(), databaseUrl.get()));
+        bind(UsersViewModel.class,
+                () -> new UsersViewModel(userRepository, session.requireCurrentUser()));
         bind(SetupViewModel.class,
                 () -> new SetupViewModel(setupService, appShell.isOnboarding()));
     }

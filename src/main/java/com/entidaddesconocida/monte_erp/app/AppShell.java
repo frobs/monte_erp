@@ -4,8 +4,10 @@ import com.entidaddesconocida.monte_erp.domain.model.User;
 import com.entidaddesconocida.monte_erp.view.LoginView;
 import com.entidaddesconocida.monte_erp.view.MainView;
 import com.entidaddesconocida.monte_erp.view.SetupView;
+import com.entidaddesconocida.monte_erp.view.UsersView;
 import com.entidaddesconocida.monte_erp.viewmodel.LoginViewModel;
 import com.entidaddesconocida.monte_erp.viewmodel.SetupViewModel;
+import com.entidaddesconocida.monte_erp.viewmodel.UsersViewModel;
 
 import de.saxsys.mvvmfx.FluentViewLoader;
 import de.saxsys.mvvmfx.ViewTuple;
@@ -52,11 +54,35 @@ public class AppShell {
     /** Signs the user in and loads the main view. */
     public void showMain(User user) {
         session.signIn(user);
+        showMain();
+    }
+
+    /** Loads the main view for the current session (e.g. when coming back from a module). */
+    public void showMain() {
+        User user = session.requireCurrentUser();
         ViewTuple<MainView, ?> tuple =
                 FluentViewLoader.fxmlView(MainView.class).load();
         String title = "Monte ERP · " + user.getName() + " (" + user.getRoleLabel() + ")";
         SceneNavigator.show(stage, tuple, title,
                 SceneNavigator.MAIN_WIDTH, SceneNavigator.MAIN_HEIGHT);
+    }
+
+    /**
+     * Loads the user management screen (RF-02).
+     *
+     * @throws IllegalStateException when there is no session or the signed-in
+     *                               user is not an administrator; the button is
+     *                               hidden for employees, this is a safety net
+     */
+    public void showUsers() {
+        User user = session.requireCurrentUser();
+        if (!user.isAdmin()) {
+            throw new IllegalStateException("La gestión de usuarios es exclusiva del administrador");
+        }
+        ViewTuple<UsersView, UsersViewModel> tuple =
+                FluentViewLoader.fxmlView(UsersView.class).load();
+        SceneNavigator.show(stage, tuple, "Monte ERP · Gestión de usuarios",
+                SceneNavigator.USERS_WIDTH, SceneNavigator.USERS_HEIGHT);
     }
 
     /**

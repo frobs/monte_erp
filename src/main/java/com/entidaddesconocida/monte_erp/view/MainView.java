@@ -62,9 +62,7 @@ public class MainView implements FxmlView<MainViewModel> {
 
     @FXML
     private void onManageUsers() {
-        showPending("Gestión de usuarios (RF-02)",
-                "Alta, edición y desactivación de usuarios.\n\nEste módulo es exclusivo del rol "
-                        + "administrador y se implementará en el siguiente requisito funcional.");
+        appShell.showUsers();
     }
 
     @FXML
