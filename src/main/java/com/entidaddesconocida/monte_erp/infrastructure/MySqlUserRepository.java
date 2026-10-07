@@ -22,6 +22,11 @@ public class MySqlUserRepository implements UserRepository {
 
     private static final String COLUMNS = "id, name, username, password_hash, role, active";
     private static final String SELECT_ALL = "SELECT " + COLUMNS + " FROM USER";
+    private static final String INSERT_USER =
+            "INSERT INTO USER (name, username, password_hash, role, active) VALUES (?, ?, ?, ?, ?)";
+    private static final String UPDATE_USER =
+            "UPDATE USER SET name = ?, username = ?, password_hash = ?, role = ?, active = ? WHERE id = ?";
+    private static final String DEACTIVATE_USER = "UPDATE USER SET active = 0 WHERE id = ?";
 
     @Override
     public User findByUsername(String username) throws SQLException {
@@ -48,9 +53,8 @@ public class MySqlUserRepository implements UserRepository {
 
     @Override
     public int insert(User user) throws SQLException {
-        String sql = "INSERT INTO USER (name, username, password_hash, role, active) VALUES (?, ?, ?, ?, ?)";
         try (PreparedStatement ps = DatabaseConnection.getConnection()
-                .prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
+                .prepareStatement(INSERT_USER, Statement.RETURN_GENERATED_KEYS)) {
             ps.setString(1, user.getName());
             ps.setString(2, user.getUsername());
             ps.setString(3, user.getPasswordHash());
@@ -67,8 +71,7 @@ public class MySqlUserRepository implements UserRepository {
 
     @Override
     public void update(User user) throws SQLException {
-        String sql = "UPDATE USER SET name = ?, username = ?, password_hash = ?, role = ?, active = ? WHERE id = ?";
-        try (PreparedStatement ps = DatabaseConnection.getConnection().prepareStatement(sql)) {
+        try (PreparedStatement ps = DatabaseConnection.getConnection().prepareStatement(UPDATE_USER)) {
             ps.setString(1, user.getName());
             ps.setString(2, user.getUsername());
             ps.setString(3, user.getPasswordHash());
@@ -82,7 +85,7 @@ public class MySqlUserRepository implements UserRepository {
     @Override
     public void deactivate(int id) throws SQLException {
         try (PreparedStatement ps = DatabaseConnection.getConnection()
-                .prepareStatement("UPDATE USER SET active = 0 WHERE id = ?")) {
+                .prepareStatement(DEACTIVATE_USER)) {
             ps.setInt(1, id);
             ps.executeUpdate();
         }

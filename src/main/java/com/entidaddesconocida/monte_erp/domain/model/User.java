@@ -15,6 +15,18 @@ public class User {
     /** Employee role (basic permissions). */
     public static final String ROLE_EMPLOYEE = "employee";
 
+    /** User facing label of {@link #ROLE_ADMIN} (single source of truth). */
+    public static final String ROLE_ADMIN_LABEL = "Administrador";
+
+    /** User facing label of {@link #ROLE_EMPLOYEE} (single source of truth). */
+    public static final String ROLE_EMPLOYEE_LABEL = "Empleado";
+
+    /** User facing label of an active account. */
+    public static final String ACTIVE_LABEL = "Activo";
+
+    /** User facing label of a disabled account. */
+    public static final String INACTIVE_LABEL = "Inactivo";
+
     private int id;
     private String name;
     private String username;
@@ -88,7 +100,12 @@ public class User {
 
     /** Human readable role label, for the user interface (Spanish, as every other user facing text). */
     public String getRoleLabel() {
-        return isAdmin() ? "Administrador" : "Empleado";
+        return isAdmin() ? ROLE_ADMIN_LABEL : ROLE_EMPLOYEE_LABEL;
+    }
+
+    /** Human readable account status label, for the user interface. */
+    public String getStatusLabel() {
+        return active ? ACTIVE_LABEL : INACTIVE_LABEL;
     }
 
     @Override
