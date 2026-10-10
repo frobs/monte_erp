@@ -14,6 +14,7 @@ import java.util.Properties;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -103,5 +104,60 @@ class DatabaseConfigTest {
         }
         assertEquals("valor", properties.getProperty("otra.clave"));
         assertEquals("jdbc:mysql://localhost/monte_erp", properties.getProperty(DatabaseConfig.KEY_URL));
+    }
+
+    @Test
+    @DisplayName("ensureFileExists es idempotente si el archivo ya existe")
+    void ensureFileExistsIsIdempotent() throws IOException {
+        Path file = tempDir.resolve("application.properties");
+        DatabaseConfig config = config(new FakeCredentialStore());
+
+        config.ensureFileExists();
+        config.ensureFileExists();
+
+        assertTrue(Files.isRegularFile(file));
+    }
+
+    @Test
+    @DisplayName("save recorta espacios de la URL antes de persistirla")
+    void saveTrimsTheUrl() throws IOException {
+        DatabaseConfig config = config(new FakeCredentialStore());
+
+        config.save(new ConnectionSettings("  jdbc:mysql://localhost/monte_erp  ", "erp_user", "erp_pass"));
+
+        assertEquals("jdbc:mysql://localhost/monte_erp", config.load().url());
+    }
+
+    @Test
+    @DisplayName("save con URL null escribe vacío y load devuelve null")
+    void saveWithNullUrlPersistsAnEmptyValue() throws IOException {
+        DatabaseConfig config = config(new FakeCredentialStore());
+
+        config.save(new ConnectionSettings(null, "erp_user", "erp_pass"));
+
+        assertNull(config.load().url());
+    }
+
+    @Test
+    @DisplayName("load trata las credenciales en blanco del keyring como ausentes")
+    void loadTreatsBlankCredentialsAsMissing() {
+        FakeCredentialStore store = new FakeCredentialStore()
+                .with(ACCOUNT_USER, "   ")
+                .with(ACCOUNT_PASSWORD, "");
+
+        ConnectionSettings loaded = config(store).load();
+
+        assertNull(loaded.user());
+        assertNull(loaded.password());
+        assertFalse(loaded.isComplete());
+    }
+
+    @Test
+    @DisplayName("Un fallo del keyring al guardar se propaga como CredentialStoreException")
+    void savePropagatesKeyringFailure() {
+        DatabaseConfig config = config(new FakeCredentialStore().throwOnSet());
+
+        assertThrows(CredentialStoreException.class,
+                () -> config.save(new ConnectionSettings("jdbc:mysql://localhost/monte_erp", "erp_user", "erp_pass")));
     }
 }

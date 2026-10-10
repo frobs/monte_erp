@@ -57,6 +57,32 @@ class MigrationRunnerTest {
     }
 
     @Test
+    @DisplayName("versionOf() tolera nombres sin separador y la extensión en mayúsculas")
+    void extractsVersionEdgeCases() {
+        assertEquals("V3", MigrationRunner.versionOf("V3__a.SQL"));
+        assertEquals("V2", MigrationRunner.versionOf("V2"));
+        assertEquals("schema", MigrationRunner.versionOf("schema"));
+        assertEquals("__leading", MigrationRunner.versionOf("__leading.sql"));
+    }
+
+    @Test
+    @DisplayName("A ';' inside a double-quoted identifier does not split statements")
+    void respectsDoubleQuotedLiterals() {
+        List<String> statements = MigrationRunner.splitStatements(
+                "INSERT INTO A (t) VALUES (\"one;two\"); SELECT 1;");
+        assertEquals(2, statements.size(), statements.toString());
+        assertEquals("INSERT INTO A (t) VALUES (\"one;two\")", statements.get(0));
+        assertEquals("SELECT 1", statements.get(1));
+    }
+
+    @Test
+    @DisplayName("Block comments and '#' comments are ignored until the end of the script")
+    void ignoresTrailingComments() {
+        assertEquals(1, MigrationRunner.splitStatements("SELECT 1; /* trailing block").size());
+        assertEquals(1, MigrationRunner.splitStatements("SELECT 2 # trailing line").size());
+    }
+
+    @Test
     @DisplayName("The V1 script is discovered on the classpath (exploded or inside a JAR)")
     void discoversScripts() throws Exception {
         List<String> scripts = MigrationRunner.discoverScripts();

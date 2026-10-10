@@ -161,4 +161,31 @@ class SetupViewModelTest {
         assertTrue(onboardingViewModel(new FakeSetupService()).adminSectionVisibleProperty().get());
         assertFalse(editViewModel(new FakeSetupService()).adminSectionVisibleProperty().get());
     }
+
+    @Test
+    @DisplayName("Probar conexión sin todos los campos muestra error y limpia el estado")
+    void testConnectionWithIncompleteFieldsShowsError() {
+        SetupViewModel vm = editViewModel(new FakeSetupService());
+        vm.urlProperty().set(VALID.url());
+        vm.dbUserProperty().set(VALID.user());
+
+        vm.testConnection();
+
+        assertEquals("Introduce la URL, el usuario y la contraseña.", vm.errorMessageProperty().get());
+        assertEquals("", vm.statusMessageProperty().get());
+    }
+
+    @Test
+    @DisplayName("clearMessages limpia el error y el estado")
+    void clearMessagesRemovesBothMessages() {
+        SetupViewModel vm = editViewModel(new FakeSetupService().throwOnTestConnection());
+        fillConnection(vm);
+        vm.testConnection();
+        assertFalse(vm.errorMessageProperty().get().isEmpty());
+
+        vm.clearMessages();
+
+        assertEquals("", vm.errorMessageProperty().get());
+        assertEquals("", vm.statusMessageProperty().get());
+    }
 }

@@ -101,4 +101,24 @@ class LoginViewModelTest {
         viewModel.login();
         assertTrue(viewModel.errorMessageProperty().get().contains("No se pudo conectar"));
     }
+
+    @Test
+    @DisplayName("Propiedades a null: se tratan como campos vacíos")
+    void nullPropertiesCountAsEmptyFields() {
+        viewModel.usernameProperty().set(null);
+        viewModel.passwordProperty().set(null);
+        viewModel.login();
+        assertEquals("Introduce usuario y contraseña.", viewModel.errorMessageProperty().get());
+    }
+
+    @Test
+    @DisplayName("clearError borra el mensaje visible")
+    void clearErrorRemovesTheMessage() {
+        viewModel.login();
+        assertFalse(viewModel.errorMessageProperty().get().isEmpty());
+
+        viewModel.clearError();
+
+        assertEquals("", viewModel.errorMessageProperty().get());
+    }
 }
