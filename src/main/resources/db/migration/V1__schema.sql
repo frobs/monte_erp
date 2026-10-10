@@ -40,10 +40,8 @@ CREATE TABLE IF NOT EXISTS PRODUCT (
     price       DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
     min_stock   INT            NOT NULL DEFAULT 0,
     category_id INT            NOT NULL,
-    supplier_id INT            NOT NULL,
     CONSTRAINT uq_product_sku UNIQUE (sku),
     CONSTRAINT fk_product_category FOREIGN KEY (category_id) REFERENCES CATEGORY (id) ON DELETE RESTRICT,
-    CONSTRAINT fk_product_supplier FOREIGN KEY (supplier_id) REFERENCES SUPPLIER (id) ON DELETE RESTRICT,
     CONSTRAINT chk_product_price CHECK (price >= 0),
     CONSTRAINT chk_product_min_stock CHECK (min_stock >= 0)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
