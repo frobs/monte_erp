@@ -7,13 +7,18 @@ import com.entidaddesconocida.monte_erp.infrastructure.config.FakeCredentialStor
 import com.entidaddesconocida.monte_erp.security.PasswordHasher;
 import com.entidaddesconocida.monte_erp.view.LoginView;
 import com.entidaddesconocida.monte_erp.view.MainView;
+import com.entidaddesconocida.monte_erp.view.ProductsView;
 import com.entidaddesconocida.monte_erp.view.SetupView;
 import com.entidaddesconocida.monte_erp.view.UsersView;
 import com.entidaddesconocida.monte_erp.viewmodel.LoginViewModel;
 import com.entidaddesconocida.monte_erp.viewmodel.MainViewModel;
+import com.entidaddesconocida.monte_erp.viewmodel.ProductsViewModel;
 import com.entidaddesconocida.monte_erp.viewmodel.SetupViewModel;
 import com.entidaddesconocida.monte_erp.viewmodel.UsersViewModel;
+import com.entidaddesconocida.monte_erp.viewmodel.support.FakeCategoryRepository;
+import com.entidaddesconocida.monte_erp.viewmodel.support.FakeProductRepository;
 import com.entidaddesconocida.monte_erp.viewmodel.support.FakeSetupService;
+import com.entidaddesconocida.monte_erp.viewmodel.support.FakeSupplierRepository;
 import com.entidaddesconocida.monte_erp.viewmodel.support.FakeUserRepository;
 
 import org.junit.jupiter.api.DisplayName;
@@ -39,8 +44,9 @@ class AppContextTest {
     private static AppContext context(SessionState session, FakeUserRepository repo) {
         DatabaseConfig config = new DatabaseConfig(new FakeCredentialStore());
         FakeSetupService setup = new FakeSetupService();
-        return new AppContext(session, new AppShell(session), repo, config, setup,
-                () -> new DatabaseUrl("jdbc:test"));
+        return new AppContext(session, new AppShell(session), repo,
+                new FakeCategoryRepository(), new FakeSupplierRepository(), new FakeProductRepository(),
+                config, setup, () -> new DatabaseUrl("jdbc:test"));
     }
 
     @Test
@@ -117,6 +123,19 @@ class AppContextTest {
     }
 
     @Test
+    @DisplayName("create(ProductsViewModel) devuelve un VM con los repositorios inyectados")
+    void productsViewModelIsCreatedWithRepositories() {
+        AppContext context = context(new SessionState());
+
+        ProductsViewModel vm = (ProductsViewModel) context.create(ProductsViewModel.class);
+        vm.load();
+
+        assertNotNull(vm);
+        assertEquals(0, vm.products().size());
+        assertEquals("Productos: 0", vm.productCountProperty().get());
+    }
+
+    @Test
     @DisplayName("Las vistas se crean como instancias nuevas (no null)")
     void viewsAreCreated() {
         AppContext context = context(new SessionState());
@@ -124,5 +143,6 @@ class AppContextTest {
         assertNotNull(context.create(MainView.class));
         assertNotNull(context.create(SetupView.class));
         assertNotNull(context.create(UsersView.class));
+        assertNotNull(context.create(ProductsView.class));
     }
 }

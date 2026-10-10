@@ -32,6 +32,13 @@
             <artifactId>javafx-web</artifactId>
             <version>21.0.6</version>
         </dependency>
+        <!--
+            Not referenced from src/, but required at runtime: module-info
+            requires eu.hansolo.tilesfx, whose transitive module
+            eu.hansolo.fx.countries declares `requires javafx.swing`. Removing
+            this dependency breaks the boot layer (`Module javafx.swing not
+            found`) on `javafx:run`, even though tests and the shaded JAR build.
+        -->
         <dependency>
             <groupId>org.openjfx</groupId>
             <artifactId>javafx-swing</artifactId>

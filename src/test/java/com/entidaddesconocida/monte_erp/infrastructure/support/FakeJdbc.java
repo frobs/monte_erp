@@ -186,7 +186,9 @@ public final class FakeJdbc implements Driver {
         return proxy(PreparedStatement.class, (proxy, method, args) -> {
             String name = method.getName();
             if (name.startsWith("set") && args != null && args.length == 2 && args[0] instanceof Integer index) {
-                parameters.put(index, args[1]);
+                // setNull(index, sqlType) binds SQL NULL: the second argument is
+                // the column type, not the value, so it is recorded as null.
+                parameters.put(index, "setNull".equals(name) ? null : args[1]);
                 return null;
             }
             return switch (name) {
@@ -221,12 +223,15 @@ public final class FakeJdbc implements Driver {
 
     private ResultSet resultSetProxy(List<Row> resultRows) {
         int[] index = {-1};
+        // Real JDBC semantics: wasNull() reports whether the column read last
+        // was SQL NULL, which is how a nullable category_id is detected.
+        boolean[] lastReadWasNull = {false};
         return proxy(ResultSet.class, (proxy, method, args) -> switch (method.getName()) {
             case "next" -> ++index[0] < resultRows.size();
             case "close" -> null;
-            case "wasNull" -> false;
+            case "wasNull" -> lastReadWasNull[0];
             case "toString" -> "FakeResultSet" + resultRows;
-            default -> readColumn(method, args, resultRows, index[0]);
+            default -> readColumn(method, args, resultRows, index[0], lastReadWasNull);
         });
     }
 
@@ -234,8 +239,10 @@ public final class FakeJdbc implements Driver {
         return generatedKey > 0 ? List.of(row("id", generatedKey)) : List.of();
     }
 
-    private static Object readColumn(Method method, Object[] args, List<Row> resultRows, int index) {
+    private static Object readColumn(Method method, Object[] args, List<Row> resultRows, int index,
+                                     boolean[] lastReadWasNull) {
         if (index < 0 || index >= resultRows.size() || args == null || args.length == 0) {
+            lastReadWasNull[0] = false;
             return defaultValue(method);
         }
         Map<String, Object> values = resultRows.get(index).values();
@@ -245,6 +252,7 @@ public final class FakeJdbc implements Driver {
         } else {
             raw = values.values().stream().skip(((Integer) args[0]) - 1L).findFirst().orElse(null);
         }
+        lastReadWasNull[0] = raw == null;
         return convert(raw, method.getReturnType());
     }
 
