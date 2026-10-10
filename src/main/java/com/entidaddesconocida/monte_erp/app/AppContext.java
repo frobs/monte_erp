@@ -1,15 +1,20 @@
 package com.entidaddesconocida.monte_erp.app;
 
+import com.entidaddesconocida.monte_erp.domain.repository.CategoryRepository;
+import com.entidaddesconocida.monte_erp.domain.repository.ProductRepository;
+import com.entidaddesconocida.monte_erp.domain.repository.SupplierRepository;
 import com.entidaddesconocida.monte_erp.domain.repository.UserRepository;
 import com.entidaddesconocida.monte_erp.domain.service.SetupService;
 import com.entidaddesconocida.monte_erp.infrastructure.config.DatabaseConfig;
 import com.entidaddesconocida.monte_erp.infrastructure.config.DatabaseUrl;
 import com.entidaddesconocida.monte_erp.view.LoginView;
 import com.entidaddesconocida.monte_erp.view.MainView;
+import com.entidaddesconocida.monte_erp.view.ProductsView;
 import com.entidaddesconocida.monte_erp.view.SetupView;
 import com.entidaddesconocida.monte_erp.view.UsersView;
 import com.entidaddesconocida.monte_erp.viewmodel.LoginViewModel;
 import com.entidaddesconocida.monte_erp.viewmodel.MainViewModel;
+import com.entidaddesconocida.monte_erp.viewmodel.ProductsViewModel;
 import com.entidaddesconocida.monte_erp.viewmodel.SetupViewModel;
 import com.entidaddesconocida.monte_erp.viewmodel.UsersViewModel;
 
@@ -39,10 +44,15 @@ public final class AppContext {
     private final Map<Class<?>, Supplier<?>> bindings = new HashMap<>();
 
     public AppContext(SessionState session, AppShell appShell, UserRepository userRepository,
+                      CategoryRepository categoryRepository, SupplierRepository supplierRepository,
+                      ProductRepository productRepository,
                       DatabaseConfig databaseConfig, SetupService setupService,
                       Supplier<DatabaseUrl> databaseUrl) {
         // Stateless resources: single instance for the whole application.
         bind(UserRepository.class, () -> userRepository);
+        bind(CategoryRepository.class, () -> categoryRepository);
+        bind(SupplierRepository.class, () -> supplierRepository);
+        bind(ProductRepository.class, () -> productRepository);
         bind(DatabaseConfig.class, () -> databaseConfig);
         bind(SetupService.class, () -> setupService);
         bind(DatabaseUrl.class, databaseUrl); // configuration (current JDBC URL)
@@ -52,6 +62,7 @@ public final class AppContext {
         bind(MainView.class, () -> new MainView(appShell));
         bind(SetupView.class, () -> new SetupView(appShell));
         bind(UsersView.class, () -> new UsersView(appShell));
+        bind(ProductsView.class, () -> new ProductsView(appShell));
 
         // ViewModels: constructor injection, one new instance per view load.
         bind(LoginViewModel.class, () -> new LoginViewModel(userRepository));
@@ -59,6 +70,8 @@ public final class AppContext {
                 () -> new MainViewModel(session.requireCurrentUser(), databaseUrl.get()));
         bind(UsersViewModel.class,
                 () -> new UsersViewModel(userRepository, session.requireCurrentUser()));
+        bind(ProductsViewModel.class,
+                () -> new ProductsViewModel(productRepository, categoryRepository));
         bind(SetupViewModel.class,
                 () -> new SetupViewModel(setupService, appShell.isOnboarding()));
     }

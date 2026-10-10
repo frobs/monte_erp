@@ -66,6 +66,11 @@ public class MainView implements FxmlView<MainViewModel> {
     }
 
     @FXML
+    private void onProducts() {
+        appShell.showProducts();
+    }
+
+    @FXML
     private void onPendingModule(ActionEvent event) {
         String module = event.getSource() instanceof Button button ? button.getText() : "Módulo";
         showPending(module, "Este módulo todavía no está implementado.");

@@ -3,9 +3,11 @@ package com.entidaddesconocida.monte_erp.app;
 import com.entidaddesconocida.monte_erp.domain.model.User;
 import com.entidaddesconocida.monte_erp.view.LoginView;
 import com.entidaddesconocida.monte_erp.view.MainView;
+import com.entidaddesconocida.monte_erp.view.ProductsView;
 import com.entidaddesconocida.monte_erp.view.SetupView;
 import com.entidaddesconocida.monte_erp.view.UsersView;
 import com.entidaddesconocida.monte_erp.viewmodel.LoginViewModel;
+import com.entidaddesconocida.monte_erp.viewmodel.ProductsViewModel;
 import com.entidaddesconocida.monte_erp.viewmodel.SetupViewModel;
 import com.entidaddesconocida.monte_erp.viewmodel.UsersViewModel;
 
@@ -83,6 +85,18 @@ public class AppShell {
                 FluentViewLoader.fxmlView(UsersView.class).load();
         SceneNavigator.show(stage, tuple, "Monte ERP · Gestión de usuarios",
                 SceneNavigator.USERS_WIDTH, SceneNavigator.USERS_HEIGHT);
+    }
+
+    /**
+     * Loads the product management screen (RF-03). Every signed-in user may
+     * manage products (CU-03 actor is the employee), so there is no role guard.
+     */
+    public void showProducts() {
+        session.requireCurrentUser();
+        ViewTuple<ProductsView, ProductsViewModel> tuple =
+                FluentViewLoader.fxmlView(ProductsView.class).load();
+        SceneNavigator.show(stage, tuple, "Monte ERP · Gestión de productos",
+                SceneNavigator.PRODUCTS_WIDTH, SceneNavigator.PRODUCTS_HEIGHT);
     }
 
     /**

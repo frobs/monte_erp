@@ -4,8 +4,14 @@ import com.entidaddesconocida.monte_erp.app.AppContext;
 import com.entidaddesconocida.monte_erp.app.AppShell;
 import com.entidaddesconocida.monte_erp.app.SessionState;
 import com.entidaddesconocida.monte_erp.domain.model.ConnectionSettings;
+import com.entidaddesconocida.monte_erp.domain.repository.CategoryRepository;
+import com.entidaddesconocida.monte_erp.domain.repository.ProductRepository;
+import com.entidaddesconocida.monte_erp.domain.repository.SupplierRepository;
 import com.entidaddesconocida.monte_erp.domain.repository.UserRepository;
 import com.entidaddesconocida.monte_erp.domain.service.SetupService;
+import com.entidaddesconocida.monte_erp.infrastructure.MySqlCategoryRepository;
+import com.entidaddesconocida.monte_erp.infrastructure.MySqlProductRepository;
+import com.entidaddesconocida.monte_erp.infrastructure.MySqlSupplierRepository;
 import com.entidaddesconocida.monte_erp.infrastructure.MySqlUserRepository;
 import com.entidaddesconocida.monte_erp.infrastructure.config.DatabaseConfig;
 import com.entidaddesconocida.monte_erp.infrastructure.config.DatabaseConnection;
@@ -39,12 +45,16 @@ public class MonteErpApplication extends Application {
     public void start(Stage stage) {
         DatabaseConfig databaseConfig = new DatabaseConfig(new KeyringCredentialStore());
         UserRepository userRepository = new MySqlUserRepository();
+        CategoryRepository categoryRepository = new MySqlCategoryRepository();
+        SupplierRepository supplierRepository = new MySqlSupplierRepository();
+        ProductRepository productRepository = new MySqlProductRepository();
         SetupService setupService = new DatabaseSetupService(databaseConfig, userRepository);
 
         SessionState session = new SessionState();
         AppShell appShell = new AppShell(session);
-        AppContext context = new AppContext(session, appShell, userRepository, databaseConfig,
-                setupService, () -> new DatabaseUrl(DatabaseConnection.getUrl()));
+        AppContext context = new AppContext(session, appShell, userRepository,
+                categoryRepository, supplierRepository, productRepository,
+                databaseConfig, setupService, () -> new DatabaseUrl(DatabaseConnection.getUrl()));
 
         MvvmFX.setCustomDependencyInjector(context::create);
         appShell.setStage(stage);

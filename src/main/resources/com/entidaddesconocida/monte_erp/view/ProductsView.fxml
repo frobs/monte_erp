@@ -1,0 +1,131 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.CheckBox?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.TableColumn?>
+<?import javafx.scene.control.TableView?>
+<?import javafx.scene.control.TextField?>
+<?import javafx.scene.layout.BorderPane?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.Region?>
+<?import javafx.scene.layout.VBox?>
+<?import org.controlsfx.control.SearchableComboBox?>
+
+<BorderPane xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1"
+            fx:controller="com.entidaddesconocida.monte_erp.view.ProductsView"
+            stylesheets="@../../../../css/app.css"
+            styleClass="root-pane"
+            prefWidth="1180.0" prefHeight="700.0">
+
+    <top>
+        <HBox styleClass="topbar" alignment="CENTER_LEFT" spacing="12.0">
+            <padding>
+                <Insets top="14.0" right="18.0" bottom="14.0" left="18.0"/>
+            </padding>
+            <Label text="Monte ERP" styleClass="topbar-title"/>
+            <Label text="· Gestión de productos" styleClass="topbar-caption"/>
+            <Region HBox.hgrow="ALWAYS"/>
+            <Button text="Volver" onAction="#onBack" styleClass="secondary-button"/>
+        </HBox>
+    </top>
+
+    <center>
+        <HBox spacing="18.0">
+            <padding>
+                <Insets top="18.0" right="18.0" bottom="18.0" left="18.0"/>
+            </padding>
+
+            <VBox styleClass="card" spacing="10.0" HBox.hgrow="ALWAYS">
+                <padding>
+                    <Insets top="18.0" right="18.0" bottom="18.0" left="18.0"/>
+                </padding>
+
+                <Label text="Productos" styleClass="section-title"/>
+                <Label text="Busca y filtra el catálogo; selecciona un producto para editarlo o darlo de baja."
+                       styleClass="subtitle" wrapText="true"/>
+
+                <HBox alignment="CENTER_LEFT" spacing="10.0">
+                    <TextField fx:id="searchField" promptText="Buscar por nombre o SKU"
+                               HBox.hgrow="ALWAYS" maxWidth="Infinity"/>
+                    <SearchableComboBox fx:id="categoryFilterCombo" promptText="Todas las categorías" prefWidth="200.0"/>
+                    <SearchableComboBox fx:id="supplierFilterCombo" promptText="Todos los proveedores" prefWidth="200.0"/>
+                    <CheckBox fx:id="showInactiveCheck" text="Mostrar inactivos"/>
+                    <Button text="Limpiar filtros" onAction="#onClearFilters" styleClass="secondary-button"/>
+                </HBox>
+
+                <TableView fx:id="productsTable" VBox.vgrow="ALWAYS">
+                    <placeholder>
+                        <Label text="No hay productos que mostrar."/>
+                    </placeholder>
+                    <columns>
+                        <TableColumn fx:id="skuColumn" text="SKU" prefWidth="120.0"/>
+                        <TableColumn fx:id="nameColumn" text="Nombre" prefWidth="240.0"/>
+                        <TableColumn fx:id="priceColumn" text="Precio" prefWidth="110.0"/>
+                        <TableColumn fx:id="categoryColumn" text="Categoría" prefWidth="170.0"/>
+                        <TableColumn fx:id="statusColumn" text="Estado" prefWidth="100.0"/>
+                    </columns>
+                    <columnResizePolicy>
+                        <TableView fx:constant="CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN"/>
+                    </columnResizePolicy>
+                </TableView>
+
+                <HBox alignment="CENTER_LEFT" spacing="10.0">
+                    <Button text="Nuevo producto" onAction="#onNewProduct" styleClass="secondary-button"/>
+                    <Button text="Actualizar" onAction="#onRefresh" styleClass="secondary-button"/>
+                    <Label fx:id="statusLabel" styleClass="success" wrapText="true"/>
+                </HBox>
+            </VBox>
+
+            <VBox styleClass="card" spacing="8.0" prefWidth="340.0" minWidth="310.0">
+                <padding>
+                    <Insets top="20.0" right="20.0" bottom="20.0" left="20.0"/>
+                </padding>
+
+                <Label fx:id="formTitleLabel" styleClass="title"/>
+                <Label text="Los cambios se guardan en la base de datos." styleClass="subtitle" wrapText="true"/>
+
+                <Label text="Nombre" styleClass="field-label" labelFor="$nameField">
+                    <VBox.margin>
+                        <Insets top="6.0"/>
+                    </VBox.margin>
+                </Label>
+                <TextField fx:id="nameField" promptText="nombre del producto"/>
+
+                <Label text="SKU" styleClass="field-label" labelFor="$skuField"/>
+                <TextField fx:id="skuField" promptText="código único"/>
+
+                <Label text="Descripción (opcional)" styleClass="field-label" labelFor="$descriptionField"/>
+                <TextField fx:id="descriptionField" promptText="breve descripción"/>
+
+                <Label text="Precio (€)" styleClass="field-label" labelFor="$priceField"/>
+                <TextField fx:id="priceField" promptText="0.00"/>
+
+                <Label text="Stock mínimo" styleClass="field-label" labelFor="$minStockField"/>
+                <TextField fx:id="minStockField" promptText="0 (sin alerta)"/>
+
+                <Label text="Categoría (opcional)" styleClass="field-label" labelFor="$categoryCombo"/>
+                <SearchableComboBox fx:id="categoryCombo" promptText="Sin categoría" maxWidth="Infinity"/>
+
+                <Label fx:id="errorLabel" styleClass="error" wrapText="true"/>
+
+                <Region VBox.vgrow="ALWAYS"/>
+
+                <Button text="Guardar" onAction="#onSave" defaultButton="true"
+                        maxWidth="Infinity" styleClass="primary-button"/>
+                <Button fx:id="toggleActiveButton" onAction="#onToggleActive"
+                        maxWidth="Infinity"/>
+            </VBox>
+        </HBox>
+    </center>
+
+    <bottom>
+        <HBox styleClass="statusbar" alignment="CENTER_LEFT">
+            <padding>
+                <Insets top="8.0" right="18.0" bottom="8.0" left="18.0"/>
+            </padding>
+            <Label fx:id="countLabel" styleClass="statusbar-text"/>
+        </HBox>
+    </bottom>
+</BorderPane>

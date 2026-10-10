@@ -14,6 +14,7 @@ import javafx.beans.property.ReadOnlyStringWrapper;
 import javafx.beans.property.SimpleObjectProperty;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.beans.property.StringProperty;
+import javafx.beans.value.ChangeListener;
 import javafx.collections.FXCollections;
 import javafx.collections.ListChangeListener;
 import javafx.collections.ObservableList;
@@ -75,6 +76,13 @@ public class UsersViewModel implements ViewModel {
     private final ObservableList<String> roleOptions = FXCollections.unmodifiableObservableList(
             FXCollections.observableArrayList(User.ROLE_ADMIN_LABEL, User.ROLE_EMPLOYEE_LABEL));
 
+    private final ReadOnlyStringWrapper nameError = new ReadOnlyStringWrapper("");
+    private final ReadOnlyStringWrapper usernameError = new ReadOnlyStringWrapper("");
+    private final ReadOnlyStringWrapper passwordError = new ReadOnlyStringWrapper("");
+
+    /** {@code true} only after the first save attempt, so fields are not red while typing the first time. */
+    private boolean validateOnEdit;
+
     public UsersViewModel(UserRepository userRepository, User currentUser) {
         this.userRepository = userRepository;
         this.currentUser = currentUser;
@@ -89,6 +97,19 @@ public class UsersViewModel implements ViewModel {
             populateForm(newValue);
             refreshToggleState();
         });
+
+        // Live re-validation once the user has already tried to save. The summary
+        // label is refreshed too, otherwise the message of the failed save stays
+        // visible after the user has corrected the fields.
+        ChangeListener<Object> fieldChange = (observable, oldValue, newValue) -> {
+            if (validateOnEdit) {
+                refreshFieldErrors();
+                errorMessage.set(hasFieldErrors() ? firstFieldError() : "");
+            }
+        };
+        name.addListener(fieldChange);
+        username.addListener(fieldChange);
+        password.addListener(fieldChange);
 
         users.addListener((ListChangeListener<User>) change -> updateCount());
         updateCount();
@@ -159,6 +180,21 @@ public class UsersViewModel implements ViewModel {
         return userCount.getReadOnlyProperty();
     }
 
+    /** Empty when the name is valid; the message to show otherwise. */
+    public ReadOnlyStringProperty nameErrorProperty() {
+        return nameError.getReadOnlyProperty();
+    }
+
+    /** Empty when the username is valid; the message to show otherwise. */
+    public ReadOnlyStringProperty usernameErrorProperty() {
+        return usernameError.getReadOnlyProperty();
+    }
+
+    /** Empty when the password is valid (blank is valid on edition); the message to show otherwise. */
+    public ReadOnlyStringProperty passwordErrorProperty() {
+        return passwordError.getReadOnlyProperty();
+    }
+
     /** Loads (or reloads) the user list and resets the form. */
     public void load() {
         errorMessage.set("");
@@ -184,31 +220,20 @@ public class UsersViewModel implements ViewModel {
      * edition a blank password keeps the stored hash untouched.
      */
     public void save() {
+        validateOnEdit = true;
+        refreshFieldErrors();
+        if (hasFieldErrors()) {
+            // The field messages are shown both decorated (ValidatorFX in the
+            // View) and as a summary. The first one wins so the message text
+            // stays exactly as it was before the refactor.
+            fail(firstFieldError());
+            return;
+        }
+
         String nameValue = trimmed(name.get());
         String usernameValue = trimmed(username.get());
         String passwordValue = password.get() == null ? "" : password.get();
         User selected = selectedUser.get();
-
-        if (nameValue.isEmpty()) {
-            fail("Introduce el nombre del usuario.");
-            return;
-        }
-        if (usernameValue.isEmpty()) {
-            fail("Introduce el nombre de usuario.");
-            return;
-        }
-        if (nameValue.length() > MAX_NAME_LENGTH) {
-            fail("El nombre no puede superar los " + MAX_NAME_LENGTH + " caracteres.");
-            return;
-        }
-        if (usernameValue.length() > MAX_USERNAME_LENGTH) {
-            fail("El nombre de usuario no puede superar los " + MAX_USERNAME_LENGTH + " caracteres.");
-            return;
-        }
-        if (selected == null && passwordValue.isEmpty()) {
-            fail("Introduce la contraseña del usuario.");
-            return;
-        }
 
         String roleValue = toRole(role.get());
         if (selected != null && isCurrentUser(selected) && !User.ROLE_ADMIN.equals(roleValue)) {
@@ -329,12 +354,14 @@ public class UsersViewModel implements ViewModel {
     }
 
     private void populateForm(User user) {
+        validateOnEdit = false;
         name.set(user.getName());
         username.set(user.getUsername());
         password.set("");
         role.set(user.isAdmin() ? User.ROLE_ADMIN_LABEL : User.ROLE_EMPLOYEE_LABEL);
         formTitle.set("Editar usuario");
         passwordPrompt.set("Dejar en blanco para mantener la actual");
+        clearFieldErrors();
     }
 
     /** Clears the selection and the form; the listener ends up in {@link #clearForm()}. */
@@ -345,14 +372,72 @@ public class UsersViewModel implements ViewModel {
 
     /** Clears the form fields and returns to the "new user" defaults. */
     private void clearForm() {
+        validateOnEdit = false;
         name.set("");
         username.set("");
         password.set("");
         role.set(User.ROLE_EMPLOYEE_LABEL);
         formTitle.set("Nuevo usuario");
         passwordPrompt.set("Contraseña");
+        clearFieldErrors();
         errorMessage.set("");
         refreshToggleState();
+    }
+
+    /**
+     * Recomputes the three field errors. Called on every save and, once the user
+     * has tried to save, on every field change.
+     */
+    private void refreshFieldErrors() {
+        nameError.set(validateName());
+        usernameError.set(validateUsername());
+        passwordError.set(validatePassword());
+    }
+
+    private void clearFieldErrors() {
+        nameError.set("");
+        usernameError.set("");
+        passwordError.set("");
+    }
+
+    private boolean hasFieldErrors() {
+        return !nameError.get().isBlank() || !usernameError.get().isBlank()
+                || !passwordError.get().isBlank();
+    }
+
+    private String firstFieldError() {
+        if (!nameError.get().isBlank()) {
+            return nameError.get();
+        }
+        return !usernameError.get().isBlank() ? usernameError.get() : passwordError.get();
+    }
+
+    private String validateName() {
+        String value = trimmed(name.get());
+        if (value.isEmpty()) {
+            return "Introduce el nombre del usuario.";
+        }
+        if (value.length() > MAX_NAME_LENGTH) {
+            return "El nombre no puede superar los " + MAX_NAME_LENGTH + " caracteres.";
+        }
+        return "";
+    }
+
+    private String validateUsername() {
+        String value = trimmed(username.get());
+        if (value.isEmpty()) {
+            return "Introduce el nombre de usuario.";
+        }
+        if (value.length() > MAX_USERNAME_LENGTH) {
+            return "El nombre de usuario no puede superar los " + MAX_USERNAME_LENGTH + " caracteres.";
+        }
+        return "";
+    }
+
+    private String validatePassword() {
+        boolean creating = selectedUser.get() == null;
+        String value = password.get() == null ? "" : password.get();
+        return creating && value.isEmpty() ? "Introduce la contraseña del usuario." : "";
     }
 
     /**

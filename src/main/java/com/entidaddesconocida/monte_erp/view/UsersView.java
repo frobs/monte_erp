@@ -8,7 +8,9 @@ import de.saxsys.mvvmfx.FxmlView;
 import de.saxsys.mvvmfx.InjectViewModel;
 
 import javafx.beans.property.ReadOnlyStringWrapper;
+import javafx.beans.value.ObservableValue;
 import javafx.fxml.FXML;
+import javafx.scene.Node;
 import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
 import javafx.scene.control.ButtonType;
@@ -18,6 +20,9 @@ import javafx.scene.control.PasswordField;
 import javafx.scene.control.TableColumn;
 import javafx.scene.control.TableView;
 import javafx.scene.control.TextField;
+
+import net.synedra.validatorfx.DefaultDecoration;
+import net.synedra.validatorfx.Validator;
 
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -34,6 +39,7 @@ public class UsersView implements FxmlView<UsersViewModel> {
     private static final Logger LOGGER = Logger.getLogger(UsersView.class.getName());
 
     private final AppShell appShell;
+    private final Validator validator = new Validator();
 
     @FXML
     private TableView<User> usersTable;
@@ -130,6 +136,30 @@ public class UsersView implements FxmlView<UsersViewModel> {
         countLabel.textProperty().bind(viewModel.userCountProperty());
 
         viewModel.load();
+
+        // ValidatorFX only paints the controls; the rules live in the ViewModel
+        // as per-field error properties so they stay testable without toolkit.
+        DefaultDecoration.setFactory(DefaultDecoration::createStyleClassDecoration);
+        decorate(nameField, "name", viewModel.nameErrorProperty());
+        decorate(usernameField, "username", viewModel.usernameErrorProperty());
+        decorate(passwordField, "password", viewModel.passwordErrorProperty());
+    }
+
+    /**
+     * Decorates a control from the ViewModel error property of the field: the
+     * ViewModel owns the rule, ValidatorFX only paints the control.
+     */
+    private void decorate(Node field, String key, ObservableValue<String> error) {
+        validator.createCheck()
+                .dependsOn(key, error)
+                .withMethod(context -> {
+                    String message = context.get(key);
+                    if (message != null && !message.isBlank()) {
+                        context.error(message);
+                    }
+                })
+                .decorates(field)
+                .immediate();
     }
 
     @FXML

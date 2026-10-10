@@ -293,3 +293,12 @@
 .table-view .table-row-cell:selected .text {
     -fx-fill: #1f2a44;
 }
+
+/* ---------- ValidatorFX field decoration (RF-02 / RF-03) ----------
+   DefaultDecoration is configured with createStyleClassDecoration, so an
+   invalid field receives the style class "validatorfx-<severity>". */
+.validatorfx-error {
+    -fx-border-color: #b91c1c;
+    -fx-border-width: 1.5;
+    -fx-border-radius: 4;
+}

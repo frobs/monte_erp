@@ -50,7 +50,7 @@
                 <padding>
                     <Insets top="10.0"/>
                 </padding>
-                <Button text="Productos" onAction="#onPendingModule" styleClass="module-button"/>
+                <Button text="Productos" onAction="#onProducts" styleClass="module-button"/>
                 <Button text="Compras" onAction="#onPendingModule" styleClass="module-button"/>
                 <Button text="Pedidos" onAction="#onPendingModule" styleClass="module-button"/>
                 <Button text="Stock" onAction="#onPendingModule" styleClass="module-button"/>
