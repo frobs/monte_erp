@@ -31,7 +31,7 @@ public class MySqlProductRepository implements ProductRepository {
 
     private static final String COLUMNS = """
             p.id, p.name, p.sku, p.description, p.price, p.min_stock, p.active,
-            p.category_id, c.name AS category_name
+            p.category_id, c.name AS category_name, c.active AS category_active
             """;
     // LEFT JOIN so a product without a category (RF-03 makes it optional) is
     // still listed, with a NULL category_name.
@@ -152,12 +152,14 @@ public class MySqlProductRepository implements ProductRepository {
         product.setPrice(rs.getBigDecimal("price"));
         product.setMinStock(rs.getInt("min_stock"));
         product.setActive(rs.getBoolean("active"));
-        // Only id and name are needed: the combo/list render the name and the
-        // foreign key is written from the id. A missing category stays null
-        // instead of becoming Category(0, null).
+        // Only id, name and active are needed: the combo/list render the name,
+        // the foreign key is written from the id and the active flag tells the
+        // product form whether the category can still be assigned (RF-04). A
+        // missing category stays null instead of becoming Category(0, null).
         int categoryId = rs.getInt("category_id");
         if (!rs.wasNull()) {
-            product.setCategory(new Category(categoryId, rs.getString("category_name"), null));
+            product.setCategory(new Category(categoryId, rs.getString("category_name"), null,
+                    rs.getBoolean("category_active")));
         }
         return product;
     }

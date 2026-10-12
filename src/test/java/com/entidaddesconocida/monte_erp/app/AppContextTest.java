@@ -5,11 +5,13 @@ import com.entidaddesconocida.monte_erp.infrastructure.config.DatabaseConfig;
 import com.entidaddesconocida.monte_erp.infrastructure.config.DatabaseUrl;
 import com.entidaddesconocida.monte_erp.infrastructure.config.FakeCredentialStore;
 import com.entidaddesconocida.monte_erp.security.PasswordHasher;
+import com.entidaddesconocida.monte_erp.view.CategoriesView;
 import com.entidaddesconocida.monte_erp.view.LoginView;
 import com.entidaddesconocida.monte_erp.view.MainView;
 import com.entidaddesconocida.monte_erp.view.ProductsView;
 import com.entidaddesconocida.monte_erp.view.SetupView;
 import com.entidaddesconocida.monte_erp.view.UsersView;
+import com.entidaddesconocida.monte_erp.viewmodel.CategoriesViewModel;
 import com.entidaddesconocida.monte_erp.viewmodel.LoginViewModel;
 import com.entidaddesconocida.monte_erp.viewmodel.MainViewModel;
 import com.entidaddesconocida.monte_erp.viewmodel.ProductsViewModel;
@@ -136,6 +138,19 @@ class AppContextTest {
     }
 
     @Test
+    @DisplayName("create(CategoriesViewModel) devuelve un VM con el repositorio de categorías inyectado")
+    void categoriesViewModelIsCreatedWithRepository() {
+        AppContext context = context(new SessionState());
+
+        CategoriesViewModel vm = (CategoriesViewModel) context.create(CategoriesViewModel.class);
+        vm.load();
+
+        assertNotNull(vm);
+        assertEquals(0, vm.categories().size());
+        assertEquals("Categorías: 0", vm.categoryCountProperty().get());
+    }
+
+    @Test
     @DisplayName("Las vistas se crean como instancias nuevas (no null)")
     void viewsAreCreated() {
         AppContext context = context(new SessionState());
@@ -144,5 +159,6 @@ class AppContextTest {
         assertNotNull(context.create(SetupView.class));
         assertNotNull(context.create(UsersView.class));
         assertNotNull(context.create(ProductsView.class));
+        assertNotNull(context.create(CategoriesView.class));
     }
 }

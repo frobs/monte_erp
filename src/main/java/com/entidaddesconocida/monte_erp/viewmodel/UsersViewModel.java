@@ -4,25 +4,15 @@ import com.entidaddesconocida.monte_erp.domain.model.User;
 import com.entidaddesconocida.monte_erp.domain.repository.UserRepository;
 import com.entidaddesconocida.monte_erp.security.PasswordHasher;
 
-import de.saxsys.mvvmfx.ViewModel;
-
 import javafx.beans.property.ObjectProperty;
-import javafx.beans.property.ReadOnlyBooleanProperty;
-import javafx.beans.property.ReadOnlyBooleanWrapper;
 import javafx.beans.property.ReadOnlyStringProperty;
 import javafx.beans.property.ReadOnlyStringWrapper;
-import javafx.beans.property.SimpleObjectProperty;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.beans.property.StringProperty;
-import javafx.beans.value.ChangeListener;
 import javafx.collections.FXCollections;
-import javafx.collections.ListChangeListener;
 import javafx.collections.ObservableList;
 
 import java.sql.SQLException;
-import java.sql.SQLIntegrityConstraintViolationException;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 
 /**
  * ViewModel of the user management screen (RF-02 / CU-02).
@@ -35,10 +25,14 @@ import java.util.logging.Logger;
  * <p>It never references the View: the confirmation dialog for the destructive
  * action lives in the View, while the business rules (required fields,
  * duplicated username, no self-deactivation or self-demotion) live here.</p>
+ *
+ * <p>Only the user specific parts live here: the field rules, the duplicate
+ * username check, the self-protection rules and the session synchronization.
+ * The CRUD skeleton comes from {@link CrudViewModel}. This is the only CRUD
+ * screen that does not extend {@link FilterableCrudViewModel}: users have no
+ * search and no active/inactive visibility toggle.</p>
  */
-public class UsersViewModel implements ViewModel {
-
-    private static final Logger LOGGER = Logger.getLogger(UsersViewModel.class.getName());
+public class UsersViewModel extends CrudViewModel<User> {
 
     /** Label of the destructive toggle action (deactivate the selected user). */
     public static final String TOGGLE_DEACTIVATE_LABEL = "Desactivar usuario";
@@ -48,31 +42,17 @@ public class UsersViewModel implements ViewModel {
 
     private static final int MAX_NAME_LENGTH = 100;
     private static final int MAX_USERNAME_LENGTH = 50;
-    private static final String DATABASE_ERROR =
-            "No se pudo conectar con la base de datos. Comprueba que MySQL esté arrancado.";
-    private static final String RELOAD_ERROR =
-            "Los cambios se guardaron, pero no se pudo recargar la lista. Pulsa 'Actualizar'.";
 
     private final UserRepository userRepository;
     private final User currentUser;
-
-    private final ObservableList<User> users = FXCollections.observableArrayList();
-    private final ObjectProperty<User> selectedUser = new SimpleObjectProperty<>();
 
     private final StringProperty name = new SimpleStringProperty("");
     private final StringProperty username = new SimpleStringProperty("");
     private final StringProperty password = new SimpleStringProperty("");
     private final StringProperty role = new SimpleStringProperty(User.ROLE_EMPLOYEE_LABEL);
 
-    private final StringProperty errorMessage = new SimpleStringProperty("");
-    private final StringProperty statusMessage = new SimpleStringProperty("");
-    private final ReadOnlyStringWrapper formTitle = new ReadOnlyStringWrapper("Nuevo usuario");
     private final ReadOnlyStringWrapper passwordPrompt =
             new ReadOnlyStringWrapper("Contraseña");
-    private final ReadOnlyStringWrapper toggleLabel =
-            new ReadOnlyStringWrapper(TOGGLE_DEACTIVATE_LABEL);
-    private final ReadOnlyBooleanWrapper toggleDisabled = new ReadOnlyBooleanWrapper(true);
-    private final ReadOnlyStringWrapper userCount = new ReadOnlyStringWrapper("");
     private final ObservableList<String> roleOptions = FXCollections.unmodifiableObservableList(
             FXCollections.observableArrayList(User.ROLE_ADMIN_LABEL, User.ROLE_EMPLOYEE_LABEL));
 
@@ -80,49 +60,22 @@ public class UsersViewModel implements ViewModel {
     private final ReadOnlyStringWrapper usernameError = new ReadOnlyStringWrapper("");
     private final ReadOnlyStringWrapper passwordError = new ReadOnlyStringWrapper("");
 
-    /** {@code true} only after the first save attempt, so fields are not red while typing the first time. */
-    private boolean validateOnEdit;
-
     public UsersViewModel(UserRepository userRepository, User currentUser) {
         this.userRepository = userRepository;
         this.currentUser = currentUser;
-
-        // Selecting a row loads it into the form; clearing the selection resets
-        // the form so a stale row can never be edited/saved by accident.
-        selectedUser.addListener((observable, oldValue, newValue) -> {
-            if (newValue == null) {
-                clearForm();
-                return;
-            }
-            populateForm(newValue);
-            refreshToggleState();
-        });
-
-        // Live re-validation once the user has already tried to save. The summary
-        // label is refreshed too, otherwise the message of the failed save stays
-        // visible after the user has corrected the fields.
-        ChangeListener<Object> fieldChange = (observable, oldValue, newValue) -> {
-            if (validateOnEdit) {
-                refreshFieldErrors();
-                errorMessage.set(hasFieldErrors() ? firstFieldError() : "");
-            }
-        };
-        name.addListener(fieldChange);
-        username.addListener(fieldChange);
-        password.addListener(fieldChange);
-
-        users.addListener((ListChangeListener<User>) change -> updateCount());
+        watchItemsForCount();
+        watchFields(name, username, password);
         updateCount();
     }
 
     /** Users loaded from the database, bound to the table. */
     public ObservableList<User> users() {
-        return users;
+        return items;
     }
 
     /** Currently selected user, or {@code null} when none is selected. */
     public ObjectProperty<User> selectedUserProperty() {
-        return selectedUser;
+        return selectedItem;
     }
 
     public StringProperty nameProperty() {
@@ -147,37 +100,14 @@ public class UsersViewModel implements ViewModel {
         return roleOptions;
     }
 
-    public StringProperty errorMessageProperty() {
-        return errorMessage;
-    }
-
-    public StringProperty statusMessageProperty() {
-        return statusMessage;
-    }
-
-    /** {@code "Nuevo usuario"} or {@code "Editar usuario"}, depending on the selection. */
-    public ReadOnlyStringProperty formTitleProperty() {
-        return formTitle.getReadOnlyProperty();
-    }
-
     /** Password hint: on edition a blank value keeps the stored hash. */
     public ReadOnlyStringProperty passwordPromptProperty() {
         return passwordPrompt.getReadOnlyProperty();
     }
 
-    /** Label of the activate/deactivate button, derived from the selected user. */
-    public ReadOnlyStringProperty toggleLabelProperty() {
-        return toggleLabel.getReadOnlyProperty();
-    }
-
-    /** {@code true} when the activate/deactivate button must be disabled. */
-    public ReadOnlyBooleanProperty toggleDisabledProperty() {
-        return toggleDisabled.getReadOnlyProperty();
-    }
-
     /** Footer text with the number of registered users. */
     public ReadOnlyStringProperty userCountProperty() {
-        return userCount.getReadOnlyProperty();
+        return itemCountProperty();
     }
 
     /** Empty when the name is valid; the message to show otherwise. */
@@ -195,221 +125,218 @@ public class UsersViewModel implements ViewModel {
         return passwordError.getReadOnlyProperty();
     }
 
-    /** Loads (or reloads) the user list and resets the form. */
-    public void load() {
-        errorMessage.set("");
-        statusMessage.set("");
-        try {
-            refreshList();
-            resetForm();
-        } catch (SQLException e) {
-            LOGGER.log(Level.SEVERE, "Could not load the users", e);
-            errorMessage.set(DATABASE_ERROR);
-        }
-    }
-
     /** Clears the form so a brand new user can be typed in. */
     public void newUser() {
-        errorMessage.set("");
-        statusMessage.set("");
-        resetForm();
+        newItem();
     }
 
-    /**
-     * Creates the user typed in the form, or updates the selected one. On
-     * edition a blank password keeps the stored hash untouched.
-     */
-    public void save() {
-        validateOnEdit = true;
-        refreshFieldErrors();
-        if (hasFieldErrors()) {
-            // The field messages are shown both decorated (ValidatorFX in the
-            // View) and as a summary. The first one wins so the message text
-            // stays exactly as it was before the refactor.
-            fail(firstFieldError());
-            return;
-        }
+    @Override
+    protected void refreshItems() throws SQLException {
+        items.setAll(userRepository.findAll());
+    }
 
+    @Override
+    protected void write() throws SQLException {
         String nameValue = trimmed(name.get());
         String usernameValue = trimmed(username.get());
         String passwordValue = password.get() == null ? "" : password.get();
-        User selected = selectedUser.get();
+        User selected = selectedItem.get();
+        String roleValue = toRole(role.get());
+        if (selected == null) {
+            User user = new User(nameValue, usernameValue,
+                    PasswordHasher.hash(passwordValue), roleValue, true);
+            userRepository.insert(user);
+        } else {
+            // Persist a detached copy first: a failed write must never leave
+            // the rendered row with values that are not in the database.
+            // A blank password keeps the stored hash untouched.
+            User updated = new User(nameValue, usernameValue, selected.getPasswordHash(),
+                    roleValue, selected.isActive());
+            updated.setId(selected.getId());
+            if (!passwordValue.isEmpty()) {
+                updated.setPasswordHash(PasswordHasher.hash(passwordValue));
+            }
+            userRepository.update(updated);
+            syncCurrentUser(updated);
+        }
+    }
 
+    @Override
+    protected boolean validateBusinessRules() throws SQLException {
+        User selected = selectedItem.get();
         String roleValue = toRole(role.get());
         if (selected != null && isCurrentUser(selected) && !User.ROLE_ADMIN.equals(roleValue)) {
             fail("No puedes quitarte el rol de administrador.");
-            return;
+            return false;
         }
-
-        try {
-            if (usernameAlreadyTaken(usernameValue, selected)) {
-                fail(duplicateMessage(usernameValue));
-                return;
-            }
-            if (selected == null) {
-                User user = new User(nameValue, usernameValue,
-                        PasswordHasher.hash(passwordValue), roleValue, true);
-                userRepository.insert(user);
-            } else {
-                // Persist a detached copy first: a failed write must never leave
-                // the rendered row with values that are not in the database.
-                User updated = new User(nameValue, usernameValue, selected.getPasswordHash(),
-                        roleValue, selected.isActive());
-                updated.setId(selected.getId());
-                if (!passwordValue.isEmpty()) {
-                    updated.setPasswordHash(PasswordHasher.hash(passwordValue));
-                }
-                userRepository.update(updated);
-                syncCurrentUser(updated);
-            }
-        } catch (SQLIntegrityConstraintViolationException e) {
-            // The unique constraint on username is the safety net if the check
-            // above races with another insert.
-            LOGGER.log(Level.WARNING, "Duplicated username on save", e);
+        String usernameValue = trimmed(username.get());
+        User existing = userRepository.findByUsername(usernameValue);
+        if (existing != null && (selected == null || existing.getId() != selected.getId())) {
             fail(duplicateMessage(usernameValue));
-            return;
-        } catch (SQLException e) {
-            LOGGER.log(Level.SEVERE, "Could not save the user", e);
-            fail(DATABASE_ERROR);
-            return;
+            return false;
         }
-        reloadAfterWrite("Usuario guardado correctamente.");
+        return true;
     }
 
-    /** Logical deletion of the selected user (never a physical delete). */
-    public void deactivate() {
-        User selected = selectedUser.get();
-        if (selected == null) {
-            fail("Selecciona un usuario de la tabla.");
-            return;
-        }
-        if (!selected.isActive()) {
-            fail("El usuario ya está desactivado.");
-            return;
-        }
-        if (isCurrentUser(selected)) {
+    @Override
+    protected void handleIntegrityViolation() {
+        // The unique constraint on username is the safety net if the check
+        // above races with another insert.
+        fail(duplicateMessage(trimmed(username.get())));
+    }
+
+    @Override
+    protected void doDeactivate(int id) throws SQLException {
+        userRepository.deactivate(id);
+    }
+
+    @Override
+    protected void doActivate(int id) throws SQLException {
+        User selected = selectedItem.get();
+        User updated = new User(selected.getName(), selected.getUsername(),
+                selected.getPasswordHash(), selected.getRole(), true);
+        updated.setId(id);
+        userRepository.update(updated);
+        syncCurrentUser(updated);
+    }
+
+    @Override
+    public boolean itemIsActive(User item) {
+        return item.isActive();
+    }
+
+    @Override
+    protected int itemId(User item) {
+        return item.getId();
+    }
+
+    /** The current administrator cannot deactivate their own account. */
+    @Override
+    protected boolean canDeactivate(User item) {
+        if (isCurrentUser(item)) {
             fail("No puedes desactivar tu propio usuario.");
-            return;
+            return false;
         }
-        try {
-            userRepository.deactivate(selected.getId());
-        } catch (SQLException e) {
-            LOGGER.log(Level.SEVERE, "Could not deactivate the user", e);
-            fail(DATABASE_ERROR);
-            return;
-        }
-        reloadAfterWrite("Usuario '" + selected.getUsername() + "' desactivado.");
+        return true;
     }
 
-    /** Brings a previously disabled user back to active. */
-    public void activate() {
-        User selected = selectedUser.get();
-        if (selected == null) {
-            fail("Selecciona un usuario de la tabla.");
-            return;
-        }
-        if (selected.isActive()) {
-            fail("El usuario ya está activo.");
-            return;
-        }
-        try {
-            User updated = new User(selected.getName(), selected.getUsername(),
-                    selected.getPasswordHash(), selected.getRole(), true);
-            updated.setId(selected.getId());
-            userRepository.update(updated);
-            syncCurrentUser(updated);
-        } catch (SQLException e) {
-            LOGGER.log(Level.SEVERE, "Could not activate the user", e);
-            fail(DATABASE_ERROR);
-            return;
-        }
-        reloadAfterWrite("Usuario '" + selected.getUsername() + "' activado.");
+    /** The current administrator cannot be deactivated, so the toggle is disabled for them. */
+    @Override
+    protected boolean isToggleDisabledForActive(User item) {
+        return isCurrentUser(item);
     }
 
-    private void refreshList() throws SQLException {
-        users.setAll(userRepository.findAll());
-    }
-
-    /**
-     * Reloads the list after a confirmed write. The write is already committed,
-     * so a reload failure must not be reported as a failed save: it gets its own
-     * message and the form is still reset.
-     */
-    private void reloadAfterWrite(String successMessage) {
-        try {
-            refreshList();
-        } catch (SQLException e) {
-            LOGGER.log(Level.WARNING, "The write succeeded but the reload failed", e);
-            resetForm();
-            fail(RELOAD_ERROR);
-            return;
-        }
-        resetForm();
-        succeed(successMessage);
-    }
-
-    private boolean usernameAlreadyTaken(String candidate, User edited) throws SQLException {
-        User existing = userRepository.findByUsername(candidate);
-        return existing != null && (edited == null || existing.getId() != edited.getId());
-    }
-
-    private void populateForm(User user) {
+    @Override
+    protected void populateForm(User user) {
         validateOnEdit = false;
         name.set(user.getName());
         username.set(user.getUsername());
         password.set("");
         role.set(user.isAdmin() ? User.ROLE_ADMIN_LABEL : User.ROLE_EMPLOYEE_LABEL);
-        formTitle.set("Editar usuario");
+        setFormTitle(editFormTitle());
         passwordPrompt.set("Dejar en blanco para mantener la actual");
         clearFieldErrors();
     }
 
-    /** Clears the selection and the form; the listener ends up in {@link #clearForm()}. */
-    private void resetForm() {
-        selectedUser.set(null);
-        clearForm();
-    }
-
-    /** Clears the form fields and returns to the "new user" defaults. */
-    private void clearForm() {
+    @Override
+    protected void clearForm() {
         validateOnEdit = false;
         name.set("");
         username.set("");
         password.set("");
         role.set(User.ROLE_EMPLOYEE_LABEL);
-        formTitle.set("Nuevo usuario");
+        setFormTitle(newFormTitle());
         passwordPrompt.set("Contraseña");
         clearFieldErrors();
-        errorMessage.set("");
-        refreshToggleState();
+        clearErrorMessage();
     }
 
-    /**
-     * Recomputes the three field errors. Called on every save and, once the user
-     * has tried to save, on every field change.
-     */
-    private void refreshFieldErrors() {
+    @Override
+    protected void refreshFieldErrors() {
         nameError.set(validateName());
         usernameError.set(validateUsername());
         passwordError.set(validatePassword());
     }
 
-    private void clearFieldErrors() {
+    @Override
+    protected void clearFieldErrors() {
         nameError.set("");
         usernameError.set("");
         passwordError.set("");
     }
 
-    private boolean hasFieldErrors() {
+    @Override
+    protected boolean hasFieldErrors() {
         return !nameError.get().isBlank() || !usernameError.get().isBlank()
                 || !passwordError.get().isBlank();
     }
 
-    private String firstFieldError() {
+    /**
+     * The field messages are shown both decorated (ValidatorFX in the View) and
+     * as a summary. The first one wins so the message text stays exactly as it
+     * was before the refactor.
+     */
+    @Override
+    protected String fieldErrorsSummary() {
         if (!nameError.get().isBlank()) {
             return nameError.get();
         }
         return !usernameError.get().isBlank() ? usernameError.get() : passwordError.get();
+    }
+
+    @Override
+    protected String countText() {
+        return "Usuarios registrados: " + items.size();
+    }
+
+    @Override
+    protected String newFormTitle() {
+        return "Nuevo usuario";
+    }
+
+    @Override
+    protected String editFormTitle() {
+        return "Editar usuario";
+    }
+
+    @Override
+    public String deactivateLabel() {
+        return TOGGLE_DEACTIVATE_LABEL;
+    }
+
+    @Override
+    protected String activateLabel() {
+        return TOGGLE_ACTIVATE_LABEL;
+    }
+
+    @Override
+    protected String notSelectedMessage() {
+        return "Selecciona un usuario de la tabla.";
+    }
+
+    @Override
+    protected String alreadyActiveMessage() {
+        return "El usuario ya está activo.";
+    }
+
+    @Override
+    protected String alreadyInactiveMessage() {
+        return "El usuario ya está desactivado.";
+    }
+
+    @Override
+    protected String deactivatedMessage(User user) {
+        return "Usuario '" + user.getUsername() + "' desactivado.";
+    }
+
+    @Override
+    protected String activatedMessage(User user) {
+        return "Usuario '" + user.getUsername() + "' activado.";
+    }
+
+    @Override
+    protected String saveSuccessMessage() {
+        return "Usuario guardado correctamente.";
     }
 
     private String validateName() {
@@ -435,7 +362,7 @@ public class UsersViewModel implements ViewModel {
     }
 
     private String validatePassword() {
-        boolean creating = selectedUser.get() == null;
+        boolean creating = selectedItem.get() == null;
         String value = password.get() == null ? "" : password.get();
         return creating && value.isEmpty() ? "Introduce la contraseña del usuario." : "";
     }
@@ -459,46 +386,11 @@ public class UsersViewModel implements ViewModel {
         return currentUser != null && user != null && user.getId() == currentUser.getId();
     }
 
-    private void refreshToggleState() {
-        User selected = selectedUser.get();
-        if (selected == null) {
-            toggleLabel.set(TOGGLE_DEACTIVATE_LABEL);
-            toggleDisabled.set(true);
-            return;
-        }
-        if (selected.isActive()) {
-            toggleLabel.set(TOGGLE_DEACTIVATE_LABEL);
-            toggleDisabled.set(isCurrentUser(selected));
-        } else {
-            toggleLabel.set(TOGGLE_ACTIVATE_LABEL);
-            toggleDisabled.set(false);
-        }
-    }
-
-    private void updateCount() {
-        int total = users.size();
-        userCount.set("Usuarios registrados: " + total);
-    }
-
-    private void fail(String message) {
-        statusMessage.set("");
-        errorMessage.set(message);
-    }
-
-    private void succeed(String message) {
-        errorMessage.set("");
-        statusMessage.set(message);
-    }
-
     private static String duplicateMessage(String username) {
         return "El nombre de usuario '" + username + "' ya existe.";
     }
 
     private static String toRole(String roleLabel) {
         return User.ROLE_ADMIN_LABEL.equals(roleLabel) ? User.ROLE_ADMIN : User.ROLE_EMPLOYEE;
-    }
-
-    private static String trimmed(String value) {
-        return value == null ? "" : value.trim();
     }
 }

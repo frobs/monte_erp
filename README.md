@@ -41,24 +41,25 @@ monte_erp/
 │   │   │       ├── Launcher.java                  # Punto de entrada (main)
 │   │   │       ├── MonteErpApplication.java       # JavaFX Application
 │   │   │       ├── app/                           # AppContext, AppShell, SessionState, SceneNavigator
-│   │   │       ├── view/                          # LoginView, SetupView, MainView, UsersView (code-behind FXML)
-│   │   │       ├── viewmodel/                     # LoginViewModel, SetupViewModel, MainViewModel, UsersViewModel
+│   │   │       ├── view/                          # LoginView, SetupView, MainView, UsersView, ProductsView, CategoriesView + CrudView (base)
+│   │   │       ├── viewmodel/                     # LoginViewModel, SetupViewModel, MainViewModel, UsersViewModel, ProductsViewModel, CategoriesViewModel + CrudViewModel/FilterableCrudViewModel (base)
 │   │   │       ├── domain/
-│   │   │       │   ├── model/                     # User
-│   │   │       │   └── repository/                # UserRepository (interfaz de puerto)
-│   │   │       ├── infrastructure/                # MySqlUserRepository (implementación JDBC)
-│   │   │       │   └── config/                    # DatabaseConnection, DatabaseConfig, DatabaseSetupService, MigrationRunner
+│   │   │       │   ├── model/                     # User, Product, Category, Supplier
+│   │   │       │   └── repository/                # UserRepository, ProductRepository, CategoryRepository, SupplierRepository (puertos)
+│   │   │       ├── infrastructure/                # MySqlUserRepository, MySqlProductRepository, MySqlCategoryRepository, MySqlSupplierRepository
+│   │   │       │   └── config/                    # DatabaseConnection, DatabaseConfig, DatabaseSetupService, MigrationRunner, keyring
 │   │   │       └── security/                      # PasswordHasher
 │   │   └── resources/
-│   │       ├── application.properties             # URL, usuario y contraseña de la BD
 │   │       ├── css/app.css                        # Estilos de la interfaz
-│   │       ├── db/migration/V1__schema.sql        # Migración: esquema completo
+│   │       ├── db/migration/V1..V4__*.sql         # Migraciones: esquema + bajas lógicas (PRODUCT, CATEGORY)
 │   │       └── com/entidaddesconocida/monte_erp/view/
 │   │           ├── LoginView.fxml                 # vista de login (mismo paquete que LoginView)
 │   │           ├── SetupView.fxml                 # vista de configuración de BD
 │   │           ├── MainView.fxml                  # vista principal (mismo paquete que MainView)
-│   │           └── UsersView.fxml                 # vista de gestión de usuarios (RF-02)
-│   └── test/java/...                              # Pruebas JUnit 5 (unitarias + integración)
+│   │           ├── UsersView.fxml                 # vista de gestión de usuarios (RF-02)
+│   │           ├── ProductsView.fxml              # vista de gestión de productos (RF-03/RF-11)
+│   │           └── CategoriesView.fxml            # vista de gestión de categorías (RF-04)
+│   └── test/java/...                              # Pruebas JUnit 5 unitarias (fakes en memoria y ficheros temporales)
 └── target/                  # Artefactos generados (tras compilar)
 ```
 
@@ -128,16 +129,18 @@ docker exec -it monte_erp_mysql mysql -u erp_user -p monte_erp
 
 ## Conexión de la aplicación a MySQL
 
-La conexión se configura en `src/main/resources/application.properties`:
+La configuración vive en dos sitios:
 
-| Propiedad       | Valor por defecto                                | Descripción                  |
-| --------------- | ------------------------------------------------ | ---------------------------- |
-| `db.url`        | `jdbc:mysql://localhost:3306/monte_erp?...`      | URL JDBC de la base de datos |
-| `db.user`       | `erp_user`                                       | Usuario de la base de datos  |
-| `db.password`   | `erp_pass`                                       | Contraseña del usuario       |
+- La **URL** (`db.url`) en un `application.properties` **junto al JAR** (en el
+  directorio de trabajo), gestionado por `DatabaseConfig`.
+- El **usuario y la contraseña** de la base de datos en el **keyring del sistema
+  operativo** (java-keyring, vía `KeyringCredentialStore`), nunca en el repositorio.
 
-`DatabaseConnection` (paquete `infrastructure/config`) es el único punto que lee
-ese fichero y reparte la conexión compartida al resto de la aplicación.
+Si falta esa configuración, la app abre la pantalla de **configuración**
+(`SetupView`) en modo onboarding en lugar del login; desde el login se puede
+cambiar la conexión con "Cambiar configuración de base de datos".
+`DatabaseConnection` (paquete `infrastructure/config`) es el único punto que abre
+conexiones JDBC.
 
 ### Migraciones
 
@@ -145,7 +148,10 @@ Los scripts `.sql` versionados viven en `src/main/resources/db/migration` y
 siguen la convención `V<n>__<descripcion>.sql`. Al arrancar, `MigrationRunner`
 aplica en orden los que estén pendientes y registra cada uno en la tabla de
 control `schema_migrations`, por lo que arrancar la aplicación varias veces no
-repite trabajo. Para cambiar el esquema basta con añadir `V2__<descripcion>.sql`.
+repite trabajo. Para cambiar el esquema basta con añadir el siguiente
+`V<n>__<descripcion>.sql` (hoy `V5`): `V2`/`V4` añaden `PRODUCT.active` y
+`CATEGORY.active` (bajas lógicas) y `V3` hace `NULL`-able `PRODUCT.category_id`,
+porque la categoría es opcional.
 
 Esquema creado por `V1__schema.sql` (10 tablas):
 

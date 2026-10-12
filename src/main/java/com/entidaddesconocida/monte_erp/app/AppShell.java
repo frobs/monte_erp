@@ -1,11 +1,13 @@
 package com.entidaddesconocida.monte_erp.app;
 
 import com.entidaddesconocida.monte_erp.domain.model.User;
+import com.entidaddesconocida.monte_erp.view.CategoriesView;
 import com.entidaddesconocida.monte_erp.view.LoginView;
 import com.entidaddesconocida.monte_erp.view.MainView;
 import com.entidaddesconocida.monte_erp.view.ProductsView;
 import com.entidaddesconocida.monte_erp.view.SetupView;
 import com.entidaddesconocida.monte_erp.view.UsersView;
+import com.entidaddesconocida.monte_erp.viewmodel.CategoriesViewModel;
 import com.entidaddesconocida.monte_erp.viewmodel.LoginViewModel;
 import com.entidaddesconocida.monte_erp.viewmodel.ProductsViewModel;
 import com.entidaddesconocida.monte_erp.viewmodel.SetupViewModel;
@@ -97,6 +99,18 @@ public class AppShell {
                 FluentViewLoader.fxmlView(ProductsView.class).load();
         SceneNavigator.show(stage, tuple, "Monte ERP · Gestión de productos",
                 SceneNavigator.PRODUCTS_WIDTH, SceneNavigator.PRODUCTS_HEIGHT);
+    }
+
+    /**
+     * Loads the category management screen (RF-04). Every signed-in user may
+     * manage categories (CU-04 actor is the employee), so there is no role guard.
+     */
+    public void showCategories() {
+        session.requireCurrentUser();
+        ViewTuple<CategoriesView, CategoriesViewModel> tuple =
+                FluentViewLoader.fxmlView(CategoriesView.class).load();
+        SceneNavigator.show(stage, tuple, "Monte ERP · Gestión de categorías",
+                SceneNavigator.CATEGORIES_WIDTH, SceneNavigator.CATEGORIES_HEIGHT);
     }
 
     /**

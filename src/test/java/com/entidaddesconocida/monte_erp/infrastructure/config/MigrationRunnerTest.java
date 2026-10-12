@@ -83,9 +83,12 @@ class MigrationRunnerTest {
     }
 
     @Test
-    @DisplayName("The V1 script is discovered on the classpath (exploded or inside a JAR)")
+    @DisplayName("The V1 and V4 scripts are discovered on the classpath (exploded or inside a JAR)")
     void discoversScripts() throws Exception {
         List<String> scripts = MigrationRunner.discoverScripts();
         assertTrue(scripts.contains("V1__schema.sql"), "scripts found: " + scripts);
+        // CATEGORY.active comes from V4: if that resource disappears from the JAR,
+        // every existing installation breaks at start-up and no test would notice.
+        assertTrue(scripts.contains("V4__category_active.sql"), "scripts found: " + scripts);
     }
 }

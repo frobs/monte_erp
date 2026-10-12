@@ -58,7 +58,8 @@ class MySqlProductRepositoryTest {
                 "min_stock", 5,
                 "active", true,
                 "category_id", 3,
-                "category_name", "Bebidas");
+                "category_name", "Bebidas",
+                "category_active", true);
     }
 
     @Test
@@ -79,12 +80,37 @@ class MySqlProductRepositoryTest {
         assertTrue(product.isActive());
         assertEquals(3, product.getCategory().getId());
         assertEquals("Bebidas", product.getCategory().getName());
+        assertTrue(product.getCategory().isActive());
 
         String sql = fake.executedStatements().get(0);
         assertTrue(sql.contains("FROM PRODUCT p"));
         assertTrue(sql.contains("LEFT JOIN CATEGORY c ON p.category_id = c.id"));
+        // The category's active flag is what drives the D4 rule of the form, so the
+        // projection is pinned here (FakeJdbc maps by column name, so dropping the
+        // column from the SELECT would otherwise go unnoticed).
+        assertTrue(sql.contains("c.active AS category_active"), sql);
         assertTrue(sql.contains("WHERE p.active = 1"));
         assertTrue(sql.contains("ORDER BY p.name"));
+    }
+
+    @Test
+    @DisplayName("Una categoría dada de baja en el JOIN se mapea con active = false")
+    void mapsInactiveCategory() throws SQLException {
+        fake.withRows(FakeJdbc.row(
+                "id", 1,
+                "name", "Café molido",
+                "sku", "CAF-001",
+                "description", null,
+                "price", new BigDecimal("4.50"),
+                "min_stock", 0,
+                "active", true,
+                "category_id", 3,
+                "category_name", "Bebidas",
+                "category_active", false));
+
+        Product product = repository.findAll().get(0);
+
+        assertFalse(product.getCategory().isActive());
     }
 
     @Test
