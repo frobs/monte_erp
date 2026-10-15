@@ -6,14 +6,40 @@ import java.sql.SQLException;
 import java.util.List;
 
 /**
- * Read-only port over {@link Supplier} entities.
+ * Port over {@link Supplier} entities (RF-05 / CU-05).
  *
- * <p>RF-03 only needs the suppliers to fill the product form and the filter
- * combo boxes; the full CRUD belongs to RF-05, so the write operations are
- * deliberately absent here.</p>
+ * <p>{@link #findAll()} keeps the "every supplier" semantics used by the product
+ * filter of RF-11, so an inactive supplier is still listed there.
+ * {@link #findActive()} is the list for the assignment combo of a purchase
+ * (RF-14): an inactive supplier cannot be assigned.</p>
+ *
+ * <p>Suppliers are never deleted physically (decision D1): {@link #deactivate(int)}
+ * just flags the row, because {@code PURCHASE} references {@code SUPPLIER} with
+ * {@code ON DELETE RESTRICT}.</p>
  */
 public interface SupplierRepository {
 
-    /** Returns every supplier, ordered by name. */
+    /** Returns every supplier (active and inactive), ordered by name. */
     List<Supplier> findAll() throws SQLException;
+
+    /** Returns only the active suppliers, ordered by name. */
+    List<Supplier> findActive() throws SQLException;
+
+    /** Returns only the logically deleted suppliers, ordered by name. */
+    List<Supplier> findInactive() throws SQLException;
+
+    /** Returns the supplier with the given name in any state, or {@code null}. */
+    Supplier findByName(String name) throws SQLException;
+
+    /** Inserts a new supplier (it is born active) and returns its generated id. */
+    int insert(Supplier supplier) throws SQLException;
+
+    /** Updates name, phone and email; the {@code active} flag is left untouched. */
+    void update(Supplier supplier) throws SQLException;
+
+    /** Logical deletion: sets {@code active = 0}. */
+    void deactivate(int id) throws SQLException;
+
+    /** Reactivates a previously deleted supplier: sets {@code active = 1}. */
+    void activate(int id) throws SQLException;
 }
