@@ -53,6 +53,7 @@
                 <Button text="Productos" onAction="#onProducts" styleClass="module-button"/>
                 <Button text="Categorías" onAction="#onCategories" styleClass="module-button"/>
                 <Button text="Proveedores" onAction="#onSuppliers" styleClass="module-button"/>
+                <Button text="Clientes" onAction="#onCustomers" styleClass="module-button"/>
                 <Button text="Compras" onAction="#onPendingModule" styleClass="module-button"/>
                 <Button text="Pedidos" onAction="#onPendingModule" styleClass="module-button"/>
                 <Button text="Stock" onAction="#onPendingModule" styleClass="module-button"/>

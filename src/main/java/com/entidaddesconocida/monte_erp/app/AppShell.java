@@ -2,6 +2,7 @@ package com.entidaddesconocida.monte_erp.app;
 
 import com.entidaddesconocida.monte_erp.domain.model.User;
 import com.entidaddesconocida.monte_erp.view.CategoriesView;
+import com.entidaddesconocida.monte_erp.view.CustomersView;
 import com.entidaddesconocida.monte_erp.view.LoginView;
 import com.entidaddesconocida.monte_erp.view.MainView;
 import com.entidaddesconocida.monte_erp.view.ProductsView;
@@ -9,6 +10,7 @@ import com.entidaddesconocida.monte_erp.view.SetupView;
 import com.entidaddesconocida.monte_erp.view.SuppliersView;
 import com.entidaddesconocida.monte_erp.view.UsersView;
 import com.entidaddesconocida.monte_erp.viewmodel.CategoriesViewModel;
+import com.entidaddesconocida.monte_erp.viewmodel.CustomersViewModel;
 import com.entidaddesconocida.monte_erp.viewmodel.LoginViewModel;
 import com.entidaddesconocida.monte_erp.viewmodel.ProductsViewModel;
 import com.entidaddesconocida.monte_erp.viewmodel.SetupViewModel;
@@ -125,6 +127,18 @@ public class AppShell {
                 FluentViewLoader.fxmlView(SuppliersView.class).load();
         SceneNavigator.show(stage, tuple, "Monte ERP · Gestión de proveedores",
                 SceneNavigator.SUPPLIERS_WIDTH, SceneNavigator.SUPPLIERS_HEIGHT);
+    }
+
+    /**
+     * Loads the customer management screen (RF-06). Every signed-in user may
+     * manage customers (CU-06 actor is the employee), so there is no role guard.
+     */
+    public void showCustomers() {
+        session.requireCurrentUser();
+        ViewTuple<CustomersView, CustomersViewModel> tuple =
+                FluentViewLoader.fxmlView(CustomersView.class).load();
+        SceneNavigator.show(stage, tuple, "Monte ERP · Gestión de clientes",
+                SceneNavigator.CUSTOMERS_WIDTH, SceneNavigator.CUSTOMERS_HEIGHT);
     }
 
     /**

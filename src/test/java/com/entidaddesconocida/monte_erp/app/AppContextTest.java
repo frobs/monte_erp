@@ -6,18 +6,21 @@ import com.entidaddesconocida.monte_erp.infrastructure.config.DatabaseUrl;
 import com.entidaddesconocida.monte_erp.infrastructure.config.FakeCredentialStore;
 import com.entidaddesconocida.monte_erp.security.PasswordHasher;
 import com.entidaddesconocida.monte_erp.view.CategoriesView;
+import com.entidaddesconocida.monte_erp.view.CustomersView;
 import com.entidaddesconocida.monte_erp.view.LoginView;
 import com.entidaddesconocida.monte_erp.view.MainView;
 import com.entidaddesconocida.monte_erp.view.ProductsView;
 import com.entidaddesconocida.monte_erp.view.SetupView;
 import com.entidaddesconocida.monte_erp.view.UsersView;
 import com.entidaddesconocida.monte_erp.viewmodel.CategoriesViewModel;
+import com.entidaddesconocida.monte_erp.viewmodel.CustomersViewModel;
 import com.entidaddesconocida.monte_erp.viewmodel.LoginViewModel;
 import com.entidaddesconocida.monte_erp.viewmodel.MainViewModel;
 import com.entidaddesconocida.monte_erp.viewmodel.ProductsViewModel;
 import com.entidaddesconocida.monte_erp.viewmodel.SetupViewModel;
 import com.entidaddesconocida.monte_erp.viewmodel.UsersViewModel;
 import com.entidaddesconocida.monte_erp.viewmodel.support.FakeCategoryRepository;
+import com.entidaddesconocida.monte_erp.viewmodel.support.FakeCustomerRepository;
 import com.entidaddesconocida.monte_erp.viewmodel.support.FakeProductRepository;
 import com.entidaddesconocida.monte_erp.viewmodel.support.FakeSetupService;
 import com.entidaddesconocida.monte_erp.viewmodel.support.FakeSupplierRepository;
@@ -48,6 +51,7 @@ class AppContextTest {
         FakeSetupService setup = new FakeSetupService();
         return new AppContext(session, new AppShell(session), repo,
                 new FakeCategoryRepository(), new FakeSupplierRepository(), new FakeProductRepository(),
+                new FakeCustomerRepository(),
                 config, setup, () -> new DatabaseUrl("jdbc:test"));
     }
 
@@ -151,6 +155,19 @@ class AppContextTest {
     }
 
     @Test
+    @DisplayName("create(CustomersViewModel) devuelve un VM con el repositorio de clientes inyectado")
+    void customersViewModelIsCreatedWithRepository() {
+        AppContext context = context(new SessionState());
+
+        CustomersViewModel vm = (CustomersViewModel) context.create(CustomersViewModel.class);
+        vm.load();
+
+        assertNotNull(vm);
+        assertEquals(0, vm.customers().size());
+        assertEquals("Clientes: 0", vm.customerCountProperty().get());
+    }
+
+    @Test
     @DisplayName("Las vistas se crean como instancias nuevas (no null)")
     void viewsAreCreated() {
         AppContext context = context(new SessionState());
@@ -160,5 +177,6 @@ class AppContextTest {
         assertNotNull(context.create(UsersView.class));
         assertNotNull(context.create(ProductsView.class));
         assertNotNull(context.create(CategoriesView.class));
+        assertNotNull(context.create(CustomersView.class));
     }
 }
