@@ -12,12 +12,14 @@ import com.entidaddesconocida.monte_erp.view.LoginView;
 import com.entidaddesconocida.monte_erp.view.MainView;
 import com.entidaddesconocida.monte_erp.view.ProductsView;
 import com.entidaddesconocida.monte_erp.view.SetupView;
+import com.entidaddesconocida.monte_erp.view.SuppliersView;
 import com.entidaddesconocida.monte_erp.view.UsersView;
 import com.entidaddesconocida.monte_erp.viewmodel.CategoriesViewModel;
 import com.entidaddesconocida.monte_erp.viewmodel.LoginViewModel;
 import com.entidaddesconocida.monte_erp.viewmodel.MainViewModel;
 import com.entidaddesconocida.monte_erp.viewmodel.ProductsViewModel;
 import com.entidaddesconocida.monte_erp.viewmodel.SetupViewModel;
+import com.entidaddesconocida.monte_erp.viewmodel.SuppliersViewModel;
 import com.entidaddesconocida.monte_erp.viewmodel.UsersViewModel;
 
 import java.util.HashMap;
@@ -66,6 +68,7 @@ public final class AppContext {
         bind(UsersView.class, () -> new UsersView(appShell));
         bind(ProductsView.class, () -> new ProductsView(appShell));
         bind(CategoriesView.class, () -> new CategoriesView(appShell));
+        bind(SuppliersView.class, () -> new SuppliersView(appShell));
 
         // ViewModels: constructor injection, one new instance per view load.
         bind(LoginViewModel.class, () -> new LoginViewModel(userRepository));
@@ -77,6 +80,8 @@ public final class AppContext {
                 () -> new ProductsViewModel(productRepository, categoryRepository));
         bind(CategoriesViewModel.class,
                 () -> new CategoriesViewModel(categoryRepository));
+        bind(SuppliersViewModel.class,
+                () -> new SuppliersViewModel(supplierRepository));
         bind(SetupViewModel.class,
                 () -> new SetupViewModel(setupService, appShell.isOnboarding()));
     }

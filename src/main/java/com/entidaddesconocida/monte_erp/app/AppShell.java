@@ -6,11 +6,13 @@ import com.entidaddesconocida.monte_erp.view.LoginView;
 import com.entidaddesconocida.monte_erp.view.MainView;
 import com.entidaddesconocida.monte_erp.view.ProductsView;
 import com.entidaddesconocida.monte_erp.view.SetupView;
+import com.entidaddesconocida.monte_erp.view.SuppliersView;
 import com.entidaddesconocida.monte_erp.view.UsersView;
 import com.entidaddesconocida.monte_erp.viewmodel.CategoriesViewModel;
 import com.entidaddesconocida.monte_erp.viewmodel.LoginViewModel;
 import com.entidaddesconocida.monte_erp.viewmodel.ProductsViewModel;
 import com.entidaddesconocida.monte_erp.viewmodel.SetupViewModel;
+import com.entidaddesconocida.monte_erp.viewmodel.SuppliersViewModel;
 import com.entidaddesconocida.monte_erp.viewmodel.UsersViewModel;
 
 import de.saxsys.mvvmfx.FluentViewLoader;
@@ -111,6 +113,18 @@ public class AppShell {
                 FluentViewLoader.fxmlView(CategoriesView.class).load();
         SceneNavigator.show(stage, tuple, "Monte ERP · Gestión de categorías",
                 SceneNavigator.CATEGORIES_WIDTH, SceneNavigator.CATEGORIES_HEIGHT);
+    }
+
+    /**
+     * Loads the supplier management screen (RF-05). Every signed-in user may
+     * manage suppliers (CU-05 actor is the employee), so there is no role guard.
+     */
+    public void showSuppliers() {
+        session.requireCurrentUser();
+        ViewTuple<SuppliersView, SuppliersViewModel> tuple =
+                FluentViewLoader.fxmlView(SuppliersView.class).load();
+        SceneNavigator.show(stage, tuple, "Monte ERP · Gestión de proveedores",
+                SceneNavigator.SUPPLIERS_WIDTH, SceneNavigator.SUPPLIERS_HEIGHT);
     }
 
     /**
