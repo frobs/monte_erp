@@ -46,10 +46,14 @@ public final class FakeJdbc implements Driver {
     private final List<String> preparedSql = new ArrayList<>();
     private final List<Map<Integer, Object>> boundParameters = new ArrayList<>();
     private final List<String> executedStatements = new ArrayList<>();
+    private final List<String> transactionCalls = new ArrayList<>();
 
     private List<Row> rows = List.of();
     private int generatedKey;
     private int updateCount = 1;
+    private int updateCalls;
+    private int failUpdateNumber;
+    private boolean autoCommit = true;
     private final Set<Object> closedConnections = Collections.newSetFromMap(new IdentityHashMap<>());
     private Object lastConnection;
 
@@ -115,6 +119,21 @@ public final class FakeJdbc implements Driver {
         return executedStatements;
     }
 
+    /** Transaction calls in order: {@code setAutoCommit(x)}, {@code commit()}, {@code rollback()}. */
+    public List<String> transactionCalls() {
+        return transactionCalls;
+    }
+
+    /**
+     * Makes the n-th {@code executeUpdate()} (1-based, across all statements)
+     * throw an {@link SQLException}, to exercise the rollback path of a
+     * transactional repository.
+     */
+    public FakeJdbc failUpdateNumber(int n) {
+        this.failUpdateNumber = n;
+        return this;
+    }
+
     /** Builds a result row from alternating column name / value pairs. */
     public static Row row(Object... columnsAndValues) {
         return Row.of(columnsAndValues);
@@ -173,7 +192,20 @@ public final class FakeJdbc implements Driver {
                 closedConnections.add(proxy);
                 yield null;
             }
-            case "getAutoCommit" -> true;
+            case "getAutoCommit" -> autoCommit;
+            case "setAutoCommit" -> {
+                autoCommit = (Boolean) args[0];
+                transactionCalls.add("setAutoCommit(" + args[0] + ")");
+                yield null;
+            }
+            case "commit" -> {
+                transactionCalls.add("commit()");
+                yield null;
+            }
+            case "rollback" -> {
+                transactionCalls.add("rollback()");
+                yield null;
+            }
             case "toString" -> "FakeConnection";
             default -> defaultValue(method);
         });
@@ -193,7 +225,13 @@ public final class FakeJdbc implements Driver {
             }
             return switch (name) {
                 case "executeQuery" -> resultSetProxy(rows);
-                case "executeUpdate" -> updateCount;
+                case "executeUpdate" -> {
+                    updateCalls++;
+                    if (failUpdateNumber > 0 && updateCalls == failUpdateNumber) {
+                        throw new SQLException("Simulated failure on executeUpdate #" + updateCalls);
+                    }
+                    yield updateCount;
+                }
                 case "execute" -> true;
                 case "getGeneratedKeys" -> resultSetProxy(generatedKeyRows());
                 case "toString" -> "FakePreparedStatement[" + sql + "]";
