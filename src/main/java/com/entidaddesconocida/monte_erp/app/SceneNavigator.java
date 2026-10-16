@@ -28,6 +28,8 @@ public final class SceneNavigator {
     public static final double SUPPLIERS_HEIGHT = 680;
     public static final double CUSTOMERS_WIDTH = 1100;
     public static final double CUSTOMERS_HEIGHT = 680;
+    public static final double SALES_ORDERS_WIDTH = 1180;
+    public static final double SALES_ORDERS_HEIGHT = 720;
 
     private SceneNavigator() {
         // Utility class: never instantiated.

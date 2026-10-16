@@ -1,0 +1,318 @@
+package com.entidaddesconocida.monte_erp.viewmodel;
+
+import com.entidaddesconocida.monte_erp.domain.model.Customer;
+import com.entidaddesconocida.monte_erp.domain.model.Product;
+import com.entidaddesconocida.monte_erp.domain.model.SalesOrder;
+import com.entidaddesconocida.monte_erp.domain.model.SalesOrderLine;
+import com.entidaddesconocida.monte_erp.domain.model.User;
+import com.entidaddesconocida.monte_erp.viewmodel.support.FakeCustomerRepository;
+import com.entidaddesconocida.monte_erp.viewmodel.support.FakeProductRepository;
+import com.entidaddesconocida.monte_erp.viewmodel.support.FakeSalesOrderRepository;
+
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+
+import java.math.BigDecimal;
+import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+/**
+ * Unit tests for {@link SalesOrdersViewModel} (RF-07 / CU-07, total from RF-13).
+ *
+ * <p>No database and no JavaFX toolkit: the ViewModel is built by hand with the
+ * in-memory doubles. The per-field error properties replace ValidatorFX, so the
+ * rules are asserted without a toolkit.</p>
+ */
+class SalesOrdersViewModelTest {
+
+    private static final Customer ACME = new Customer(1, "Acme", null, null, null);
+    private static final Customer GLOBEX = new Customer(2, "Globex", null, null, null);
+    private static final Customer INACTIVE = new Customer(3, "Old", null, null, null, false);
+
+    private FakeCustomerRepository customerRepository;
+    private FakeProductRepository productRepository;
+    private FakeSalesOrderRepository salesOrderRepository;
+    private SalesOrdersViewModel viewModel;
+
+    private Product teclado;
+    private Product raton;
+
+    @BeforeEach
+    void setUp() {
+        customerRepository = new FakeCustomerRepository()
+                .withCustomer(ACME).withCustomer(GLOBEX).withCustomer(INACTIVE);
+        productRepository = new FakeProductRepository()
+                .withProduct(product(1, "Teclado", "10.00"))
+                .withProduct(product(2, "Ratón", "5.50"))
+                .withProduct(product(3, "Antiguo", "1.00", false));
+        salesOrderRepository = new FakeSalesOrderRepository();
+        viewModel = new SalesOrdersViewModel(salesOrderRepository, customerRepository,
+                productRepository, user());
+        viewModel.load();
+    }
+
+    private static Product product(int id, String name, String price) {
+        return product(id, name, price, true);
+    }
+
+    private static Product product(int id, String name, String price, boolean active) {
+        Product product = new Product(name, "SKU-" + id, null, new BigDecimal(price), 0, null, active);
+        product.setId(id);
+        return product;
+    }
+
+    private static User user() {
+        User user = new User("Bea", "bea", "hash", User.ROLE_EMPLOYEE, true);
+        user.setId(9);
+        return user;
+    }
+
+    private void selectProduct(int index) {
+        teclado = viewModel.products().get(index);
+        viewModel.selectedProductProperty().set(teclado);
+    }
+
+    private void addLine(String productName, String quantity) {
+        Product product = viewModel.products().stream()
+                .filter(candidate -> candidate.getName().equals(productName))
+                .findFirst().orElseThrow();
+        viewModel.selectedProductProperty().set(product);
+        viewModel.quantityProperty().set(quantity);
+        viewModel.addLine();
+    }
+
+    @Test
+    @DisplayName("load carga solo clientes y productos activos, y el histórico")
+    void loadFillsActiveCombosAndHistory() {
+        assertEquals(List.of("Acme", "Globex"),
+                viewModel.customers().stream().map(Customer::getName).toList());
+        assertEquals(List.of("Ratón", "Teclado"),
+                viewModel.products().stream().map(Product::getName).toList());
+        assertEquals(0, viewModel.orders().size());
+    }
+
+    @Test
+    @DisplayName("load con la base de datos caída muestra el error de conexión")
+    void loadReportsDatabaseError() {
+        SalesOrdersViewModel failing = new SalesOrdersViewModel(
+                new FakeSalesOrderRepository().throwOnAccess(), customerRepository,
+                productRepository, user());
+
+        failing.load();
+
+        assertEquals(SalesOrdersViewModel.DATABASE_ERROR, failing.errorMessageProperty().get());
+    }
+
+    @Test
+    @DisplayName("load limpia la selección del histórico y su detalle")
+    void loadClearsSelectedOrder() {
+        SalesOrder order = new SalesOrder(5, java.time.LocalDateTime.now(),
+                SalesOrder.STATUS_PENDING, BigDecimal.ZERO, ACME, user(), List.of());
+        salesOrderRepository.withOrder(order)
+                .withLine(5, new SalesOrderLine(1, new BigDecimal("10.00"), product(1, "Teclado", "10.00")));
+        viewModel.selectedOrderProperty().set(order);
+        viewModel.selectOrder(order);
+        assertEquals(1, viewModel.selectedOrderLines().size());
+
+        viewModel.load();
+
+        assertNull(viewModel.selectedOrderProperty().get());
+        assertEquals(0, viewModel.selectedOrderLines().size());
+    }
+
+    @Test
+    @DisplayName("addLine válido toma el precio del producto y calcula subtotal y total")
+    void addLineUsesProductPriceSnapshot() {
+        addLine("Teclado", "2");
+
+        assertEquals(1, viewModel.draftLines().size());
+        SalesOrderLine line = viewModel.draftLines().get(0);
+        assertEquals(2, line.getQuantity());
+        assertEquals(0, new BigDecimal("10.00").compareTo(line.getUnitPrice()));
+        assertEquals(0, new BigDecimal("20.00").compareTo(line.subtotal()));
+        assertEquals(0, new BigDecimal("20.00").compareTo(viewModel.orderTotalProperty().get()));
+        assertNull(viewModel.selectedProductProperty().get());
+        assertEquals("", viewModel.quantityProperty().get());
+    }
+
+    @Test
+    @DisplayName("addLine sin producto muestra error de campo y no añade la línea")
+    void addLineWithoutProductFails() {
+        viewModel.quantityProperty().set("2");
+
+        viewModel.addLine();
+
+        assertEquals(SalesOrdersViewModel.PRODUCT_REQUIRED, viewModel.productErrorProperty().get());
+        assertEquals(0, viewModel.draftLines().size());
+    }
+
+    @Test
+    @DisplayName("addLine con cantidad vacía muestra error de campo")
+    void addLineWithEmptyQuantityFails() {
+        selectProduct(0);
+
+        viewModel.addLine();
+
+        assertEquals(SalesOrdersViewModel.QUANTITY_INVALID, viewModel.quantityErrorProperty().get());
+        assertEquals(0, viewModel.draftLines().size());
+    }
+
+    @Test
+    @DisplayName("addLine con cantidad no numérica muestra error de campo")
+    void addLineWithNonNumericQuantityFails() {
+        selectProduct(0);
+        viewModel.quantityProperty().set("dos");
+
+        viewModel.addLine();
+
+        assertEquals(SalesOrdersViewModel.QUANTITY_INVALID, viewModel.quantityErrorProperty().get());
+    }
+
+    @Test
+    @DisplayName("addLine con cantidad 0 muestra error de campo")
+    void addLineWithZeroQuantityFails() {
+        selectProduct(0);
+        viewModel.quantityProperty().set("0");
+
+        viewModel.addLine();
+
+        assertEquals(SalesOrdersViewModel.QUANTITY_INVALID, viewModel.quantityErrorProperty().get());
+    }
+
+    @Test
+    @DisplayName("addLine con cantidad negativa muestra error de campo")
+    void addLineWithNegativeQuantityFails() {
+        selectProduct(0);
+        viewModel.quantityProperty().set("-3");
+
+        viewModel.addLine();
+
+        assertEquals(SalesOrdersViewModel.QUANTITY_INVALID, viewModel.quantityErrorProperty().get());
+    }
+
+    @Test
+    @DisplayName("addLine con producto repetido se rechaza (decisión D3)")
+    void addLineRejectsDuplicatedProduct() {
+        addLine("Teclado", "1");
+
+        addLine("Teclado", "1");
+
+        assertEquals(SalesOrdersViewModel.DUPLICATED_PRODUCT, viewModel.productErrorProperty().get());
+        assertEquals(1, viewModel.draftLines().size());
+    }
+
+    @Test
+    @DisplayName("removeLine quita la línea y recalcula el total")
+    void removeLineRecomputesTotal() {
+        addLine("Teclado", "2");
+        addLine("Ratón", "3");
+        assertEquals(0, new BigDecimal("36.50").compareTo(viewModel.orderTotalProperty().get()));
+
+        viewModel.removeLine(viewModel.draftLines().get(0));
+
+        assertEquals(1, viewModel.draftLines().size());
+        assertEquals(0, new BigDecimal("16.50").compareTo(viewModel.orderTotalProperty().get()));
+    }
+
+    @Test
+    @DisplayName("newOrder vacía el borrador y el total")
+    void newOrderClearsTheDraft() {
+        addLine("Teclado", "2");
+
+        viewModel.newOrder();
+
+        assertEquals(0, viewModel.draftLines().size());
+        assertEquals(0, BigDecimal.ZERO.compareTo(viewModel.orderTotalProperty().get()));
+        assertNull(viewModel.selectedCustomerProperty().get());
+    }
+
+    @Test
+    @DisplayName("save sin cliente muestra error de campo")
+    void saveWithoutCustomerFails() {
+        addLine("Teclado", "1");
+
+        viewModel.save();
+
+        assertEquals(SalesOrdersViewModel.CUSTOMER_REQUIRED, viewModel.customerErrorProperty().get());
+        assertEquals(0, viewModel.orders().size());
+    }
+
+    @Test
+    @DisplayName("save sin líneas muestra error de campo")
+    void saveWithoutLinesFails() {
+        viewModel.selectedCustomerProperty().set(ACME);
+
+        viewModel.save();
+
+        assertEquals(SalesOrdersViewModel.LINES_REQUIRED, viewModel.linesErrorProperty().get());
+        assertEquals(0, viewModel.orders().size());
+    }
+
+    @Test
+    @DisplayName("save válido inserta el pedido pending, con usuario y total, y limpia el formulario")
+    void saveValidOrder() {
+        viewModel.selectedCustomerProperty().set(ACME);
+        addLine("Teclado", "2");
+        addLine("Ratón", "1");
+
+        viewModel.save();
+
+        assertEquals("", viewModel.errorMessageProperty().get());
+        assertEquals(0, viewModel.draftLines().size());
+        assertNull(viewModel.selectedCustomerProperty().get());
+
+        assertEquals(1, viewModel.orders().size());
+        SalesOrder saved = viewModel.orders().get(0);
+        assertTrue(viewModel.statusMessageProperty().get().contains("Pedido #" + saved.getId()));
+        assertEquals(SalesOrder.STATUS_PENDING, saved.getStatus());
+        assertEquals("Acme", saved.getCustomer().getName());
+        assertEquals(9, saved.getUser().getId());
+        assertEquals(0, new BigDecimal("25.50").compareTo(saved.getTotal()));
+    }
+
+    @Test
+    @DisplayName("save con fallo de base de datos muestra el error de conexión")
+    void saveReportsDatabaseError() {
+        salesOrderRepository.failOn("insert");
+        viewModel.selectedCustomerProperty().set(ACME);
+        addLine("Teclado", "1");
+
+        viewModel.save();
+
+        assertEquals(SalesOrdersViewModel.DATABASE_ERROR, viewModel.errorMessageProperty().get());
+    }
+
+    @Test
+    @DisplayName("selectOrder carga las líneas y null las vacía")
+    void selectOrderLoadsAndClearsLines() {
+        Product product = product(1, "Teclado", "10.00");
+        SalesOrder order = new SalesOrder(5, java.time.LocalDateTime.now(),
+                SalesOrder.STATUS_PENDING, new BigDecimal("20.00"), ACME, user(), List.of());
+        salesOrderRepository.withOrder(order)
+                .withLine(5, new SalesOrderLine(2, new BigDecimal("10.00"), product));
+
+        viewModel.selectOrder(order);
+        assertEquals(1, viewModel.selectedOrderLines().size());
+        assertEquals("Teclado", viewModel.selectedOrderLines().get(0).getProduct().getName());
+
+        viewModel.selectOrder(null);
+        assertEquals(0, viewModel.selectedOrderLines().size());
+    }
+
+    @Test
+    @DisplayName("selectOrder con la base de datos caída vacía el detalle y avisa")
+    void selectOrderReportsDatabaseError() {
+        salesOrderRepository.failOn("findLines");
+        SalesOrder order = new SalesOrder(5, java.time.LocalDateTime.now(),
+                SalesOrder.STATUS_PENDING, BigDecimal.ZERO, ACME, user(), List.of());
+
+        viewModel.selectOrder(order);
+
+        assertEquals(0, viewModel.selectedOrderLines().size());
+        assertEquals(SalesOrdersViewModel.DATABASE_ERROR, viewModel.errorMessageProperty().get());
+    }
+}

@@ -81,6 +81,16 @@ class AppShellTest {
     }
 
     @Test
+    @DisplayName("showSalesOrders sin sesión falla con IllegalStateException antes de cargar la vista")
+    void showSalesOrdersWithoutSessionFails() {
+        AppShell shell = new AppShell(new SessionState());
+
+        IllegalStateException ex = assertThrows(IllegalStateException.class, shell::showSalesOrders);
+
+        assertEquals("No hay sesión iniciada", ex.getMessage());
+    }
+
+    @Test
     @DisplayName("isOnboarding es false por defecto")
     void onboardingIsFalseByDefault() {
         assertFalse(new AppShell(new SessionState()).isOnboarding());

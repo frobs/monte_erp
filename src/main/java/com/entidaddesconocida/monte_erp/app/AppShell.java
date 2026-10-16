@@ -6,6 +6,7 @@ import com.entidaddesconocida.monte_erp.view.CustomersView;
 import com.entidaddesconocida.monte_erp.view.LoginView;
 import com.entidaddesconocida.monte_erp.view.MainView;
 import com.entidaddesconocida.monte_erp.view.ProductsView;
+import com.entidaddesconocida.monte_erp.view.SalesOrdersView;
 import com.entidaddesconocida.monte_erp.view.SetupView;
 import com.entidaddesconocida.monte_erp.view.SuppliersView;
 import com.entidaddesconocida.monte_erp.view.UsersView;
@@ -13,6 +14,7 @@ import com.entidaddesconocida.monte_erp.viewmodel.CategoriesViewModel;
 import com.entidaddesconocida.monte_erp.viewmodel.CustomersViewModel;
 import com.entidaddesconocida.monte_erp.viewmodel.LoginViewModel;
 import com.entidaddesconocida.monte_erp.viewmodel.ProductsViewModel;
+import com.entidaddesconocida.monte_erp.viewmodel.SalesOrdersViewModel;
 import com.entidaddesconocida.monte_erp.viewmodel.SetupViewModel;
 import com.entidaddesconocida.monte_erp.viewmodel.SuppliersViewModel;
 import com.entidaddesconocida.monte_erp.viewmodel.UsersViewModel;
@@ -139,6 +141,18 @@ public class AppShell {
                 FluentViewLoader.fxmlView(CustomersView.class).load();
         SceneNavigator.show(stage, tuple, "Monte ERP · Gestión de clientes",
                 SceneNavigator.CUSTOMERS_WIDTH, SceneNavigator.CUSTOMERS_HEIGHT);
+    }
+
+    /**
+     * Loads the sales-order screen (RF-07). Every signed-in user may create
+     * orders (CU-07 actor is the employee), so there is no role guard.
+     */
+    public void showSalesOrders() {
+        session.requireCurrentUser();
+        ViewTuple<SalesOrdersView, SalesOrdersViewModel> tuple =
+                FluentViewLoader.fxmlView(SalesOrdersView.class).load();
+        SceneNavigator.show(stage, tuple, "Monte ERP · Gestión de pedidos",
+                SceneNavigator.SALES_ORDERS_WIDTH, SceneNavigator.SALES_ORDERS_HEIGHT);
     }
 
     /**
