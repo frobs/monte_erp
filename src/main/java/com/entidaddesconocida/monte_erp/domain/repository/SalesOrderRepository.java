@@ -10,9 +10,8 @@ import java.util.List;
  * Port over {@link SalesOrder} entities (RF-07 / CU-07).
  *
  * <p>The order screen is not a CRUD: an order is created and then read as
- * history, never edited or deleted (the status arrives with US-08). That is why
- * this port only exposes the insert and the two reads; {@code changeStatus(...)}
- * will be added by RF-08.</p>
+ * history, never edited or deleted. RF-08 / US-08 adds the status change as the
+ * only mutation, guarded so a concurrent change cannot be silently overwritten.</p>
  *
  * <p>The insert must be <strong>atomic</strong>: the order header and every line
  * are written in a single transaction, so a failed line never leaves an order
@@ -31,4 +30,11 @@ public interface SalesOrderRepository {
 
     /** Lines of the given order, with their product, ordered by line id. */
     List<SalesOrderLine> findLines(int salesOrderId) throws SQLException;
+
+    /**
+     * Changes the status of an order only if it still has {@code currentStatus}
+     * (optimistic guard, RF-08). Returns the rows affected: 1 on success, 0 when
+     * the order was already moved by someone else.
+     */
+    int changeStatus(int id, String currentStatus, String newStatus) throws SQLException;
 }

@@ -4,6 +4,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Customer sales order (the {@code SALES_ORDER} table of the E-R diagram),
@@ -15,8 +16,15 @@ import java.util.List;
  * the user. {@code order_date} is filled by the database default, so the history
  * reloads from the database instead of trusting the in-memory date.</p>
  *
- * <p>{@code changeStatus(...)} belongs to RF-08 (US-08) and is deliberately not
- * included yet.</p>
+ * <p>The status is not a free string: RF-08 (US-08) turns the pipeline into a
+ * domain invariant through {@link #allowedTransitions()},
+ * {@link #canTransitionTo(String)} and {@link #changeStatus(String)}. The only
+ * way to move an order is {@code changeStatus(...)}, which rejects retrogressions
+ * ({@code shipped → pending}), leaving a terminal state
+ * ({@code delivered}/{@code cancelled}), repeating the current state and any
+ * unknown/null target. {@code setStatus(String)} is deliberately not public: the
+ * database rehydration goes through the full constructor with the trusted ENUM
+ * value.</p>
  */
 public class SalesOrder {
 
@@ -31,6 +39,13 @@ public class SalesOrder {
 
     /** State of a cancelled order. */
     public static final String STATUS_CANCELLED = "cancelled";
+
+    /** Spanish labels of the four ENUM values, shared with the user interface (RF-07). */
+    private static final Map<String, String> STATUS_LABELS = Map.of(
+            STATUS_PENDING, "Pendiente",
+            STATUS_SHIPPED, "Enviado",
+            STATUS_DELIVERED, "Entregado",
+            STATUS_CANCELLED, "Cancelado");
 
     private int id;
     private LocalDateTime orderDate;
@@ -90,8 +105,48 @@ public class SalesOrder {
         return status;
     }
 
-    public void setStatus(String status) {
-        this.status = status;
+    /**
+     * Transitions allowed from the current status, in button order (RF-08):
+     * {@code pending → shipped/cancelled}, {@code shipped → delivered/cancelled}.
+     * Empty for a terminal status ({@code delivered}/{@code cancelled}) or an
+     * unknown/absent one. The returned list is immutable, so the rule cannot be
+     * mutated from outside.
+     */
+    public List<String> allowedTransitions() {
+        if (STATUS_PENDING.equals(status)) {
+            return List.of(STATUS_SHIPPED, STATUS_CANCELLED);
+        }
+        if (STATUS_SHIPPED.equals(status)) {
+            return List.of(STATUS_DELIVERED, STATUS_CANCELLED);
+        }
+        return List.of();
+    }
+
+    /**
+     * Whether the order can move to {@code target} from its current status.
+     * Repeatedly asking for the current status, a regression, leaving a terminal
+     * status, an unknown target or {@code null} are all rejected.
+     */
+    public boolean canTransitionTo(String target) {
+        return target != null && allowedTransitions().contains(target);
+    }
+
+    /** Whether the status is final: no transition leaves {@code delivered}/{@code cancelled}. */
+    public boolean isTerminal() {
+        return STATUS_DELIVERED.equals(status) || STATUS_CANCELLED.equals(status);
+    }
+
+    /**
+     * Single gate for status changes (RF-08): validates the transition against
+     * {@link #allowedTransitions()} and moves the order, or throws
+     * {@link IllegalStateException} naming the origin and the rejected target.
+     */
+    public void changeStatus(String target) {
+        if (!canTransitionTo(target)) {
+            throw new IllegalStateException("Transición de estado no permitida: \""
+                    + status + "\" → \"" + target + "\".");
+        }
+        this.status = target;
     }
 
     public BigDecimal getTotal() {
@@ -146,16 +201,23 @@ public class SalesOrder {
 
     /** Human readable status label, for the user interface (Spanish). */
     public String getStatusLabel() {
-        if (STATUS_SHIPPED.equals(status)) {
-            return "Enviado";
+        return labelFor(status);
+    }
+
+    /**
+     * Human readable label of a status value (RF-07/RF-08), shared with the
+     * messages of the ViewModel. An unknown/absent value is rendered raw so a
+     * diagnostic message never lies about the state.
+     *
+     * <p>The {@code null} check is needed because the immutable map rejects a
+     * {@code null} key: without it, {@code labelFor(null)} would throw instead of
+     * returning the raw value.</p>
+     */
+    public static String labelFor(String status) {
+        if (status == null) {
+            return String.valueOf(status);
         }
-        if (STATUS_DELIVERED.equals(status)) {
-            return "Entregado";
-        }
-        if (STATUS_CANCELLED.equals(status)) {
-            return "Cancelado";
-        }
-        return "Pendiente";
+        return STATUS_LABELS.getOrDefault(status, status);
     }
 
     @Override

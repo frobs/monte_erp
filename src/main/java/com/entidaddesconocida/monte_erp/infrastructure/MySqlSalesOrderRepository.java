@@ -52,6 +52,12 @@ public class MySqlSalesOrderRepository implements SalesOrderRepository {
              WHERE l.sales_order_id = ?
              ORDER BY l.id
             """;
+    /**
+     * Optimistic guard (decision D9): the row is only updated while it still has
+     * the status the caller read, so a concurrent change cannot be overwritten.
+     */
+    private static final String UPDATE_STATUS =
+            "UPDATE SALES_ORDER SET status = ? WHERE id = ? AND status = ?";
 
     @Override
     public int insert(SalesOrder order) throws SQLException {
@@ -103,6 +109,17 @@ public class MySqlSalesOrderRepository implements SalesOrderRepository {
             }
         }
         return lines;
+    }
+
+    @Override
+    public int changeStatus(int id, String currentStatus, String newStatus) throws SQLException {
+        // No business logic: the transition was already validated by the domain.
+        try (PreparedStatement ps = DatabaseConnection.getConnection().prepareStatement(UPDATE_STATUS)) {
+            ps.setString(1, newStatus);
+            ps.setInt(2, id);
+            ps.setString(3, currentStatus);
+            return ps.executeUpdate();
+        }
     }
 
     private int insertOrder(Connection connection, SalesOrder order) throws SQLException {

@@ -184,4 +184,42 @@ class MySqlSalesOrderRepositoryTest {
         assertTrue(sql.contains("WHERE l.sales_order_id = ?"));
         assertEquals(7, fake.boundParameters().get(0).get(1));
     }
+
+    // --- RF-08: status change -------------------------------------------
+
+    @Test
+    @DisplayName("RF-08: changeStatus emite el UPDATE con guarda optimista y enlaza destino, id y origen")
+    void changeStatusBindsOptimisticGuard() throws SQLException {
+        fake.withUpdateCount(1);
+
+        int updated = repository.changeStatus(7, SalesOrder.STATUS_PENDING, SalesOrder.STATUS_SHIPPED);
+
+        assertEquals(1, updated);
+        String sql = fake.preparedSql().get(0);
+        assertTrue(sql.contains("UPDATE SALES_ORDER SET status = ?"));
+        assertTrue(sql.contains("WHERE id = ? AND status = ?"));
+        Map<Integer, Object> parameters = fake.boundParameters().get(0);
+        assertEquals(SalesOrder.STATUS_SHIPPED, parameters.get(1));
+        assertEquals(7, parameters.get(2));
+        assertEquals(SalesOrder.STATUS_PENDING, parameters.get(3));
+    }
+
+    @Test
+    @DisplayName("RF-08: changeStatus devuelve 0 filas cuando la guarda no casa (conflicto)")
+    void changeStatusReturnsZeroOnConflict() throws SQLException {
+        fake.withUpdateCount(0);
+
+        int updated = repository.changeStatus(7, SalesOrder.STATUS_PENDING, SalesOrder.STATUS_SHIPPED);
+
+        assertEquals(0, updated);
+    }
+
+    @Test
+    @DisplayName("RF-08: changeStatus propaga el SQLException de la base de datos")
+    void changeStatusPropagatesSqlException() {
+        fake.failUpdateNumber(1);
+
+        assertThrows(SQLException.class, () ->
+                repository.changeStatus(7, SalesOrder.STATUS_PENDING, SalesOrder.STATUS_SHIPPED));
+    }
 }

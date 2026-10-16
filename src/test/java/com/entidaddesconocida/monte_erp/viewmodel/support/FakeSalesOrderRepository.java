@@ -24,8 +24,10 @@ import java.util.Set;
  * makes every method throw {@link SQLException} and {@link #failOn(String)} fails
  * only one. The double stores <em>copies</em> so a bug in the ViewModel cannot
  * mutate the fixtures, and it mimics the database: {@link #insert(SalesOrder)}
- * assigns the generated id and {@link #findAll()} returns the orders most recent
- * first.</p>
+ * assigns the generated id, {@link #findAll()} returns the orders most recent
+ * first and {@link #changeStatus(int, String, String)} applies the same
+ * optimistic guard as the {@code UPDATE ... WHERE id = ? AND status = ?}: it
+ * returns 1 only when the stored status still matches {@code currentStatus}.</p>
  */
 public class FakeSalesOrderRepository implements SalesOrderRepository {
 
@@ -103,6 +105,20 @@ public class FakeSalesOrderRepository implements SalesOrderRepository {
     public List<SalesOrderLine> findLines(int salesOrderId) throws SQLException {
         maybeThrow("findLines");
         return copyLines(linesByOrder.getOrDefault(salesOrderId, List.of()));
+    }
+
+    @Override
+    public int changeStatus(int id, String currentStatus, String newStatus) throws SQLException {
+        maybeThrow("changeStatus");
+        SalesOrder stored = orders.get(id);
+        if (stored == null || !currentStatus.equals(stored.getStatus())) {
+            return 0;
+        }
+        // A fresh copy with the full constructor (there is no public setStatus).
+        orders.put(id, new SalesOrder(stored.getId(), stored.getOrderDate(), newStatus,
+                stored.getTotal(), copy(stored.getCustomer()), copy(stored.getUser()),
+                copyLines(linesByOrder.getOrDefault(id, List.of()))));
+        return 1;
     }
 
     private static SalesOrder copy(SalesOrder order) {
