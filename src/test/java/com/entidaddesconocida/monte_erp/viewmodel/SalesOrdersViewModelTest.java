@@ -14,6 +14,8 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
+import java.sql.SQLException;
+import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -313,6 +315,114 @@ class SalesOrdersViewModelTest {
         viewModel.selectOrder(order);
 
         assertEquals(0, viewModel.selectedOrderLines().size());
+        assertEquals(SalesOrdersViewModel.DATABASE_ERROR, viewModel.errorMessageProperty().get());
+    }
+
+    // --- RF-08: status change -------------------------------------------
+
+    private SalesOrder selectStoredOrder(String status) {
+        salesOrderRepository.withOrder(new SalesOrder(0, LocalDateTime.now(), status,
+                new BigDecimal("20.00"), ACME, user(), List.of()));
+        viewModel.load();
+        SalesOrder selected = viewModel.orders().get(0);
+        viewModel.selectedOrderProperty().set(selected);
+        viewModel.selectOrder(selected);
+        return selected;
+    }
+
+    @Test
+    @DisplayName("RF-08: availableTransitions vacío sin selección y completo para un pedido pending")
+    void availableTransitionsReflectTheSelectedOrder() {
+        assertEquals(List.of(), viewModel.availableTransitions());
+
+        selectStoredOrder(SalesOrder.STATUS_PENDING);
+
+        assertEquals(List.of(SalesOrder.STATUS_SHIPPED, SalesOrder.STATUS_CANCELLED),
+                viewModel.availableTransitions());
+    }
+
+    @Test
+    @DisplayName("RF-08: availableTransitions vacío para un pedido terminal")
+    void availableTransitionsAreEmptyForTerminalOrders() {
+        selectStoredOrder(SalesOrder.STATUS_DELIVERED);
+
+        assertEquals(List.of(), viewModel.availableTransitions());
+    }
+
+    @Test
+    @DisplayName("RF-08: load limpia availableTransitions junto con la selección")
+    void loadClearsAvailableTransitions() {
+        selectStoredOrder(SalesOrder.STATUS_PENDING);
+        assertEquals(2, viewModel.availableTransitions().size());
+
+        viewModel.load();
+
+        assertEquals(0, viewModel.availableTransitions().size());
+    }
+
+    @Test
+    @DisplayName("RF-08: changeStatus sin pedido seleccionado avisa y no toca el repositorio")
+    void changeStatusWithoutSelectionFails() {
+        salesOrderRepository.failOn("changeStatus");
+
+        viewModel.changeStatus(SalesOrder.STATUS_SHIPPED);
+
+        assertEquals(SalesOrdersViewModel.ORDER_REQUIRED, viewModel.errorMessageProperty().get());
+    }
+
+    @Test
+    @DisplayName("RF-08: changeStatus con transición no permitida avisa y no toca el repositorio")
+    void changeStatusWithInvalidTransitionFailsBeforeTheRepository() {
+        selectStoredOrder(SalesOrder.STATUS_DELIVERED);
+        salesOrderRepository.failOn("changeStatus");
+
+        viewModel.changeStatus(SalesOrder.STATUS_CANCELLED);
+
+        assertEquals(String.format(SalesOrdersViewModel.INVALID_TRANSITION, "Entregado", "Cancelado"),
+                viewModel.errorMessageProperty().get());
+    }
+
+    @Test
+    @DisplayName("RF-08: changeStatus válido persiste, recarga el histórico, re-selecciona y recalcula")
+    void changeStatusPersistsAndReloads() {
+        SalesOrder selected = selectStoredOrder(SalesOrder.STATUS_PENDING);
+        int id = selected.getId();
+
+        viewModel.changeStatus(SalesOrder.STATUS_SHIPPED);
+
+        assertEquals("", viewModel.errorMessageProperty().get());
+        assertTrue(viewModel.statusMessageProperty().get().contains("Pedido #" + id));
+        assertTrue(viewModel.statusMessageProperty().get().contains("Enviado"));
+        assertEquals(1, viewModel.orders().size());
+        assertEquals(SalesOrder.STATUS_SHIPPED, viewModel.orders().get(0).getStatus());
+        assertEquals(id, viewModel.selectedOrderProperty().get().getId());
+        assertEquals(SalesOrder.STATUS_SHIPPED, viewModel.selectedOrderProperty().get().getStatus());
+        assertEquals(List.of(SalesOrder.STATUS_DELIVERED, SalesOrder.STATUS_CANCELLED),
+                viewModel.availableTransitions());
+    }
+
+    @Test
+    @DisplayName("RF-08: changeStatus con 0 filas avisa del conflicto y recarga el histórico")
+    void changeStatusWithZeroRowsReportsConflict() throws SQLException {
+        SalesOrder selected = selectStoredOrder(SalesOrder.STATUS_PENDING);
+        // A concurrent transaction moves the order after it was loaded.
+        salesOrderRepository.changeStatus(selected.getId(), SalesOrder.STATUS_PENDING,
+                SalesOrder.STATUS_SHIPPED);
+
+        viewModel.changeStatus(SalesOrder.STATUS_CANCELLED);
+
+        assertEquals(SalesOrdersViewModel.CONFLICT, viewModel.errorMessageProperty().get());
+        assertEquals(SalesOrder.STATUS_SHIPPED, viewModel.orders().get(0).getStatus());
+    }
+
+    @Test
+    @DisplayName("RF-08: changeStatus con fallo de base de datos muestra el error de conexión")
+    void changeStatusReportsDatabaseError() {
+        selectStoredOrder(SalesOrder.STATUS_PENDING);
+        salesOrderRepository.failOn("changeStatus");
+
+        viewModel.changeStatus(SalesOrder.STATUS_SHIPPED);
+
         assertEquals(SalesOrdersViewModel.DATABASE_ERROR, viewModel.errorMessageProperty().get());
     }
 }

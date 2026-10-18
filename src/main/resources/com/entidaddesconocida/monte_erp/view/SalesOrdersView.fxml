@@ -79,6 +79,18 @@
                         <TableView fx:constant="CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN"/>
                     </columnResizePolicy>
                 </TableView>
+
+                <HBox fx:id="statusActions" alignment="CENTER_LEFT" spacing="10.0">
+                    <Button fx:id="markShippedButton" text="Marcar enviado"
+                            onAction="#onMarkShipped" styleClass="secondary-button"/>
+                    <Button fx:id="markDeliveredButton" text="Marcar entregado"
+                            onAction="#onMarkDelivered" styleClass="primary-button"/>
+                    <Button fx:id="cancelOrderButton" text="Cancelar"
+                            onAction="#onCancelOrder" styleClass="danger-button"/>
+                </HBox>
+
+                <Label fx:id="detailErrorLabel" styleClass="error" wrapText="true"/>
+                <Label fx:id="detailStatusLabel" styleClass="success" wrapText="true"/>
             </VBox>
 
             <VBox styleClass="card" spacing="8.0" prefWidth="360.0" minWidth="330.0">

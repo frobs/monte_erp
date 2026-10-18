@@ -11,9 +11,12 @@ import de.saxsys.mvvmfx.FxmlView;
 import de.saxsys.mvvmfx.InjectViewModel;
 
 import javafx.beans.binding.Bindings;
+import javafx.beans.binding.BooleanBinding;
 import javafx.beans.property.ReadOnlyStringWrapper;
 import javafx.fxml.FXML;
+import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
+import javafx.scene.control.ButtonType;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.ListCell;
@@ -31,8 +34,9 @@ import java.util.Locale;
  *
  * <p>It is not a CRUD screen, so it does not extend {@link CrudView}: it shows the
  * read-only history with the detail of the selected order on the left and the new
- * order form on the right. Navigation is delegated to the {@link AppShell}; the
- * rules live in {@link SalesOrdersViewModel}.</p>
+ * order form on the right. RF-08 adds the contextual status buttons over the
+ * selected order; the rules live in {@link SalesOrdersViewModel} and the
+ * destructive confirmation (cancel) stays here, in the view.</p>
  */
 public class SalesOrdersView implements FxmlView<SalesOrdersViewModel> {
 
@@ -73,6 +77,21 @@ public class SalesOrdersView implements FxmlView<SalesOrdersViewModel> {
 
     @FXML
     private TableColumn<SalesOrderLine, String> lineSubtotalColumn;
+
+    @FXML
+    private Button markShippedButton;
+
+    @FXML
+    private Button markDeliveredButton;
+
+    @FXML
+    private Button cancelOrderButton;
+
+    @FXML
+    private Label detailErrorLabel;
+
+    @FXML
+    private Label detailStatusLabel;
 
     @FXML
     private ComboBox<Customer> customerCombo;
@@ -170,6 +189,28 @@ public class SalesOrdersView implements FxmlView<SalesOrdersViewModel> {
         totalLabel.textProperty().bind(Bindings.createStringBinding(
                 () -> "Total: " + formatMoney(viewModel.orderTotalProperty().get()),
                 viewModel.orderTotalProperty()));
+
+        bindStatusActions();
+    }
+
+    /**
+     * RF-08: each status button is shown only while its transition is valid for
+     * the selected order; the {@code availableTransitions} list is the dependency
+     * of the binding, so it is re-evaluated when the selection changes.
+     */
+    private void bindStatusActions() {
+        markShippedButton.visibleProperty().bind(transitionAvailable(SalesOrder.STATUS_SHIPPED));
+        markShippedButton.managedProperty().bind(markShippedButton.visibleProperty());
+        markDeliveredButton.visibleProperty().bind(transitionAvailable(SalesOrder.STATUS_DELIVERED));
+        markDeliveredButton.managedProperty().bind(markDeliveredButton.visibleProperty());
+        cancelOrderButton.visibleProperty().bind(transitionAvailable(SalesOrder.STATUS_CANCELLED));
+        cancelOrderButton.managedProperty().bind(cancelOrderButton.visibleProperty());
+    }
+
+    private BooleanBinding transitionAvailable(String status) {
+        return Bindings.createBooleanBinding(
+                () -> viewModel.availableTransitions().contains(status),
+                viewModel.availableTransitions());
     }
 
     private void bindSelection() {
@@ -195,6 +236,14 @@ public class SalesOrdersView implements FxmlView<SalesOrdersViewModel> {
         statusLabel.textProperty().bind(viewModel.statusMessageProperty());
         statusLabel.visibleProperty().bind(viewModel.statusMessageProperty().isNotEmpty());
         statusLabel.managedProperty().bind(viewModel.statusMessageProperty().isNotEmpty());
+
+        detailErrorLabel.textProperty().bind(viewModel.errorMessageProperty());
+        detailErrorLabel.visibleProperty().bind(viewModel.errorMessageProperty().isNotEmpty());
+        detailErrorLabel.managedProperty().bind(viewModel.errorMessageProperty().isNotEmpty());
+
+        detailStatusLabel.textProperty().bind(viewModel.statusMessageProperty());
+        detailStatusLabel.visibleProperty().bind(viewModel.statusMessageProperty().isNotEmpty());
+        detailStatusLabel.managedProperty().bind(viewModel.statusMessageProperty().isNotEmpty());
     }
 
     @FXML
@@ -215,6 +264,31 @@ public class SalesOrdersView implements FxmlView<SalesOrdersViewModel> {
     @FXML
     private void onNewOrder() {
         viewModel.newOrder();
+    }
+
+    /** RF-08: marks the selected order as shipped (only offered while pending). */
+    @FXML
+    private void onMarkShipped() {
+        viewModel.changeStatus(SalesOrder.STATUS_SHIPPED);
+    }
+
+    /** RF-08: marks the selected order as delivered (only offered while shipped). */
+    @FXML
+    private void onMarkDelivered() {
+        viewModel.changeStatus(SalesOrder.STATUS_DELIVERED);
+    }
+
+    /** RF-08: cancels the selected order after a destructive confirmation (RNF-05). */
+    @FXML
+    private void onCancelOrder() {
+        Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
+        alert.setTitle("Monte ERP");
+        alert.setHeaderText("Cancelar el pedido");
+        alert.setContentText("El pedido quedará cancelado y no podrá volver a cambiar de estado."
+                + " ¿Quieres continuar?");
+        alert.showAndWait()
+                .filter(button -> button == ButtonType.OK)
+                .ifPresent(button -> viewModel.changeStatus(SalesOrder.STATUS_CANCELLED));
     }
 
     @FXML

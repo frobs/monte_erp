@@ -31,9 +31,9 @@ import java.util.logging.Logger;
 /**
  * ViewModel of the sales-order screen (RF-07 / CU-07, total from RF-13).
  *
- * <p>It is <strong>not</strong> a CRUD: there is no edition nor deletion (the
- * status arrives with US-08), so it does not extend {@code CrudViewModel}. It is
- * a master-detail screen that creates an order from several lines and shows the
+ * <p>It is <strong>not</strong> a CRUD: there is no edition nor deletion, but
+ * RF-08 (US-08) adds the status change as the only mutation. It is a
+ * master-detail screen that creates an order from several lines and shows the
  * read-only history with the detail of the selected order.</p>
  *
  * <p>The unit price of a line is a snapshot of the product price when the line is
@@ -70,6 +70,17 @@ public class SalesOrdersViewModel implements ViewModel {
     /** An order needs at least one line to be saved. */
     protected static final String LINES_REQUIRED = "Añade al menos una línea al pedido.";
 
+    /** RF-08: no order selected to change its status. */
+    protected static final String ORDER_REQUIRED = "Selecciona un pedido.";
+
+    /** RF-08: the transition is not allowed by the domain (origin, target). */
+    protected static final String INVALID_TRANSITION =
+            "El pedido no puede pasar de \"%s\" a \"%s\".";
+
+    /** RF-08: the optimistic guard did not match; someone else moved the order. */
+    protected static final String CONFLICT =
+            "El pedido ha cambiado desde que se cargó; se ha actualizado el histórico.";
+
     private final SalesOrderRepository salesOrderRepository;
     private final CustomerRepository customerRepository;
     private final ProductRepository productRepository;
@@ -87,6 +98,9 @@ public class SalesOrdersViewModel implements ViewModel {
     private final ObservableList<SalesOrder> orders = FXCollections.observableArrayList();
     private final ObjectProperty<SalesOrder> selectedOrder = new SimpleObjectProperty<>();
     private final ObservableList<SalesOrderLine> selectedOrderLines = FXCollections.observableArrayList();
+
+    /** RF-08: statuses reachable from the selected order, in button order. */
+    private final ObservableList<String> availableTransitions = FXCollections.observableArrayList();
 
     private final StringProperty errorMessage = new SimpleStringProperty("");
     private final StringProperty statusMessage = new SimpleStringProperty("");
@@ -152,6 +166,15 @@ public class SalesOrdersViewModel implements ViewModel {
         return selectedOrderLines;
     }
 
+    /**
+     * RF-08: statuses the selected order can move to, in button order. Empty when
+     * there is no selection or the order is in a terminal state, so the view can
+     * bind the visibility of each action button to it.
+     */
+    public ObservableList<String> availableTransitions() {
+        return availableTransitions;
+    }
+
     public StringProperty errorMessageProperty() {
         return errorMessage;
     }
@@ -194,6 +217,7 @@ public class SalesOrdersViewModel implements ViewModel {
         // guaranteed to be in the table: drop the selection and its detail.
         selectedOrder.set(null);
         selectedOrderLines.clear();
+        availableTransitions.clear();
         clearFieldErrors();
     }
 
@@ -246,6 +270,7 @@ public class SalesOrdersViewModel implements ViewModel {
         errorMessage.set("");
         statusMessage.set("");
         resetDraft();
+        availableTransitions.clear();
         clearFieldErrors();
     }
 
@@ -282,6 +307,7 @@ public class SalesOrdersViewModel implements ViewModel {
 
     /** Loads the lines of the selected order; a {@code null} order clears them. */
     public void selectOrder(SalesOrder order) {
+        updateAvailableTransitions(order);
         if (order == null) {
             selectedOrderLines.clear();
             return;
@@ -293,6 +319,59 @@ public class SalesOrdersViewModel implements ViewModel {
             selectedOrderLines.clear();
             fail(DATABASE_ERROR);
         }
+    }
+
+    /**
+     * RF-08: moves the selected order to {@code newStatus}. The transition is
+     * validated in the domain first, then persisted with the optimistic guard;
+     * a 0-row update means someone else moved the order in the meantime, so the
+     * history is reloaded and the user is warned instead of overwriting it.
+     */
+    public void changeStatus(String newStatus) {
+        clearFieldErrors();
+        SalesOrder order = selectedOrder.get();
+        if (order == null) {
+            fail(ORDER_REQUIRED);
+            return;
+        }
+        if (!order.canTransitionTo(newStatus)) {
+            fail(String.format(INVALID_TRANSITION, SalesOrder.labelFor(order.getStatus()),
+                    SalesOrder.labelFor(newStatus)));
+            return;
+        }
+        try {
+            int updated = salesOrderRepository.changeStatus(order.getId(), order.getStatus(), newStatus);
+            if (updated == 0) {
+                orders.setAll(salesOrderRepository.findAll());
+                fail(CONFLICT);
+                return;
+            }
+            order.changeStatus(newStatus);
+            orders.setAll(salesOrderRepository.findAll());
+            SalesOrder reloaded = findById(order.getId());
+            selectedOrder.set(reloaded);
+            selectOrder(reloaded);
+            succeed("Pedido #" + order.getId() + " marcado como "
+                    + SalesOrder.labelFor(newStatus) + ".");
+        } catch (SQLException e) {
+            LOGGER.log(Level.SEVERE, "Could not change the sales order status", e);
+            fail(DATABASE_ERROR);
+        }
+    }
+
+    private void updateAvailableTransitions(SalesOrder order) {
+        if (order == null) {
+            availableTransitions.clear();
+        } else {
+            availableTransitions.setAll(order.allowedTransitions());
+        }
+    }
+
+    private SalesOrder findById(int id) {
+        return orders.stream()
+                .filter(order -> order.getId() == id)
+                .findFirst()
+                .orElse(null);
     }
 
     private Integer parseQuantity() {
