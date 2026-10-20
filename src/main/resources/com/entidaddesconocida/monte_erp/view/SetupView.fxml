@@ -13,9 +13,10 @@
            fx:controller="com.entidaddesconocida.monte_erp.view.SetupView"
            stylesheets="@../../../../css/app.css"
            styleClass="root-pane"
+           alignment="CENTER"
            prefWidth="560.0" prefHeight="660.0">
 
-    <VBox styleClass="card" maxWidth="470.0" spacing="12.0">
+    <VBox styleClass="card" maxWidth="470.0" maxHeight="-Infinity" spacing="12.0">
         <padding>
             <Insets top="28.0" right="30.0" bottom="28.0" left="30.0"/>
         </padding>

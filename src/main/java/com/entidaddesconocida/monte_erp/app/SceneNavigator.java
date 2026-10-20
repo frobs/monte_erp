@@ -8,7 +8,10 @@ import javafx.stage.Stage;
 /**
  * Utility to switch the {@link Stage} scene from a loaded mvvmFX {@link ViewTuple}.
  *
- * <p>Constants keep the window sizes in a single place.</p>
+ * <p>Constants keep the window sizes in a single place. The application always
+ * opens full screen (the stage is maximized on the first screen) and stays
+ * resizable, so the sizes below are only the window size used while the stage is
+ * not maximized.</p>
  */
 public final class SceneNavigator {
 
@@ -38,13 +41,23 @@ public final class SceneNavigator {
     }
 
     /**
-     * Replaces the stage scene with the view of the given tuple and adjusts
-     * the title and size.
+     * Replaces the stage scene with the view of the given tuple, adjusts the
+     * title and guarantees the window is shown full screen.
+     *
+     * <p>The maximize is applied only the first time a scene is shown: later
+     * navigations keep whatever size the user chose. The window is therefore
+     * always resizable and the user decides whether to restore, move or resize
+     * it; the application never forces the size back.</p>
      */
     public static void show(Stage stage, ViewTuple<?, ?> tuple, String title,
                             double width, double height) {
         stage.setTitle(title);
         stage.setScene(new Scene(tuple.getView(), width, height));
-        stage.centerOnScreen();
+        if (!stage.isShowing()) {
+            // Full screen by default, but never a non-resizable window: if the user
+            // restores or resizes it, the choice is respected from then on.
+            stage.setResizable(true);
+            stage.setMaximized(true);
+        }
     }
 }

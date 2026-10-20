@@ -12,9 +12,10 @@
            fx:controller="com.entidaddesconocida.monte_erp.view.LoginView"
            stylesheets="@../../../../css/app.css"
            styleClass="root-pane"
+           alignment="CENTER"
            prefWidth="460.0" prefHeight="480.0">
 
-    <VBox styleClass="card" maxWidth="360.0" spacing="14.0">
+    <VBox styleClass="card" maxWidth="360.0" maxHeight="-Infinity" spacing="14.0">
         <padding>
             <Insets top="32.0" right="32.0" bottom="32.0" left="32.0"/>
         </padding>
