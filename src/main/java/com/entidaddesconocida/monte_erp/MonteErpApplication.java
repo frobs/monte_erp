@@ -7,6 +7,7 @@ import com.entidaddesconocida.monte_erp.domain.model.ConnectionSettings;
 import com.entidaddesconocida.monte_erp.domain.repository.CategoryRepository;
 import com.entidaddesconocida.monte_erp.domain.repository.CustomerRepository;
 import com.entidaddesconocida.monte_erp.domain.repository.ProductRepository;
+import com.entidaddesconocida.monte_erp.domain.repository.PurchaseRepository;
 import com.entidaddesconocida.monte_erp.domain.repository.SalesOrderRepository;
 import com.entidaddesconocida.monte_erp.domain.repository.SupplierRepository;
 import com.entidaddesconocida.monte_erp.domain.repository.UserRepository;
@@ -14,6 +15,7 @@ import com.entidaddesconocida.monte_erp.domain.service.SetupService;
 import com.entidaddesconocida.monte_erp.infrastructure.MySqlCategoryRepository;
 import com.entidaddesconocida.monte_erp.infrastructure.MySqlCustomerRepository;
 import com.entidaddesconocida.monte_erp.infrastructure.MySqlProductRepository;
+import com.entidaddesconocida.monte_erp.infrastructure.MySqlPurchaseRepository;
 import com.entidaddesconocida.monte_erp.infrastructure.MySqlSalesOrderRepository;
 import com.entidaddesconocida.monte_erp.infrastructure.MySqlSupplierRepository;
 import com.entidaddesconocida.monte_erp.infrastructure.MySqlUserRepository;
@@ -54,13 +56,14 @@ public class MonteErpApplication extends Application {
         ProductRepository productRepository = new MySqlProductRepository();
         CustomerRepository customerRepository = new MySqlCustomerRepository();
         SalesOrderRepository salesOrderRepository = new MySqlSalesOrderRepository();
+        PurchaseRepository purchaseRepository = new MySqlPurchaseRepository();
         SetupService setupService = new DatabaseSetupService(databaseConfig, userRepository);
 
         SessionState session = new SessionState();
         AppShell appShell = new AppShell(session);
         AppContext context = new AppContext(session, appShell, userRepository,
                 categoryRepository, supplierRepository, productRepository, customerRepository,
-                salesOrderRepository, databaseConfig, setupService,
+                salesOrderRepository, purchaseRepository, databaseConfig, setupService,
                 () -> new DatabaseUrl(DatabaseConnection.getUrl()));
 
         MvvmFX.setCustomDependencyInjector(context::create);

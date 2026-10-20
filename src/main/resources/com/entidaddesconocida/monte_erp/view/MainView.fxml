@@ -54,7 +54,7 @@
                 <Button text="Categorías" onAction="#onCategories" styleClass="module-button"/>
                 <Button text="Proveedores" onAction="#onSuppliers" styleClass="module-button"/>
                 <Button text="Clientes" onAction="#onCustomers" styleClass="module-button"/>
-                <Button text="Compras" onAction="#onPendingModule" styleClass="module-button"/>
+                <Button text="Compras" onAction="#onPurchases" styleClass="module-button"/>
                 <Button text="Pedidos" onAction="#onSalesOrders" styleClass="module-button"/>
                 <Button text="Stock" onAction="#onPendingModule" styleClass="module-button"/>
                 <Button fx:id="manageUsersButton" text="Gestión de usuarios"

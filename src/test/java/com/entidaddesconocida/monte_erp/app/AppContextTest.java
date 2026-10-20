@@ -10,6 +10,7 @@ import com.entidaddesconocida.monte_erp.view.CustomersView;
 import com.entidaddesconocida.monte_erp.view.LoginView;
 import com.entidaddesconocida.monte_erp.view.MainView;
 import com.entidaddesconocida.monte_erp.view.ProductsView;
+import com.entidaddesconocida.monte_erp.view.PurchasesView;
 import com.entidaddesconocida.monte_erp.view.SalesOrdersView;
 import com.entidaddesconocida.monte_erp.view.SetupView;
 import com.entidaddesconocida.monte_erp.view.UsersView;
@@ -18,12 +19,14 @@ import com.entidaddesconocida.monte_erp.viewmodel.CustomersViewModel;
 import com.entidaddesconocida.monte_erp.viewmodel.LoginViewModel;
 import com.entidaddesconocida.monte_erp.viewmodel.MainViewModel;
 import com.entidaddesconocida.monte_erp.viewmodel.ProductsViewModel;
+import com.entidaddesconocida.monte_erp.viewmodel.PurchasesViewModel;
 import com.entidaddesconocida.monte_erp.viewmodel.SalesOrdersViewModel;
 import com.entidaddesconocida.monte_erp.viewmodel.SetupViewModel;
 import com.entidaddesconocida.monte_erp.viewmodel.UsersViewModel;
 import com.entidaddesconocida.monte_erp.viewmodel.support.FakeCategoryRepository;
 import com.entidaddesconocida.monte_erp.viewmodel.support.FakeCustomerRepository;
 import com.entidaddesconocida.monte_erp.viewmodel.support.FakeProductRepository;
+import com.entidaddesconocida.monte_erp.viewmodel.support.FakePurchaseRepository;
 import com.entidaddesconocida.monte_erp.viewmodel.support.FakeSalesOrderRepository;
 import com.entidaddesconocida.monte_erp.viewmodel.support.FakeSetupService;
 import com.entidaddesconocida.monte_erp.viewmodel.support.FakeSupplierRepository;
@@ -55,6 +58,7 @@ class AppContextTest {
         return new AppContext(session, new AppShell(session), repo,
                 new FakeCategoryRepository(), new FakeSupplierRepository(), new FakeProductRepository(),
                 new FakeCustomerRepository(), new FakeSalesOrderRepository(),
+                new FakePurchaseRepository(),
                 config, setup, () -> new DatabaseUrl("jdbc:test"));
     }
 
@@ -194,6 +198,29 @@ class AppContextTest {
     }
 
     @Test
+    @DisplayName("create(PurchasesViewModel) devuelve un VM con las dependencias inyectadas")
+    void purchasesViewModelIsCreatedWithDependencies() {
+        SessionState session = new SessionState();
+        session.signIn(new User("Bea", "bea", PasswordHasher.hash("bea123"), User.ROLE_EMPLOYEE, true));
+        AppContext context = context(session);
+
+        PurchasesViewModel vm = (PurchasesViewModel) context.create(PurchasesViewModel.class);
+        vm.load();
+
+        assertNotNull(vm);
+        assertEquals(0, vm.purchases().size());
+        assertEquals(0, vm.suppliers().size());
+        assertEquals(0, vm.products().size());
+    }
+
+    @Test
+    @DisplayName("create(PurchasesViewModel) sin sesión falla con IllegalStateException")
+    void purchasesViewModelWithoutSessionFails() {
+        AppContext context = context(new SessionState());
+        assertThrows(IllegalStateException.class, () -> context.create(PurchasesViewModel.class));
+    }
+
+    @Test
     @DisplayName("Las vistas se crean como instancias nuevas (no null)")
     void viewsAreCreated() {
         AppContext context = context(new SessionState());
@@ -205,5 +232,6 @@ class AppContextTest {
         assertNotNull(context.create(CategoriesView.class));
         assertNotNull(context.create(CustomersView.class));
         assertNotNull(context.create(SalesOrdersView.class));
+        assertNotNull(context.create(PurchasesView.class));
     }
 }

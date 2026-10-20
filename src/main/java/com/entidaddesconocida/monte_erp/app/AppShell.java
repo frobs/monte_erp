@@ -6,6 +6,7 @@ import com.entidaddesconocida.monte_erp.view.CustomersView;
 import com.entidaddesconocida.monte_erp.view.LoginView;
 import com.entidaddesconocida.monte_erp.view.MainView;
 import com.entidaddesconocida.monte_erp.view.ProductsView;
+import com.entidaddesconocida.monte_erp.view.PurchasesView;
 import com.entidaddesconocida.monte_erp.view.SalesOrdersView;
 import com.entidaddesconocida.monte_erp.view.SetupView;
 import com.entidaddesconocida.monte_erp.view.SuppliersView;
@@ -14,6 +15,7 @@ import com.entidaddesconocida.monte_erp.viewmodel.CategoriesViewModel;
 import com.entidaddesconocida.monte_erp.viewmodel.CustomersViewModel;
 import com.entidaddesconocida.monte_erp.viewmodel.LoginViewModel;
 import com.entidaddesconocida.monte_erp.viewmodel.ProductsViewModel;
+import com.entidaddesconocida.monte_erp.viewmodel.PurchasesViewModel;
 import com.entidaddesconocida.monte_erp.viewmodel.SalesOrdersViewModel;
 import com.entidaddesconocida.monte_erp.viewmodel.SetupViewModel;
 import com.entidaddesconocida.monte_erp.viewmodel.SuppliersViewModel;
@@ -153,6 +155,18 @@ public class AppShell {
                 FluentViewLoader.fxmlView(SalesOrdersView.class).load();
         SceneNavigator.show(stage, tuple, "Monte ERP · Gestión de pedidos",
                 SceneNavigator.SALES_ORDERS_WIDTH, SceneNavigator.SALES_ORDERS_HEIGHT);
+    }
+
+    /**
+     * Loads the purchase screen (RF-14). Every signed-in user may register
+     * purchases (CU-10 actor is the employee), so there is no role guard.
+     */
+    public void showPurchases() {
+        session.requireCurrentUser();
+        ViewTuple<PurchasesView, PurchasesViewModel> tuple =
+                FluentViewLoader.fxmlView(PurchasesView.class).load();
+        SceneNavigator.show(stage, tuple, "Monte ERP · Gestión de compras",
+                SceneNavigator.PURCHASES_WIDTH, SceneNavigator.PURCHASES_HEIGHT);
     }
 
     /**
