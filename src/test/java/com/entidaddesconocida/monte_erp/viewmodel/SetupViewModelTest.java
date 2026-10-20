@@ -146,6 +146,38 @@ class SetupViewModelTest {
     }
 
     @Test
+    @DisplayName("Probar conexión con URL mal formada: error local sin llamar al servicio")
+    void testConnectionWithMalformedUrlDoesNotCallTheService() {
+        FakeSetupService service = new FakeSetupService();
+        SetupViewModel vm = editViewModel(service);
+        vm.urlProperty().set("localhost:3306/monte_erp");
+        vm.dbUserProperty().set(VALID.user());
+        vm.dbPasswordProperty().set(VALID.password());
+
+        vm.testConnection();
+
+        assertEquals("La URL no es válida. Debe tener el formato "
+                + "jdbc:mysql://host:puerto/base_de_datos.", vm.errorMessageProperty().get());
+        assertEquals("", vm.statusMessageProperty().get());
+        assertNull(service.lastTested());
+    }
+
+    @Test
+    @DisplayName("Guardar con URL sin base de datos: error local sin llamar al servicio")
+    void saveWithMalformedUrlDoesNotCallTheService() {
+        FakeSetupService service = new FakeSetupService();
+        SetupViewModel vm = editViewModel(service);
+        vm.urlProperty().set("jdbc:mysql://localhost:3306");
+        vm.dbUserProperty().set(VALID.user());
+        vm.dbPasswordProperty().set(VALID.password());
+
+        vm.save();
+
+        assertTrue(vm.errorMessageProperty().get().startsWith("La URL no es válida."));
+        assertNull(service.lastSaved());
+    }
+
+    @Test
     @DisplayName("Los valores existentes se precargan desde el servicio")
     void prefillsFromService() {
         FakeSetupService service = new FakeSetupService().withLoaded(VALID);

@@ -43,6 +43,9 @@ public class SalesOrdersView implements FxmlView<SalesOrdersViewModel> {
     private static final DateTimeFormatter DATE_FORMAT =
             DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm");
 
+    /** Keeps the typed quantity within the {@code int} range (RF-07). */
+    private static final int QUANTITY_MAX_DIGITS = 9;
+
     private final AppShell appShell;
 
     @FXML
@@ -185,6 +188,8 @@ public class SalesOrdersView implements FxmlView<SalesOrdersViewModel> {
         productCombo.valueProperty().bindBidirectional(viewModel.selectedProductProperty());
 
         quantityField.textProperty().bindBidirectional(viewModel.quantityProperty());
+        // Local input mask: letters and signs never reach the ViewModel (RF-07).
+        quantityField.setTextFormatter(InputMasks.positiveInteger(QUANTITY_MAX_DIGITS));
 
         totalLabel.textProperty().bind(Bindings.createStringBinding(
                 () -> "Total: " + formatMoney(viewModel.orderTotalProperty().get()),

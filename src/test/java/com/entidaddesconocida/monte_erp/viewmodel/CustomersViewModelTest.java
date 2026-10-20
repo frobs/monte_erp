@@ -115,6 +115,18 @@ class CustomersViewModelTest {
     }
 
     @Test
+    @DisplayName("Teléfono con caracteres no válidos: error de campo")
+    void invalidPhoneShowsFieldError() {
+        viewModel.nameProperty().set("Globex");
+        viewModel.phoneProperty().set("llámame");
+
+        viewModel.save();
+
+        assertEquals("El teléfono solo puede contener números y los signos +, -, ( ), punto o espacios.",
+                viewModel.phoneErrorProperty().get());
+    }
+
+    @Test
     @DisplayName("Correo con formato inválido: error de campo")
     void invalidEmailShowsFieldError() {
         viewModel.nameProperty().set("Globex");

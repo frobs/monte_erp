@@ -39,6 +39,12 @@ public class PurchasesView implements FxmlView<PurchasesViewModel> {
     private static final DateTimeFormatter DATE_FORMAT =
             DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm");
 
+    /** Keeps the typed quantity within the {@code int} range (RF-14). */
+    private static final int QUANTITY_MAX_DIGITS = 9;
+
+    /** 99999999.99, the same range the product form allows (RF-14). */
+    private static final int PRICE_MAX_DIGITS = 8;
+
     private final AppShell appShell;
 
     @FXML
@@ -176,6 +182,9 @@ public class PurchasesView implements FxmlView<PurchasesViewModel> {
 
         quantityField.textProperty().bindBidirectional(viewModel.quantityProperty());
         purchasePriceField.textProperty().bindBidirectional(viewModel.purchasePriceProperty());
+        // Local input masks: letters and signs never reach the ViewModel (RF-14).
+        quantityField.setTextFormatter(InputMasks.positiveInteger(QUANTITY_MAX_DIGITS));
+        purchasePriceField.setTextFormatter(InputMasks.money(PRICE_MAX_DIGITS));
 
         totalLabel.textProperty().bind(Bindings.createStringBinding(
                 () -> "Total: " + formatMoney(viewModel.purchaseTotalProperty().get()),

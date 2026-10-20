@@ -337,7 +337,9 @@ public class PurchasesViewModel implements ViewModel {
             return null;
         }
         try {
-            return new BigDecimal(value);
+            // The input mask accepts both '1.5' and '1,5'; normalise the Spanish
+            // comma so the parsed value matches the product form (RF-03).
+            return new BigDecimal(value.replace(',', '.'));
         } catch (NumberFormatException e) {
             return null;
         }

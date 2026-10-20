@@ -11,6 +11,8 @@ import javafx.beans.property.ReadOnlyBooleanWrapper;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.beans.property.StringProperty;
 
+import java.util.regex.Pattern;
+
 /**
  * ViewModel of the database configuration screen.
  *
@@ -23,6 +25,16 @@ public class SetupViewModel implements ViewModel {
 
     /** Notification published when the configuration has been saved and applied. */
     public static final String SETUP_SUCCEEDED = "setupSucceeded";
+
+    private static final String CONNECTION_REQUIRED =
+            "Introduce la URL, el usuario y la contraseña.";
+
+    private static final String URL_INVALID =
+            "La URL no es válida. Debe tener el formato jdbc:mysql://host:puerto/base_de_datos.";
+
+    /** Local shape check (host and database present); connectivity still needs the server. */
+    private static final Pattern JDBC_URL_PATTERN =
+            Pattern.compile("^jdbc:mysql://[^/\\s]+/[^\\s?]+(\\?\\S*)?$");
 
     private final SetupService setupService;
     private final boolean onboarding;
@@ -88,7 +100,12 @@ public class SetupViewModel implements ViewModel {
     public void testConnection() {
         ConnectionSettings settings = readForm();
         if (!settings.isComplete()) {
-            errorMessage.set("Introduce la URL, el usuario y la contraseña.");
+            errorMessage.set(CONNECTION_REQUIRED);
+            statusMessage.set("");
+            return;
+        }
+        if (!isValidUrl(settings.url())) {
+            errorMessage.set(URL_INVALID);
             statusMessage.set("");
             return;
         }
@@ -110,7 +127,12 @@ public class SetupViewModel implements ViewModel {
     public void save() {
         ConnectionSettings settings = readForm();
         if (!settings.isComplete()) {
-            errorMessage.set("Introduce la URL, el usuario y la contraseña.");
+            errorMessage.set(CONNECTION_REQUIRED);
+            statusMessage.set("");
+            return;
+        }
+        if (!isValidUrl(settings.url())) {
+            errorMessage.set(URL_INVALID);
             statusMessage.set("");
             return;
         }
@@ -146,6 +168,15 @@ public class SetupViewModel implements ViewModel {
 
     private ConnectionSettings readForm() {
         return new ConnectionSettings(trimToNull(url.get()), trimToNull(dbUser.get()), dbPassword.get());
+    }
+
+    /**
+     * Rejects a malformed JDBC URL before calling the service, so an obvious
+     * format mistake does not need a (failing) connection attempt against the
+     * database to be reported.
+     */
+    private static boolean isValidUrl(String value) {
+        return value != null && JDBC_URL_PATTERN.matcher(value.trim()).matches();
     }
 
     private static String trimToNull(String value) {

@@ -47,6 +47,9 @@ public class CustomersViewModel extends FilterableCrudViewModel<Customer> {
     /** Pragmatic email shape: text@text.text, no spaces. Not a full RFC validator. */
     private static final Pattern EMAIL_PATTERN = Pattern.compile("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$");
 
+    /** Lenient phone shape: digits plus the usual separators, never letters. */
+    private static final Pattern PHONE_PATTERN = Pattern.compile("^[0-9+()\\-\\s.]*$");
+
     private final CustomerRepository customerRepository;
 
     private final StringProperty name = new SimpleStringProperty("");
@@ -330,6 +333,9 @@ public class CustomersViewModel extends FilterableCrudViewModel<Customer> {
         String value = trimmed(phone.get());
         if (value.length() > MAX_PHONE_LENGTH) {
             return "El teléfono no puede superar los " + MAX_PHONE_LENGTH + " caracteres.";
+        }
+        if (!value.isEmpty() && !PHONE_PATTERN.matcher(value).matches()) {
+            return "El teléfono solo puede contener números y los signos +, -, ( ), punto o espacios.";
         }
         return "";
     }
