@@ -146,6 +146,49 @@ public class Stock {
         return purchasePrice.multiply(BigDecimal.valueOf(initialQuantity));
     }
 
+    /**
+     * Takes {@code quantity} units out of the lot, mirroring
+     * {@code chk_stock_available_quantity} ({@code available >= 0}). The change
+     * is in memory only: persisting it belongs to the repository that runs
+     * inside the sale transaction (RF-15, decision D6).
+     *
+     * @throws IllegalArgumentException when {@code quantity <= 0} or there are
+     *                                  not enough available units in the lot
+     */
+    public void consume(int quantity) {
+        if (quantity <= 0) {
+            throw new IllegalArgumentException(
+                    "La cantidad a consumir debe ser mayor que 0: " + quantity);
+        }
+        if (quantity > availableQuantity) {
+            throw new IllegalArgumentException("No se pueden consumir " + quantity
+                    + " unidades del lote " + id + ": solo hay " + availableQuantity + " disponibles");
+        }
+        availableQuantity -= quantity;
+    }
+
+    /**
+     * Returns {@code quantity} units to the lot, used when a sale is cancelled
+     * (decision D2). The available quantity can never exceed the initial one,
+     * mirroring {@code chk_stock_not_exceed_initial}.
+     *
+     * @throws IllegalArgumentException when {@code quantity <= 0} or the return
+     *                                  would push the available quantity above
+     *                                  the initial one
+     */
+    public void restore(int quantity) {
+        if (quantity <= 0) {
+            throw new IllegalArgumentException(
+                    "La cantidad a reponer debe ser mayor que 0: " + quantity);
+        }
+        if (availableQuantity + quantity > initialQuantity) {
+            throw new IllegalArgumentException("No se pueden reponer " + quantity
+                    + " unidades al lote " + id + ": superaría la cantidad inicial "
+                    + initialQuantity);
+        }
+        availableQuantity += quantity;
+    }
+
     /** Readable rendering for logs/combos, e.g. {@code "3 × Teclado"}. */
     @Override
     public String toString() {

@@ -78,4 +78,40 @@ class StockTest {
 
         assertEquals(0, BigDecimal.ZERO.compareTo(lot.subtotal()));
     }
+
+    @Test
+    @DisplayName("consume descuenta el disponible y puede agotar el lote")
+    void consumeDiscountsAndCanEmptyTheLot() {
+        Stock lot = new Stock(product(), 5, new BigDecimal("1.00"));
+
+        lot.consume(2);
+        assertEquals(3, lot.getAvailableQuantity());
+
+        lot.consume(3);
+        assertEquals(0, lot.getAvailableQuantity());
+    }
+
+    @Test
+    @DisplayName("consume por encima del disponible o con 0/negativo se rechaza")
+    void consumeBeyondAvailableIsRejected() {
+        Stock lot = new Stock(product(), 5, new BigDecimal("1.00"));
+
+        assertThrows(IllegalArgumentException.class, () -> lot.consume(6));
+        assertThrows(IllegalArgumentException.class, () -> lot.consume(0));
+        assertThrows(IllegalArgumentException.class, () -> lot.consume(-1));
+        assertEquals(5, lot.getAvailableQuantity());
+    }
+
+    @Test
+    @DisplayName("restore devuelve unidades sin superar la cantidad inicial")
+    void restoreGivesUnitsBackUpToInitial() {
+        Stock lot = new Stock(product(), 5, new BigDecimal("1.00"));
+        lot.consume(5);
+
+        lot.restore(5);
+        assertEquals(5, lot.getAvailableQuantity());
+
+        assertThrows(IllegalArgumentException.class, () -> lot.restore(1));
+        assertThrows(IllegalArgumentException.class, () -> lot.restore(0));
+    }
 }

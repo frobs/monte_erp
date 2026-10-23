@@ -8,7 +8,9 @@ import java.math.BigDecimal;
  * <p>The stock is <strong>not</strong> an attribute of the product: it is
  * computed by adding the {@code availableQuantity} of its lots ({@code Stock}),
  * which belongs to RF-09/RF-10. That is why this entity does not expose
- * {@code availableStock()} / {@code isBelowMinimum()} yet.</p>
+ * {@code availableStock()}: it only knows the minimum ({@link #getMinStock()})
+ * and answers {@link #isBelowMinimum(int)} with the available quantity the stock
+ * screen computes for it.</p>
  *
  * <p>The supplier is <strong>not</strong> an attribute either: the relation goes
  * through the purchase ({@code PRODUCT} → {@code STOCK} → {@code PURCHASE} →
@@ -113,6 +115,20 @@ public class Product {
 
     public void setActive(boolean active) {
         this.active = active;
+    }
+
+    /**
+     * Whether the product is below its minimum stock (RF-10): the rule is
+     * <strong>strict</strong> ({@code available < minStock}), so having exactly
+     * the minimum is not an alert and a minimum of 0 never alerts (the
+     * available quantity cannot be negative).
+     *
+     * <p>The available quantity is not stored here: it is the sum of the
+     * available quantities of the product lots, computed by the stock screen
+     * ({@code StockLevel}).</p>
+     */
+    public boolean isBelowMinimum(int availableStock) {
+        return availableStock < minStock;
     }
 
     /** Human readable status label, for the user interface. */
