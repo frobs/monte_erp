@@ -80,6 +80,23 @@
                     </columnResizePolicy>
                 </TableView>
 
+                <Label text="Lotes consumidos" styleClass="section-title"/>
+
+                <TableView fx:id="consumedLotsTable" prefHeight="150.0" minHeight="100.0">
+                    <placeholder>
+                        <Label text="El pedido seleccionado no ha consumido lotes."/>
+                    </placeholder>
+                    <columns>
+                        <TableColumn fx:id="issueProductColumn" text="Producto" prefWidth="240.0"/>
+                        <TableColumn fx:id="issueQuantityColumn" text="Cantidad" prefWidth="90.0"/>
+                        <TableColumn fx:id="issueLotColumn" text="Lote (entrada)" prefWidth="170.0"/>
+                        <TableColumn fx:id="issuePurchaseColumn" text="Compra" prefWidth="100.0"/>
+                    </columns>
+                    <columnResizePolicy>
+                        <TableView fx:constant="CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN"/>
+                    </columnResizePolicy>
+                </TableView>
+
                 <HBox fx:id="statusActions" alignment="CENTER_LEFT" spacing="10.0">
                     <Button fx:id="markShippedButton" text="Marcar enviado"
                             onAction="#onMarkShipped" styleClass="secondary-button"/>
@@ -117,6 +134,7 @@
                 </Label>
                 <ComboBox fx:id="productCombo" promptText="selecciona un producto"
                           maxWidth="Infinity"/>
+                <Label fx:id="stockLabel" styleClass="subtitle" wrapText="true"/>
 
                 <Label text="Cantidad" styleClass="field-label">
                     <VBox.margin>

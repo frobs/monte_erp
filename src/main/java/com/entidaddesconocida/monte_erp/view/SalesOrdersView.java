@@ -5,6 +5,7 @@ import com.entidaddesconocida.monte_erp.domain.model.Customer;
 import com.entidaddesconocida.monte_erp.domain.model.Product;
 import com.entidaddesconocida.monte_erp.domain.model.SalesOrder;
 import com.entidaddesconocida.monte_erp.domain.model.SalesOrderLine;
+import com.entidaddesconocida.monte_erp.domain.model.StockIssue;
 import com.entidaddesconocida.monte_erp.viewmodel.SalesOrdersViewModel;
 
 import de.saxsys.mvvmfx.FxmlView;
@@ -82,6 +83,21 @@ public class SalesOrdersView implements FxmlView<SalesOrdersViewModel> {
     private TableColumn<SalesOrderLine, String> lineSubtotalColumn;
 
     @FXML
+    private TableView<StockIssue> consumedLotsTable;
+
+    @FXML
+    private TableColumn<StockIssue, String> issueProductColumn;
+
+    @FXML
+    private TableColumn<StockIssue, String> issueQuantityColumn;
+
+    @FXML
+    private TableColumn<StockIssue, String> issueLotColumn;
+
+    @FXML
+    private TableColumn<StockIssue, String> issuePurchaseColumn;
+
+    @FXML
     private Button markShippedButton;
 
     @FXML
@@ -101,6 +117,9 @@ public class SalesOrdersView implements FxmlView<SalesOrdersViewModel> {
 
     @FXML
     private ComboBox<Product> productCombo;
+
+    @FXML
+    private Label stockLabel;
 
     @FXML
     private TextField quantityField;
@@ -166,6 +185,20 @@ public class SalesOrdersView implements FxmlView<SalesOrdersViewModel> {
         lineSubtotalColumn.setCellValueFactory(cell ->
                 new ReadOnlyStringWrapper(formatMoney(cell.getValue().subtotal())));
 
+        // RF-15: which lot every unit of the order left from (FIFO traces).
+        issueProductColumn.setCellValueFactory(cell -> new ReadOnlyStringWrapper(
+                productLabel(cell.getValue().getStock() == null
+                        ? null : cell.getValue().getStock().getProduct())));
+        issueQuantityColumn.setCellValueFactory(cell -> new ReadOnlyStringWrapper(
+                String.valueOf(cell.getValue().getQuantity())));
+        issueLotColumn.setCellValueFactory(cell -> new ReadOnlyStringWrapper(
+                cell.getValue().getStock() == null || cell.getValue().getStock().getEntryDate() == null
+                        ? "" : DATE_FORMAT.format(cell.getValue().getStock().getEntryDate())));
+        issuePurchaseColumn.setCellValueFactory(cell -> new ReadOnlyStringWrapper(
+                cell.getValue().getStock() == null || cell.getValue().getStock().getPurchase() == null
+                        || cell.getValue().getStock().getPurchase().getId() == 0
+                        ? "" : "#" + cell.getValue().getStock().getPurchase().getId()));
+
         draftProductColumn.setCellValueFactory(cell -> new ReadOnlyStringWrapper(
                 productLabel(cell.getValue().getProduct())));
         draftQuantityColumn.setCellValueFactory(cell -> new ReadOnlyStringWrapper(
@@ -177,6 +210,7 @@ public class SalesOrdersView implements FxmlView<SalesOrdersViewModel> {
 
         ordersTable.setItems(viewModel.orders());
         orderLinesTable.setItems(viewModel.selectedOrderLines());
+        consumedLotsTable.setItems(viewModel.selectedOrderIssues());
         draftLinesTable.setItems(viewModel.draftLines());
 
         customerCombo.setItems(viewModel.customers());
@@ -187,9 +221,19 @@ public class SalesOrdersView implements FxmlView<SalesOrdersViewModel> {
         productCombo.setButtonCell(productCell());
         productCombo.valueProperty().bindBidirectional(viewModel.selectedProductProperty());
 
+        // RF-09: the available units of the chosen product are shown and become
+        // the cap of the quantity field, so an impossible line cannot be typed.
+        stockLabel.textProperty().bind(Bindings.createStringBinding(
+                this::availableStockText,
+                viewModel.selectedProductProperty(), viewModel.availableStockProperty()));
+        stockLabel.visibleProperty().bind(viewModel.selectedProductProperty().isNotNull());
+        stockLabel.managedProperty().bind(stockLabel.visibleProperty());
+
         quantityField.textProperty().bindBidirectional(viewModel.quantityProperty());
-        // Local input mask: letters and signs never reach the ViewModel (RF-07).
-        quantityField.setTextFormatter(InputMasks.positiveInteger(QUANTITY_MAX_DIGITS));
+        // Local input mask: letters, signs and quantities above the stock never
+        // reach the ViewModel (RF-07/RF-09).
+        quantityField.setTextFormatter(InputMasks.positiveIntegerWithin(QUANTITY_MAX_DIGITS,
+                this::quantityUpperBound));
 
         totalLabel.textProperty().bind(Bindings.createStringBinding(
                 () -> "Total: " + formatMoney(viewModel.orderTotalProperty().get()),
@@ -216,6 +260,26 @@ public class SalesOrdersView implements FxmlView<SalesOrdersViewModel> {
         return Bindings.createBooleanBinding(
                 () -> viewModel.availableTransitions().contains(status),
                 viewModel.availableTransitions());
+    }
+
+    /** Stock hint of the chosen product: no text without a selection. */
+    private String availableStockText() {
+        if (viewModel.selectedProductProperty().get() == null) {
+            return "";
+        }
+        int available = viewModel.availableStockProperty().get();
+        return available > 0
+                ? "Disponibles: " + available + " unidades" : "Sin stock disponible";
+    }
+
+    /**
+     * Upper bound of the quantity field: while no product is selected anything
+     * can be typed (the ViewModel reports the missing product on save); once one
+     * is chosen the bound is its available stock.
+     */
+    private int quantityUpperBound() {
+        return viewModel.selectedProductProperty().get() == null
+                ? Integer.MAX_VALUE : viewModel.availableStockProperty().get();
     }
 
     private void bindSelection() {

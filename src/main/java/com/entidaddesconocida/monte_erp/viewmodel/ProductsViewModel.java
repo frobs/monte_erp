@@ -61,6 +61,7 @@ public class ProductsViewModel extends FilterableCrudViewModel<Product> {
     private final StringProperty name = new SimpleStringProperty("");
     private final StringProperty sku = new SimpleStringProperty("");
     private final StringProperty price = new SimpleStringProperty("");
+    private final StringProperty minStock = new SimpleStringProperty("");
     private final ObjectProperty<Category> category = new SimpleObjectProperty<>();
     private final ObjectProperty<Category> categoryFilter = new SimpleObjectProperty<>();
 
@@ -70,6 +71,7 @@ public class ProductsViewModel extends FilterableCrudViewModel<Product> {
     private final ReadOnlyStringWrapper nameError = new ReadOnlyStringWrapper("");
     private final ReadOnlyStringWrapper skuError = new ReadOnlyStringWrapper("");
     private final ReadOnlyStringWrapper priceError = new ReadOnlyStringWrapper("");
+    private final ReadOnlyStringWrapper minStockError = new ReadOnlyStringWrapper("");
     private final ReadOnlyStringWrapper categoryError = new ReadOnlyStringWrapper("");
 
     public ProductsViewModel(ProductRepository productRepository,
@@ -77,7 +79,7 @@ public class ProductsViewModel extends FilterableCrudViewModel<Product> {
         this.productRepository = productRepository;
         this.categoryRepository = categoryRepository;
         bindFilter(searchText, categoryFilter);
-        watchFields(name, sku, price, category);
+        watchFields(name, sku, price, minStock, category);
         updateCount();
     }
 
@@ -107,6 +109,11 @@ public class ProductsViewModel extends FilterableCrudViewModel<Product> {
     /** Price as typed by the user; parsed in the save template. */
     public StringProperty priceProperty() {
         return price;
+    }
+
+    /** Minimum stock typed by the user (RF-10); empty means 0. */
+    public StringProperty minStockProperty() {
+        return minStock;
     }
 
     /** Category chosen in the form; {@code null} means "sin categoría" (optional since RF-03). */
@@ -150,6 +157,11 @@ public class ProductsViewModel extends FilterableCrudViewModel<Product> {
     /** Empty when the price is valid; the message to show otherwise. */
     public ReadOnlyStringProperty priceErrorProperty() {
         return priceError.getReadOnlyProperty();
+    }
+
+    /** Empty when the minimum stock is valid; the message to show otherwise (RF-10). */
+    public ReadOnlyStringProperty minStockErrorProperty() {
+        return minStockError.getReadOnlyProperty();
     }
 
     /**
@@ -205,18 +217,19 @@ public class ProductsViewModel extends FilterableCrudViewModel<Product> {
         String nameValue = trimmed(name.get());
         String skuValue = trimmed(sku.get());
         BigDecimal priceValue = parsePrice(price.get());
+        int minStockValue = parseMinStock(minStock.get());
         Product selected = selectedItem.get();
         if (selected == null) {
-            Product product = new Product(nameValue, skuValue, null, priceValue, 0,
+            Product product = new Product(nameValue, skuValue, null, priceValue, minStockValue,
                     category.get(), true);
             productRepository.insert(product);
         } else {
             // Persist a detached copy: a failed write must never leave the
             // rendered row with values that are not in the database. The
-            // description and min_stock of the edited row are preserved (they
-            // are not part of the RF-03 form).
+            // description of the edited row is preserved (it is not part of the
+            // RF-03 form).
             Product updated = new Product(nameValue, skuValue, selected.getDescription(),
-                    priceValue, selected.getMinStock(), category.get(), selected.isActive());
+                    priceValue, minStockValue, category.get(), selected.isActive());
             updated.setId(selected.getId());
             productRepository.update(updated);
         }
@@ -269,6 +282,7 @@ public class ProductsViewModel extends FilterableCrudViewModel<Product> {
         name.set(product.getName());
         sku.set(product.getSku());
         price.set(product.getPrice() == null ? "" : product.getPrice().toPlainString());
+        minStock.set(String.valueOf(product.getMinStock()));
         category.set(optionForCategory(product.getCategory()));
         setFormTitle(editFormTitle());
         clearErrorMessage();
@@ -281,6 +295,7 @@ public class ProductsViewModel extends FilterableCrudViewModel<Product> {
         name.set("");
         sku.set("");
         price.set("");
+        minStock.set("");
         category.set(null);
         setFormTitle(newFormTitle());
         clearFieldErrors();
@@ -292,6 +307,7 @@ public class ProductsViewModel extends FilterableCrudViewModel<Product> {
         nameError.set(validateName());
         skuError.set(validateSku());
         priceError.set(validatePrice());
+        minStockError.set(validateMinStock());
         categoryError.set(validateCategory());
     }
 
@@ -300,18 +316,21 @@ public class ProductsViewModel extends FilterableCrudViewModel<Product> {
         nameError.set("");
         skuError.set("");
         priceError.set("");
+        minStockError.set("");
         categoryError.set("");
     }
 
     @Override
     protected boolean hasFieldErrors() {
         return !nameError.get().isBlank() || !skuError.get().isBlank()
-                || !priceError.get().isBlank() || !categoryError.get().isBlank();
+                || !priceError.get().isBlank() || !minStockError.get().isBlank()
+                || !categoryError.get().isBlank();
     }
 
     @Override
     protected String fieldErrorsSummary() {
-        return joinedErrors(nameError.get(), skuError.get(), priceError.get(), categoryError.get());
+        return joinedErrors(nameError.get(), skuError.get(), priceError.get(),
+                minStockError.get(), categoryError.get());
     }
 
     @Override
@@ -412,6 +431,27 @@ public class ProductsViewModel extends FilterableCrudViewModel<Product> {
     }
 
     /**
+     * Minimum stock is optional: empty means 0. When typed it must be a
+     * non-negative integer, mirroring {@code chk_product_min_stock} (RF-10).
+     */
+    private String validateMinStock() {
+        String value = trimmed(minStock.get());
+        if (value.isEmpty()) {
+            return "";
+        }
+        int parsed;
+        try {
+            parsed = Integer.parseInt(value);
+        } catch (NumberFormatException e) {
+            return "El stock mínimo debe ser un número entero.";
+        }
+        if (parsed < 0) {
+            return "El stock mínimo no puede ser negativo.";
+        }
+        return "";
+    }
+
+    /**
      * An inactive category cannot be assigned to a product (decision D4). The
      * rule only fires when the product still holds one that was given up: the
      * category is optional, so clearing it is always a valid way out.
@@ -447,5 +487,10 @@ public class ProductsViewModel extends FilterableCrudViewModel<Product> {
 
     private static BigDecimal parsePrice(String value) {
         return new BigDecimal(trimmed(value).replace(',', '.')).setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private static int parseMinStock(String value) {
+        String trimmedValue = trimmed(value);
+        return trimmedValue.isEmpty() ? 0 : Integer.parseInt(trimmedValue);
     }
 }

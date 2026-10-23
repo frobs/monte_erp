@@ -4,14 +4,21 @@ import com.entidaddesconocida.monte_erp.domain.model.Customer;
 import com.entidaddesconocida.monte_erp.domain.model.Product;
 import com.entidaddesconocida.monte_erp.domain.model.SalesOrder;
 import com.entidaddesconocida.monte_erp.domain.model.SalesOrderLine;
+import com.entidaddesconocida.monte_erp.domain.model.Stock;
+import com.entidaddesconocida.monte_erp.domain.model.StockIssue;
 import com.entidaddesconocida.monte_erp.domain.model.User;
 import com.entidaddesconocida.monte_erp.domain.repository.CustomerRepository;
 import com.entidaddesconocida.monte_erp.domain.repository.ProductRepository;
 import com.entidaddesconocida.monte_erp.domain.repository.SalesOrderRepository;
+import com.entidaddesconocida.monte_erp.domain.repository.StockRepository;
+import com.entidaddesconocida.monte_erp.domain.service.FifoAllocator;
+import com.entidaddesconocida.monte_erp.domain.service.InsufficientStockException;
 
 import de.saxsys.mvvmfx.ViewModel;
 
 import javafx.beans.property.ObjectProperty;
+import javafx.beans.property.ReadOnlyIntegerProperty;
+import javafx.beans.property.ReadOnlyIntegerWrapper;
 import javafx.beans.property.ReadOnlyObjectProperty;
 import javafx.beans.property.ReadOnlyObjectWrapper;
 import javafx.beans.property.ReadOnlyStringProperty;
@@ -39,8 +46,13 @@ import java.util.logging.Logger;
  * <p>The unit price of a line is a snapshot of the product price when the line is
  * added (decision D4) and only one line per product is allowed (D3), rejected
  * with a message. The order is saved as {@code pending} with the signed-in user
- * (D5) and the total is computed from the lines (D6). The stock is deliberately
- * not checked: that is RF-09/RF-15 (US-09/US-14).</p>
+ * (D5) and the total is computed from the lines (D6).</p>
+ *
+ * <p>Stock is checked twice (RF-09/RF-15, decision D4): {@link #addLine()}
+ * pre-warns with {@link StockRepository#findAvailable(int)} and does not add an
+ * impossible line, while {@link #save()} is the authority (the repository
+ * re-reads the lots under lock and may still reject the order). The detail of a
+ * selected order also loads the consumed lots ({@link SalesOrderRepository#findIssues(int)}, RF-15).</p>
  *
  * <p>Like the CRUD ViewModels it is free of ValidatorFX: the per-field rules are
  * exposed as one error property per field, so it stays testable with plain JUnit
@@ -67,6 +79,9 @@ public class SalesOrdersViewModel implements ViewModel {
     /** A product can only appear once in the order (decision D3). */
     protected static final String DUPLICATED_PRODUCT = "El producto ya está en el pedido.";
 
+    /** Prefix of the stock pre-warning message (RF-09, decision D4). */
+    protected static final String STOCK_INSUFFICIENT = "Stock insuficiente";
+
     /** An order needs at least one line to be saved. */
     protected static final String LINES_REQUIRED = "Añade al menos una línea al pedido.";
 
@@ -84,6 +99,7 @@ public class SalesOrdersViewModel implements ViewModel {
     private final SalesOrderRepository salesOrderRepository;
     private final CustomerRepository customerRepository;
     private final ProductRepository productRepository;
+    private final StockRepository stockRepository;
     private final User currentUser;
 
     private final ObservableList<Customer> customers = FXCollections.observableArrayList();
@@ -92,12 +108,18 @@ public class SalesOrdersViewModel implements ViewModel {
     private final ObjectProperty<Product> selectedProduct = new SimpleObjectProperty<>();
     private final StringProperty quantity = new SimpleStringProperty("");
 
+    /** Available units of the selected product, refreshed when the selection changes (RF-09). */
+    private final ReadOnlyIntegerWrapper availableStock = new ReadOnlyIntegerWrapper(0);
+
     private final ObservableList<SalesOrderLine> draftLines = FXCollections.observableArrayList();
     private final ReadOnlyObjectWrapper<BigDecimal> orderTotal = new ReadOnlyObjectWrapper<>(BigDecimal.ZERO);
 
     private final ObservableList<SalesOrder> orders = FXCollections.observableArrayList();
     private final ObjectProperty<SalesOrder> selectedOrder = new SimpleObjectProperty<>();
     private final ObservableList<SalesOrderLine> selectedOrderLines = FXCollections.observableArrayList();
+
+    /** RF-15: lots consumed by the selected order, for the detail table. */
+    private final ObservableList<StockIssue> selectedOrderIssues = FXCollections.observableArrayList();
 
     /** RF-08: statuses reachable from the selected order, in button order. */
     private final ObservableList<String> availableTransitions = FXCollections.observableArrayList();
@@ -107,16 +129,22 @@ public class SalesOrdersViewModel implements ViewModel {
     private final ReadOnlyStringWrapper customerError = new ReadOnlyStringWrapper("");
     private final ReadOnlyStringWrapper productError = new ReadOnlyStringWrapper("");
     private final ReadOnlyStringWrapper quantityError = new ReadOnlyStringWrapper("");
+    private final ReadOnlyStringWrapper stockError = new ReadOnlyStringWrapper("");
     private final ReadOnlyStringWrapper linesError = new ReadOnlyStringWrapper("");
 
     public SalesOrdersViewModel(SalesOrderRepository salesOrderRepository,
                                 CustomerRepository customerRepository,
                                 ProductRepository productRepository,
+                                StockRepository stockRepository,
                                 User currentUser) {
         this.salesOrderRepository = salesOrderRepository;
         this.customerRepository = customerRepository;
         this.productRepository = productRepository;
+        this.stockRepository = stockRepository;
         this.currentUser = currentUser;
+        // The view shows the available units of the chosen product and caps the
+        // quantity field with them, so the stock is refreshed on every change.
+        selectedProduct.addListener((observable, previous, product) -> refreshAvailableStock(product));
     }
 
     /** Active customers offered in the combo (decision: an inactive one cannot be assigned). */
@@ -142,6 +170,15 @@ public class SalesOrdersViewModel implements ViewModel {
         return quantity;
     }
 
+    /**
+     * Available units of the product currently selected in the combo (RF-09). It
+     * is {@code 0} when there is no selection, and the view uses it both to show
+     * the stock and to cap what can be typed in the quantity field.
+     */
+    public ReadOnlyIntegerProperty availableStockProperty() {
+        return availableStock.getReadOnlyProperty();
+    }
+
     /** Lines of the order being drafted. */
     public ObservableList<SalesOrderLine> draftLines() {
         return draftLines;
@@ -164,6 +201,11 @@ public class SalesOrdersViewModel implements ViewModel {
     /** Lines of the selected order, loaded from the repository. */
     public ObservableList<SalesOrderLine> selectedOrderLines() {
         return selectedOrderLines;
+    }
+
+    /** RF-15: lots consumed by the selected order, loaded from the repository. */
+    public ObservableList<StockIssue> selectedOrderIssues() {
+        return selectedOrderIssues;
     }
 
     /**
@@ -195,6 +237,11 @@ public class SalesOrdersViewModel implements ViewModel {
         return quantityError.getReadOnlyProperty();
     }
 
+    /** Stock pre-warning of {@link #addLine()} (RF-09, decision D4). */
+    public ReadOnlyStringProperty stockErrorProperty() {
+        return stockError.getReadOnlyProperty();
+    }
+
     public ReadOnlyStringProperty linesErrorProperty() {
         return linesError.getReadOnlyProperty();
     }
@@ -217,6 +264,7 @@ public class SalesOrdersViewModel implements ViewModel {
         // guaranteed to be in the table: drop the selection and its detail.
         selectedOrder.set(null);
         selectedOrderLines.clear();
+        selectedOrderIssues.clear();
         availableTransitions.clear();
         clearFieldErrors();
     }
@@ -247,6 +295,10 @@ public class SalesOrdersViewModel implements ViewModel {
 
         if (hasFieldErrors()) {
             fail(joinedErrors(productError.get(), quantityError.get()));
+            return;
+        }
+
+        if (!stockCovers(product, parsedQuantity)) {
             return;
         }
 
@@ -299,6 +351,10 @@ public class SalesOrdersViewModel implements ViewModel {
             resetDraft();
             clearFieldErrors();
             succeed("Pedido #" + id + " guardado correctamente.");
+        } catch (InsufficientStockException e) {
+            // The repository re-read the lots under lock and the order no longer
+            // fits: keep the draft so the employee can adjust the quantity.
+            fail(e.getMessage());
         } catch (SQLException e) {
             LOGGER.log(Level.SEVERE, "Could not save the sales order", e);
             fail(DATABASE_ERROR);
@@ -310,13 +366,16 @@ public class SalesOrdersViewModel implements ViewModel {
         updateAvailableTransitions(order);
         if (order == null) {
             selectedOrderLines.clear();
+            selectedOrderIssues.clear();
             return;
         }
         try {
             selectedOrderLines.setAll(salesOrderRepository.findLines(order.getId()));
+            selectedOrderIssues.setAll(salesOrderRepository.findIssues(order.getId()));
         } catch (SQLException e) {
             LOGGER.log(Level.SEVERE, "Could not load the order lines", e);
             selectedOrderLines.clear();
+            selectedOrderIssues.clear();
             fail(DATABASE_ERROR);
         }
     }
@@ -386,6 +445,64 @@ public class SalesOrdersViewModel implements ViewModel {
         }
     }
 
+    /**
+     * Reloads the available units of the given product (0 for {@code null}) and
+     * caps the typed quantity to it. A database failure is reported as a
+     * connection error and leaves the stock at 0 so no impossible line is added.
+     */
+    private void refreshAvailableStock(Product product) {
+        if (product == null) {
+            availableStock.set(0);
+            return;
+        }
+        int available;
+        try {
+            available = FifoAllocator.availableTotal(stockRepository.findAvailable(product.getId()));
+        } catch (SQLException e) {
+            LOGGER.log(Level.SEVERE, "Could not load the available stock", e);
+            availableStock.set(0);
+            fail(DATABASE_ERROR);
+            return;
+        }
+        availableStock.set(available);
+        // The field mask stops the user from typing more than the stock, but a
+        // product change can leave an already typed quantity above the new stock.
+        Integer typed = parseQuantity();
+        if (typed != null && typed > available) {
+            quantity.set(available > 0 ? String.valueOf(available) : "");
+        }
+    }
+
+    /**
+     * Pre-checks the available lots of the product before adding the line
+     * (decision D4): when they do not cover the quantity, warns and leaves the
+     * draft untouched. A database failure is reported as a connection error.
+     *
+     * @return {@code true} when the line can be added
+     */
+    private boolean stockCovers(Product product, int requested) {
+        if (product == null) {
+            return false;
+        }
+        int available;
+        try {
+            List<Stock> lots = stockRepository.findAvailable(product.getId());
+            available = FifoAllocator.availableTotal(lots);
+        } catch (SQLException e) {
+            LOGGER.log(Level.SEVERE, "Could not check the available stock", e);
+            fail(DATABASE_ERROR);
+            return false;
+        }
+        if (available < requested) {
+            String message = InsufficientStockException.formatMessage(product.getName(),
+                    requested, available);
+            stockError.set(message);
+            fail(message);
+            return false;
+        }
+        return true;
+    }
+
     private boolean containsProduct(Product product) {
         return draftLines.stream()
                 .anyMatch(line -> line.getProduct() != null
@@ -412,12 +529,14 @@ public class SalesOrdersViewModel implements ViewModel {
         customerError.set("");
         productError.set("");
         quantityError.set("");
+        stockError.set("");
         linesError.set("");
     }
 
     private boolean hasFieldErrors() {
         return !customerError.get().isBlank() || !productError.get().isBlank()
-                || !quantityError.get().isBlank() || !linesError.get().isBlank();
+                || !quantityError.get().isBlank() || !stockError.get().isBlank()
+                || !linesError.get().isBlank();
     }
 
     private void fail(String message) {

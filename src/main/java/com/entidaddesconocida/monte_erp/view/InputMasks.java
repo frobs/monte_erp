@@ -2,6 +2,8 @@ package com.entidaddesconocida.monte_erp.view;
 
 import javafx.scene.control.TextFormatter;
 
+import java.util.function.IntSupplier;
+
 /**
  * Input masks for the numeric text fields (quantity and money).
  *
@@ -32,6 +34,19 @@ public final class InputMasks {
     }
 
     /**
+     * {@code true} while {@code text} can still become a positive integer that
+     * does not exceed {@code max}: the form does not let the user type more units
+     * than the stock available for the chosen product (RF-09). An empty (in
+     * progress) value is always accepted so the field can be cleared.
+     */
+    public static boolean acceptsPartialIntegerWithin(String text, int maxDigits, int max) {
+        if (!acceptsPartialInteger(text, maxDigits)) {
+            return false;
+        }
+        return text.isEmpty() || Integer.parseInt(text) <= max;
+    }
+
+    /**
      * {@code true} while {@code text} can still become a money amount: up to
      * {@code maxIntegerDigits} digits, an optional separator ({@code .} or
      * {@code ,}, the ViewModel normalises it) and up to {@code decimalPlaces}
@@ -47,6 +62,20 @@ public final class InputMasks {
         return new TextFormatter<>(change ->
                 (!change.isContentChange() || acceptsPartialInteger(change.getControlNewText(), maxDigits))
                         ? change : null);
+    }
+
+    /**
+     * Digits only, but never above {@code maxSupplier}, which is read on every
+     * change so the cap follows the selected product's stock.
+     */
+    public static TextFormatter<String> positiveIntegerWithin(int maxDigits, IntSupplier maxSupplier) {
+        return new TextFormatter<>(change -> {
+            if (!change.isContentChange()) {
+                return change;
+            }
+            return acceptsPartialIntegerWithin(change.getControlNewText(), maxDigits, maxSupplier.getAsInt())
+                    ? change : null;
+        });
     }
 
     /** Digits plus a single decimal separator with at most two decimals. */

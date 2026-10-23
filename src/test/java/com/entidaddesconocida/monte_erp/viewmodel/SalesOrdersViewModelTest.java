@@ -4,10 +4,13 @@ import com.entidaddesconocida.monte_erp.domain.model.Customer;
 import com.entidaddesconocida.monte_erp.domain.model.Product;
 import com.entidaddesconocida.monte_erp.domain.model.SalesOrder;
 import com.entidaddesconocida.monte_erp.domain.model.SalesOrderLine;
+import com.entidaddesconocida.monte_erp.domain.model.Stock;
+import com.entidaddesconocida.monte_erp.domain.model.StockIssue;
 import com.entidaddesconocida.monte_erp.domain.model.User;
 import com.entidaddesconocida.monte_erp.viewmodel.support.FakeCustomerRepository;
 import com.entidaddesconocida.monte_erp.viewmodel.support.FakeProductRepository;
 import com.entidaddesconocida.monte_erp.viewmodel.support.FakeSalesOrderRepository;
+import com.entidaddesconocida.monte_erp.viewmodel.support.FakeStockRepository;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -38,6 +41,7 @@ class SalesOrdersViewModelTest {
     private FakeCustomerRepository customerRepository;
     private FakeProductRepository productRepository;
     private FakeSalesOrderRepository salesOrderRepository;
+    private FakeStockRepository stockRepository;
     private SalesOrdersViewModel viewModel;
 
     private Product teclado;
@@ -52,9 +56,19 @@ class SalesOrdersViewModelTest {
                 .withProduct(product(2, "Ratón", "5.50"))
                 .withProduct(product(3, "Antiguo", "1.00", false));
         salesOrderRepository = new FakeSalesOrderRepository();
+        // Plenty of stock so the RF-09 pre-check does not disturb the RF-07 tests.
+        stockRepository = new FakeStockRepository()
+                .withLot(1, lot(product(1, "Teclado", "10.00"), 100))
+                .withLot(2, lot(product(2, "Ratón", "5.50"), 100));
         viewModel = new SalesOrdersViewModel(salesOrderRepository, customerRepository,
-                productRepository, user());
+                productRepository, stockRepository, user());
         viewModel.load();
+    }
+
+    private static Stock lot(Product product, int available) {
+        Stock lot = new Stock(1, available, available, new BigDecimal("1.00"),
+                LocalDateTime.now(), product, null);
+        return lot;
     }
 
     private static Product product(int id, String name, String price) {
@@ -102,7 +116,7 @@ class SalesOrdersViewModelTest {
     void loadReportsDatabaseError() {
         SalesOrdersViewModel failing = new SalesOrdersViewModel(
                 new FakeSalesOrderRepository().throwOnAccess(), customerRepository,
-                productRepository, user());
+                productRepository, stockRepository, user());
 
         failing.load();
 
@@ -416,13 +430,143 @@ class SalesOrdersViewModelTest {
     }
 
     @Test
-    @DisplayName("RF-08: changeStatus con fallo de base de datos muestra el error de conexión")
-    void changeStatusReportsDatabaseError() {
-        selectStoredOrder(SalesOrder.STATUS_PENDING);
-        salesOrderRepository.failOn("changeStatus");
+    @DisplayName("RF-09: addLine con stock insuficiente avisa y no añade la línea")
+    void addLineWithInsufficientStockIsRejected() {
+        FakeStockRepository lowStock = new FakeStockRepository()
+                .withLot(1, lot(product(1, "Teclado", "10.00"), 1));
+        SalesOrdersViewModel vm = new SalesOrdersViewModel(salesOrderRepository,
+                customerRepository, productRepository, lowStock, user());
+        vm.load();
+        Product tecladoProduct = vm.products().stream()
+                .filter(candidate -> candidate.getId() == 1).findFirst().orElseThrow();
+        vm.selectedProductProperty().set(tecladoProduct);
+        vm.quantityProperty().set("5");
 
-        viewModel.changeStatus(SalesOrder.STATUS_SHIPPED);
+        vm.addLine();
 
-        assertEquals(SalesOrdersViewModel.DATABASE_ERROR, viewModel.errorMessageProperty().get());
+        assertEquals(0, vm.draftLines().size());
+        assertEquals("Stock insuficiente de «Teclado»: se piden 5 y solo hay 1.",
+                vm.stockErrorProperty().get());
+        assertEquals(vm.stockErrorProperty().get(), vm.errorMessageProperty().get());
+    }
+
+    @Test
+    @DisplayName("RF-09: addLine con stock suficiente añade la línea")
+    void addLineWithEnoughStockIsAccepted() {
+        addLine("Teclado", "100");
+
+        assertEquals(1, viewModel.draftLines().size());
+        assertEquals("", viewModel.stockErrorProperty().get());
+    }
+
+    @Test
+    @DisplayName("RF-09: al seleccionar un producto se muestran sus unidades disponibles")
+    void selectingProductShowsItsAvailableStock() {
+        viewModel.selectedProductProperty().set(productById(viewModel, 1));
+        assertEquals(100, viewModel.availableStockProperty().get());
+
+        viewModel.selectedProductProperty().set(null);
+        assertEquals(0, viewModel.availableStockProperty().get());
+    }
+
+    @Test
+    @DisplayName("RF-09: un producto sin lotes disponibles muestra 0 unidades")
+    void productWithoutAvailableLotsShowsZero() {
+        FakeStockRepository onlyTeclado = new FakeStockRepository()
+                .withLot(1, lot(product(1, "Teclado", "10.00"), 4));
+        SalesOrdersViewModel vm = viewModel(onlyTeclado);
+
+        vm.selectedProductProperty().set(productById(vm, 2));
+
+        assertEquals(0, vm.availableStockProperty().get());
+    }
+
+    @Test
+    @DisplayName("RF-09: al bajar de producto la cantidad escrita se recorta al stock")
+    void changingProductClampsTypedQuantity() {
+        FakeStockRepository lowStock = new FakeStockRepository()
+                .withLot(1, lot(product(1, "Teclado", "10.00"), 3))
+                .withLot(2, lot(product(2, "Ratón", "5.50"), 0));
+        SalesOrdersViewModel vm = viewModel(lowStock);
+        vm.quantityProperty().set("10");
+
+        vm.selectedProductProperty().set(productById(vm, 1));
+        assertEquals("3", vm.quantityProperty().get());
+
+        vm.selectedProductProperty().set(productById(vm, 2));
+        assertEquals("", vm.quantityProperty().get());
+    }
+
+    @Test
+    @DisplayName("RF-09: si falla la consulta de stock al seleccionar, avisa y deja 0")
+    void selectingProductWithDatabaseFailureReportsError() {
+        SalesOrdersViewModel vm = viewModel(new FakeStockRepository().failOn("findAvailable"));
+
+        vm.selectedProductProperty().set(productById(vm, 1));
+
+        assertEquals(0, vm.availableStockProperty().get());
+        assertEquals(SalesOrdersViewModel.DATABASE_ERROR, vm.errorMessageProperty().get());
+    }
+
+    private SalesOrdersViewModel viewModel(FakeStockRepository stock) {
+        SalesOrdersViewModel vm = new SalesOrdersViewModel(salesOrderRepository,
+                customerRepository, productRepository, stock, user());
+        vm.load();
+        return vm;
+    }
+
+    private static Product productById(SalesOrdersViewModel vm, int id) {
+        return vm.products().stream()
+                .filter(candidate -> candidate.getId() == id)
+                .findFirst().orElseThrow();
+    }
+
+    @Test
+    @DisplayName("RF-09: save con insuficiencia muestra el mensaje y conserva el borrador")
+    void saveWithInsufficientStockKeepsTheDraft() {
+        viewModel.selectedCustomerProperty().set(ACME);
+        addLine("Teclado", "2");
+        salesOrderRepository.failOnInsufficientStock("Teclado", 2, 0);
+
+        viewModel.save();
+
+        assertEquals("Stock insuficiente de «Teclado»: se piden 2 y solo hay 0.",
+                viewModel.errorMessageProperty().get());
+        assertEquals(1, viewModel.draftLines().size());
+        assertEquals(0, viewModel.orders().size());
+    }
+
+    @Test
+    @DisplayName("RF-15: selectOrder carga los lotes consumidos y null los limpia")
+    void selectOrderLoadsAndClearsIssues() {
+        Product product = product(1, "Teclado", "10.00");
+        SalesOrderLine line = new SalesOrderLine(4, 2, new BigDecimal("10.00"), product);
+        SalesOrder order = new SalesOrder(5, LocalDateTime.now(), SalesOrder.STATUS_PENDING,
+                new BigDecimal("20.00"), ACME, user(), List.of());
+        salesOrderRepository.withOrder(order).withLine(5, line)
+                .withIssue(5, new StockIssue(2, line, lot(product, 10)));
+
+        viewModel.selectOrder(order);
+        assertEquals(1, viewModel.selectedOrderIssues().size());
+        assertEquals(2, viewModel.selectedOrderIssues().get(0).getQuantity());
+
+        viewModel.selectOrder(null);
+        assertEquals(0, viewModel.selectedOrderIssues().size());
+    }
+
+    @Test
+    @DisplayName("RF-09/D2: cancelar un pedido limpia sus lotes consumidos")
+    void cancellingRemovesTheIssues() throws SQLException {
+        SalesOrder selected = selectStoredOrder(SalesOrder.STATUS_PENDING);
+        Product product = product(1, "Teclado", "10.00");
+        SalesOrderLine line = new SalesOrderLine(4, 2, new BigDecimal("10.00"), product);
+        salesOrderRepository.withIssue(selected.getId(), new StockIssue(2, line, lot(product, 10)));
+        viewModel.selectOrder(selected);
+        assertEquals(1, viewModel.selectedOrderIssues().size());
+
+        viewModel.changeStatus(SalesOrder.STATUS_CANCELLED);
+
+        assertEquals(SalesOrder.STATUS_CANCELLED, viewModel.orders().get(0).getStatus());
+        assertEquals(0, viewModel.selectedOrderIssues().size());
     }
 }

@@ -31,6 +31,20 @@ class InputMasksTest {
     }
 
     @Test
+    @DisplayName("La cantidad con tope acepta hasta las unidades disponibles y rechaza el resto")
+    void integerMaskWithStockBoundOnlyAcceptsUpToTheStock() {
+        assertTrue(InputMasks.acceptsPartialIntegerWithin("", 9, 0));
+        assertTrue(InputMasks.acceptsPartialIntegerWithin("", 9, 12));
+        assertTrue(InputMasks.acceptsPartialIntegerWithin("12", 9, 12));
+        assertTrue(InputMasks.acceptsPartialIntegerWithin("7", 9, 12));
+
+        assertFalse(InputMasks.acceptsPartialIntegerWithin("13", 9, 12));
+        assertFalse(InputMasks.acceptsPartialIntegerWithin("1", 9, 0));
+        assertFalse(InputMasks.acceptsPartialIntegerWithin("abc", 9, 12));
+        assertFalse(InputMasks.acceptsPartialIntegerWithin("1234567890", 9, 999999999));
+    }
+
+    @Test
     @DisplayName("El importe acepta dígitos y un separador con como máximo dos decimales")
     void decimalMaskAcceptsMoney() {
         assertTrue(InputMasks.acceptsPartialDecimal("", 8, 2));
