@@ -2,6 +2,8 @@ package com.entidaddesconocida.monte_erp.domain.repository;
 
 import com.entidaddesconocida.monte_erp.domain.model.SalesOrder;
 import com.entidaddesconocida.monte_erp.domain.model.SalesOrderLine;
+import com.entidaddesconocida.monte_erp.domain.model.StockIssue;
+import com.entidaddesconocida.monte_erp.domain.service.InsufficientStockException;
 
 import java.sql.SQLException;
 import java.util.List;
@@ -13,17 +15,30 @@ import java.util.List;
  * history, never edited or deleted. RF-08 / US-08 adds the status change as the
  * only mutation, guarded so a concurrent change cannot be silently overwritten.</p>
  *
- * <p>The insert must be <strong>atomic</strong>: the order header and every line
- * are written in a single transaction, so a failed line never leaves an order
- * without its lines.</p>
+ * <p>The insert must be <strong>atomic</strong> and <strong>FIFO</strong>: the
+ * order header, every line and the stock consumption ({@code STOCK_ISSUE} +
+ * {@code STOCK.available_quantity}) are written in a single transaction, so a
+ * failed line or an out-of-stock product never leaves an order without its lines
+ * nor a partially discounted lot. The lots are re-read under row lock
+ * ({@code FOR UPDATE}) so two concurrent sales cannot allocate the same units.</p>
+ *
+ * <p>Cancelling an order ({@code changeStatus} to {@code cancelled}) also reverts
+ * the stock in that same transaction: the issues of the order are deleted and the
+ * available quantity is given back to each lot, but only if the optimistic guard
+ * still matches (RF-09/RF-15, decision D2).</p>
  */
 public interface SalesOrderRepository {
 
     /**
-     * Inserts the order header and its lines in one transaction and returns the
-     * generated order id (also assigned to the object).
+     * Inserts the order header and its lines in one transaction, consuming the
+     * stock FIFO from the oldest available lots, and returns the generated order
+     * id (also assigned to the object).
+     *
+     * @throws InsufficientStockException when a line cannot be covered by the
+     *                                    available lots; the whole transaction is
+     *                                    rolled back, nothing is saved
      */
-    int insert(SalesOrder order) throws SQLException;
+    int insert(SalesOrder order) throws SQLException, InsufficientStockException;
 
     /** Every order, most recent first (the read-only history). */
     List<SalesOrder> findAll() throws SQLException;
@@ -32,9 +47,20 @@ public interface SalesOrderRepository {
     List<SalesOrderLine> findLines(int salesOrderId) throws SQLException;
 
     /**
+     * Lots consumed by the given order, in FIFO order (RF-15, decision D7): each
+     * issue carries the lot and its product so the detail can show from which lot
+     * every unit left.
+     */
+    List<StockIssue> findIssues(int salesOrderId) throws SQLException;
+
+    /**
      * Changes the status of an order only if it still has {@code currentStatus}
      * (optimistic guard, RF-08). Returns the rows affected: 1 on success, 0 when
      * the order was already moved by someone else.
+     *
+     * <p>When {@code newStatus} is {@code cancelled}, the stock consumed by the
+     * order is given back and its issues are deleted in the same transaction, but
+     * only after the guard matched (0 rows means no stock is touched).</p>
      */
     int changeStatus(int id, String currentStatus, String newStatus) throws SQLException;
 }

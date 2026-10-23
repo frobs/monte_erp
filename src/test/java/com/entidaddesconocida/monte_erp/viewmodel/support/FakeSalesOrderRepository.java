@@ -2,10 +2,14 @@ package com.entidaddesconocida.monte_erp.viewmodel.support;
 
 import com.entidaddesconocida.monte_erp.domain.model.Customer;
 import com.entidaddesconocida.monte_erp.domain.model.Product;
+import com.entidaddesconocida.monte_erp.domain.model.Purchase;
 import com.entidaddesconocida.monte_erp.domain.model.SalesOrder;
 import com.entidaddesconocida.monte_erp.domain.model.SalesOrderLine;
+import com.entidaddesconocida.monte_erp.domain.model.Stock;
+import com.entidaddesconocida.monte_erp.domain.model.StockIssue;
 import com.entidaddesconocida.monte_erp.domain.model.User;
 import com.entidaddesconocida.monte_erp.domain.repository.SalesOrderRepository;
+import com.entidaddesconocida.monte_erp.domain.service.InsufficientStockException;
 
 import java.sql.SQLException;
 import java.time.LocalDateTime;
@@ -33,8 +37,10 @@ public class FakeSalesOrderRepository implements SalesOrderRepository {
 
     private final Map<Integer, SalesOrder> orders = new LinkedHashMap<>();
     private final Map<Integer, List<SalesOrderLine>> linesByOrder = new LinkedHashMap<>();
+    private final Map<Integer, List<StockIssue>> issuesByOrder = new LinkedHashMap<>();
     private final Set<String> failingMethods = new HashSet<>();
     private boolean throwOnAccess;
+    private InsufficientStockException insufficientStock;
     private int nextId = 1;
 
     /** Stores a pre-existing order (and its lines) as if it came from the database. */
@@ -56,6 +62,22 @@ public class FakeSalesOrderRepository implements SalesOrderRepository {
         return this;
     }
 
+    /** Seeds a consumed lot of a stored order, for the RF-15 trace tests. */
+    public FakeSalesOrderRepository withIssue(int salesOrderId, StockIssue issue) {
+        issuesByOrder.computeIfAbsent(salesOrderId, key -> new ArrayList<>()).add(copy(issue));
+        return this;
+    }
+
+    /**
+     * Makes the next {@link #insert(SalesOrder)} fail as if the repository had
+     * re-read the lots and they no longer cover a line (RF-09, decision D4).
+     */
+    public FakeSalesOrderRepository failOnInsufficientStock(String productName, int requested,
+                                                            int available) {
+        this.insufficientStock = new InsufficientStockException(productName, requested, available);
+        return this;
+    }
+
     public FakeSalesOrderRepository throwOnAccess() {
         this.throwOnAccess = true;
         return this;
@@ -74,8 +96,11 @@ public class FakeSalesOrderRepository implements SalesOrderRepository {
     }
 
     @Override
-    public int insert(SalesOrder order) throws SQLException {
+    public int insert(SalesOrder order) throws SQLException, InsufficientStockException {
         maybeThrow("insert");
+        if (insufficientStock != null) {
+            throw insufficientStock;
+        }
         int id = nextId++;
         order.setId(id);
         if (order.getOrderDate() == null) {
@@ -108,6 +133,16 @@ public class FakeSalesOrderRepository implements SalesOrderRepository {
     }
 
     @Override
+    public List<StockIssue> findIssues(int salesOrderId) throws SQLException {
+        maybeThrow("findIssues");
+        List<StockIssue> result = new ArrayList<>();
+        for (StockIssue issue : issuesByOrder.getOrDefault(salesOrderId, List.of())) {
+            result.add(copy(issue));
+        }
+        return result;
+    }
+
+    @Override
     public int changeStatus(int id, String currentStatus, String newStatus) throws SQLException {
         maybeThrow("changeStatus");
         SalesOrder stored = orders.get(id);
@@ -118,6 +153,11 @@ public class FakeSalesOrderRepository implements SalesOrderRepository {
         orders.put(id, new SalesOrder(stored.getId(), stored.getOrderDate(), newStatus,
                 stored.getTotal(), copy(stored.getCustomer()), copy(stored.getUser()),
                 copyLines(linesByOrder.getOrDefault(id, List.of()))));
+        if (SalesOrder.STATUS_CANCELLED.equals(newStatus)) {
+            // Cancelling gives the units back: the issues of the order disappear
+            // (the counterpart of the reversion in the real repository, D2).
+            issuesByOrder.remove(id);
+        }
         return 1;
     }
 
@@ -140,6 +180,29 @@ public class FakeSalesOrderRepository implements SalesOrderRepository {
     private static SalesOrderLine copy(SalesOrderLine line) {
         return new SalesOrderLine(line.getId(), line.getQuantity(), line.getUnitPrice(),
                 copy(line.getProduct()));
+    }
+
+    private static StockIssue copy(StockIssue issue) {
+        return new StockIssue(issue.getId(), issue.getQuantity(), copy(issue.getSalesOrderLine()),
+                copy(issue.getStock()));
+    }
+
+    private static Stock copy(Stock stock) {
+        if (stock == null) {
+            return null;
+        }
+        Stock copy = new Stock(stock.getId(), stock.getInitialQuantity(),
+                stock.getAvailableQuantity(), stock.getPurchasePrice(), stock.getEntryDate(),
+                copy(stock.getProduct()), copy(stock.getPurchase()));
+        return copy;
+    }
+
+    private static Purchase copy(Purchase purchase) {
+        if (purchase == null) {
+            return null;
+        }
+        return new Purchase(purchase.getId(), purchase.getPurchaseDate(), purchase.getStatus(),
+                purchase.getTotal(), null, null, null);
     }
 
     private static Product copy(Product product) {

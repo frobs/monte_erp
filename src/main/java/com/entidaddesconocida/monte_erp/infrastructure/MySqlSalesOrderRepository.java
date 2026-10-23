@@ -2,9 +2,14 @@ package com.entidaddesconocida.monte_erp.infrastructure;
 
 import com.entidaddesconocida.monte_erp.domain.model.Customer;
 import com.entidaddesconocida.monte_erp.domain.model.Product;
+import com.entidaddesconocida.monte_erp.domain.model.Purchase;
 import com.entidaddesconocida.monte_erp.domain.model.SalesOrder;
 import com.entidaddesconocida.monte_erp.domain.model.SalesOrderLine;
+import com.entidaddesconocida.monte_erp.domain.model.Stock;
+import com.entidaddesconocida.monte_erp.domain.model.StockIssue;
 import com.entidaddesconocida.monte_erp.domain.repository.SalesOrderRepository;
+import com.entidaddesconocida.monte_erp.domain.service.FifoAllocator;
+import com.entidaddesconocida.monte_erp.domain.service.InsufficientStockException;
 import com.entidaddesconocida.monte_erp.infrastructure.config.DatabaseConnection;
 
 import java.sql.Connection;
@@ -17,14 +22,24 @@ import java.util.List;
 
 /**
  * JDBC implementation of {@link SalesOrderRepository} for the
- * {@code SALES_ORDER} and {@code SALES_ORDER_LINE} tables (RF-07 / CU-07).
+ * {@code SALES_ORDER}, {@code SALES_ORDER_LINE}, {@code STOCK_ISSUE} and
+ * {@code STOCK} tables (RF-07 / RF-08 / RF-09 / RF-15).
  *
  * <p>No business logic: it only translates between the entities and the table
- * rows. {@link #insert(SalesOrder)} is <strong>transactional</strong> over the
- * shared {@link DatabaseConnection} connection: the header and every line are
- * committed together, and any failure rolls the whole order back. The previous
- * {@code autoCommit} value is restored in a {@code finally} so the singleton
- * connection is left as it was found.</p>
+ * rows; the FIFO rule lives in {@link FifoAllocator}. {@link #insert(SalesOrder)}
+ * is <strong>transactional</strong> over the shared
+ * {@link DatabaseConnection} connection: the header, every line and the stock
+ * consumption are committed together. Per line it reads the available lots with
+ * {@code FOR UPDATE} (row lock: two concurrent sales cannot allocate the same
+ * units), asks {@code FifoAllocator} for the split, inserts one
+ * {@code STOCK_ISSUE} per lot, updates {@code STOCK.available_quantity} and
+ * applies {@link Stock#consume(int)} on the in-memory lot. Any failure (including
+ * an {@link InsufficientStockException}) rolls the whole order back.</p>
+ *
+ * <p>{@link #changeStatus(int, String, String)} to {@code cancelled} is also
+ * transactional (decision D2): after the optimistic guard matches, the issues of
+ * the order are given back to their lots and deleted. If the guard returns 0 rows
+ * the transaction is rolled back without touching the stock.</p>
  *
  * <p>The reads join {@code CUSTOMER} / {@code PRODUCT} to build <em>light</em>
  * entities carrying the name the table shows. {@link #findLines(int)} does not
@@ -38,6 +53,25 @@ public class MySqlSalesOrderRepository implements SalesOrderRepository {
     private static final String INSERT_LINE =
             "INSERT INTO SALES_ORDER_LINE (quantity, unit_price, sales_order_id, product_id)"
                     + " VALUES (?, ?, ?, ?)";
+    /**
+     * Locks the available lots of the product, oldest first, so the allocation
+     * this transaction computes cannot race with another sale (RF-15).
+     */
+    private static final String SELECT_AVAILABLE_LOTS_FOR_UPDATE = """
+            SELECT s.id, s.initial_quantity, s.available_quantity, s.purchase_price, s.entry_date,
+                   s.purchase_id, p.id AS product_id, p.name AS product_name, p.sku AS product_sku
+              FROM STOCK s
+              JOIN PRODUCT p ON p.id = s.product_id
+             WHERE s.product_id = ? AND s.available_quantity > 0
+             ORDER BY s.entry_date, s.id
+               FOR UPDATE
+            """;
+    private static final String INSERT_ISSUE =
+            "INSERT INTO STOCK_ISSUE (quantity, sales_order_line_id, stock_id) VALUES (?, ?, ?)";
+    private static final String UPDATE_LOT_AVAILABLE =
+            "UPDATE STOCK SET available_quantity = ? WHERE id = ?";
+    private static final String UPDATE_LOT_RESTORE =
+            "UPDATE STOCK SET available_quantity = available_quantity + ? WHERE id = ?";
     private static final String SELECT_ORDERS = """
             SELECT o.id, o.order_date, o.status, o.total, o.customer_id, c.name AS customer_name
               FROM SALES_ORDER o
@@ -52,6 +86,30 @@ public class MySqlSalesOrderRepository implements SalesOrderRepository {
              WHERE l.sales_order_id = ?
              ORDER BY l.id
             """;
+    private static final String SELECT_ISSUES = """
+            SELECT si.id, si.quantity, si.stock_id,
+                   l.id AS line_id, l.quantity AS line_quantity, l.unit_price,
+                   p.id AS product_id, p.name AS product_name, p.sku AS product_sku,
+                   s.initial_quantity, s.available_quantity, s.purchase_price, s.entry_date,
+                   s.purchase_id
+              FROM STOCK_ISSUE si
+              JOIN SALES_ORDER_LINE l ON l.id = si.sales_order_line_id
+              JOIN STOCK s ON s.id = si.stock_id
+              JOIN PRODUCT p ON p.id = s.product_id
+             WHERE l.sales_order_id = ?
+             ORDER BY si.id
+            """;
+    /** Issues of an order, to give the units back to their lots when cancelling. */
+    private static final String SELECT_ISSUES_TO_REVERT = """
+            SELECT si.stock_id, si.quantity
+              FROM STOCK_ISSUE si
+              JOIN SALES_ORDER_LINE l ON l.id = si.sales_order_line_id
+             WHERE l.sales_order_id = ?
+             ORDER BY si.id
+            """;
+    private static final String DELETE_ISSUES =
+            "DELETE FROM STOCK_ISSUE WHERE sales_order_line_id IN"
+                    + " (SELECT id FROM SALES_ORDER_LINE WHERE sales_order_id = ?)";
     /**
      * Optimistic guard (decision D9): the row is only updated while it still has
      * the status the caller read, so a concurrent change cannot be overwritten.
@@ -60,7 +118,7 @@ public class MySqlSalesOrderRepository implements SalesOrderRepository {
             "UPDATE SALES_ORDER SET status = ? WHERE id = ? AND status = ?";
 
     @Override
-    public int insert(SalesOrder order) throws SQLException {
+    public int insert(SalesOrder order) throws SQLException, InsufficientStockException {
         Connection connection = DatabaseConnection.getConnection();
         boolean previousAutoCommit = connection.getAutoCommit();
         connection.setAutoCommit(false);
@@ -68,11 +126,11 @@ public class MySqlSalesOrderRepository implements SalesOrderRepository {
             int id = insertOrder(connection, order);
             order.setId(id);
             for (SalesOrderLine line : order.getLines()) {
-                insertLine(connection, id, line);
+                insertLineAndConsumeStock(connection, id, line);
             }
             connection.commit();
             return id;
-        } catch (SQLException e) {
+        } catch (SQLException | InsufficientStockException | RuntimeException e) {
             try {
                 connection.rollback();
             } catch (SQLException rollbackFailure) {
@@ -112,13 +170,61 @@ public class MySqlSalesOrderRepository implements SalesOrderRepository {
     }
 
     @Override
+    public List<StockIssue> findIssues(int salesOrderId) throws SQLException {
+        List<StockIssue> issues = new ArrayList<>();
+        try (PreparedStatement ps = DatabaseConnection.getConnection().prepareStatement(SELECT_ISSUES)) {
+            ps.setInt(1, salesOrderId);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    issues.add(mapIssue(rs));
+                }
+            }
+        }
+        return issues;
+    }
+
+    @Override
     public int changeStatus(int id, String currentStatus, String newStatus) throws SQLException {
         // No business logic: the transition was already validated by the domain.
-        try (PreparedStatement ps = DatabaseConnection.getConnection().prepareStatement(UPDATE_STATUS)) {
-            ps.setString(1, newStatus);
-            ps.setInt(2, id);
-            ps.setString(3, currentStatus);
-            return ps.executeUpdate();
+        if (!SalesOrder.STATUS_CANCELLED.equals(newStatus)) {
+            try (PreparedStatement ps = DatabaseConnection.getConnection().prepareStatement(UPDATE_STATUS)) {
+                ps.setString(1, newStatus);
+                ps.setInt(2, id);
+                ps.setString(3, currentStatus);
+                return ps.executeUpdate();
+            }
+        }
+        return cancelAndRestoreStock(id, currentStatus);
+    }
+
+    /**
+     * Cancels in one transaction: optimistic guard first, then give the units
+     * back and delete the issues. A 0-row guard means someone else moved the
+     * order, so nothing is touched.
+     */
+    private int cancelAndRestoreStock(int id, String currentStatus) throws SQLException {
+        Connection connection = DatabaseConnection.getConnection();
+        boolean previousAutoCommit = connection.getAutoCommit();
+        connection.setAutoCommit(false);
+        try {
+            int updated = updateStatus(connection, id, currentStatus, SalesOrder.STATUS_CANCELLED);
+            if (updated == 0) {
+                connection.rollback();
+                return 0;
+            }
+            restoreStock(connection, id);
+            deleteIssues(connection, id);
+            connection.commit();
+            return updated;
+        } catch (SQLException e) {
+            try {
+                connection.rollback();
+            } catch (SQLException rollbackFailure) {
+                e.addSuppressed(rollbackFailure);
+            }
+            throw e;
+        } finally {
+            connection.setAutoCommit(previousAutoCommit);
         }
     }
 
@@ -135,12 +241,103 @@ public class MySqlSalesOrderRepository implements SalesOrderRepository {
         }
     }
 
-    private void insertLine(Connection connection, int salesOrderId, SalesOrderLine line) throws SQLException {
-        try (PreparedStatement ps = connection.prepareStatement(INSERT_LINE)) {
+    private void insertLineAndConsumeStock(Connection connection, int salesOrderId,
+                                           SalesOrderLine line) throws SQLException, InsufficientStockException {
+        int lineId = insertLine(connection, salesOrderId, line);
+        line.setId(lineId);
+
+        List<Stock> lots = findAvailableLotsForUpdate(connection, line.getProduct().getId());
+        List<StockIssue> issues = FifoAllocator.allocate(line, lots);
+        for (StockIssue issue : issues) {
+            insertIssue(connection, lineId, issue);
+            Stock lot = issue.getStock();
+            // The allocator guarantees taken <= available, so consume never throws.
+            lot.consume(issue.getQuantity());
+            updateLotAvailable(connection, lot, lot.getAvailableQuantity());
+        }
+        line.setIssues(issues);
+    }
+
+    private int insertLine(Connection connection, int salesOrderId, SalesOrderLine line)
+            throws SQLException {
+        try (PreparedStatement ps = connection.prepareStatement(INSERT_LINE,
+                Statement.RETURN_GENERATED_KEYS)) {
             ps.setInt(1, line.getQuantity());
             ps.setBigDecimal(2, line.getUnitPrice());
             ps.setInt(3, salesOrderId);
             ps.setInt(4, line.getProduct().getId());
+            ps.executeUpdate();
+            try (ResultSet keys = ps.getGeneratedKeys()) {
+                return keys.next() ? keys.getInt(1) : 0;
+            }
+        }
+    }
+
+    private List<Stock> findAvailableLotsForUpdate(Connection connection, int productId)
+            throws SQLException {
+        List<Stock> lots = new ArrayList<>();
+        try (PreparedStatement ps = connection.prepareStatement(SELECT_AVAILABLE_LOTS_FOR_UPDATE)) {
+            ps.setInt(1, productId);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    lots.add(mapLot(rs));
+                }
+            }
+        }
+        return lots;
+    }
+
+    private void insertIssue(Connection connection, int lineId, StockIssue issue) throws SQLException {
+        try (PreparedStatement ps = connection.prepareStatement(INSERT_ISSUE)) {
+            ps.setInt(1, issue.getQuantity());
+            ps.setInt(2, lineId);
+            ps.setInt(3, issue.getStock().getId());
+            ps.executeUpdate();
+        }
+    }
+
+    private void updateLotAvailable(Connection connection, Stock lot, int available) throws SQLException {
+        try (PreparedStatement ps = connection.prepareStatement(UPDATE_LOT_AVAILABLE)) {
+            ps.setInt(1, available);
+            ps.setInt(2, lot.getId());
+            ps.executeUpdate();
+        }
+    }
+
+    private int updateStatus(Connection connection, int id, String currentStatus, String newStatus)
+            throws SQLException {
+        try (PreparedStatement ps = connection.prepareStatement(UPDATE_STATUS)) {
+            ps.setString(1, newStatus);
+            ps.setInt(2, id);
+            ps.setString(3, currentStatus);
+            return ps.executeUpdate();
+        }
+    }
+
+    private void restoreStock(Connection connection, int salesOrderId) throws SQLException {
+        try (PreparedStatement select = connection.prepareStatement(SELECT_ISSUES_TO_REVERT)) {
+            select.setInt(1, salesOrderId);
+            List<int[]> issued = new ArrayList<>();
+            try (ResultSet rs = select.executeQuery()) {
+                while (rs.next()) {
+                    issued.add(new int[] {rs.getInt("stock_id"), rs.getInt("quantity")});
+                }
+            }
+            // The given-back units never exceed the initial quantity: they are
+            // exactly what the sale took, and Stock.restore mirrors the CHECK.
+            for (int[] row : issued) {
+                try (PreparedStatement update = connection.prepareStatement(UPDATE_LOT_RESTORE)) {
+                    update.setInt(1, row[1]);
+                    update.setInt(2, row[0]);
+                    update.executeUpdate();
+                }
+            }
+        }
+    }
+
+    private void deleteIssues(Connection connection, int salesOrderId) throws SQLException {
+        try (PreparedStatement ps = connection.prepareStatement(DELETE_ISSUES)) {
+            ps.setInt(1, salesOrderId);
             ps.executeUpdate();
         }
     }
@@ -158,10 +355,37 @@ public class MySqlSalesOrderRepository implements SalesOrderRepository {
     }
 
     private SalesOrderLine mapLine(ResultSet rs) throws SQLException {
-        Product product = new Product(rs.getString("product_name"), rs.getString("product_sku"),
-                null, null, 0, null, true);
-        product.setId(rs.getInt("product_id"));
+        Product product = lightProduct(rs, "product_id", "product_name", "product_sku");
         return new SalesOrderLine(rs.getInt("id"), rs.getInt("quantity"),
                 rs.getBigDecimal("unit_price"), product);
+    }
+
+    private StockIssue mapIssue(ResultSet rs) throws SQLException {        Product product = lightProduct(rs, "product_id", "product_name", "product_sku");
+        SalesOrderLine line = new SalesOrderLine(rs.getInt("line_id"),
+                rs.getInt("line_quantity"), rs.getBigDecimal("unit_price"), product);
+        Purchase purchase = new Purchase(rs.getInt("purchase_id"), null, null, null,
+                null, null, null);
+        Stock lot = new Stock(rs.getInt("stock_id"), rs.getInt("initial_quantity"),
+                rs.getInt("available_quantity"), rs.getBigDecimal("purchase_price"),
+                rs.getTimestamp("entry_date").toLocalDateTime(), product, purchase);
+        return new StockIssue(rs.getInt("id"), rs.getInt("quantity"), line, lot);
+    }
+
+    private static Product lightProduct(ResultSet rs, String idColumn, String nameColumn,
+                                        String skuColumn) throws SQLException {
+        Product product = new Product(rs.getString(nameColumn), rs.getString(skuColumn),
+                null, null, 0, null, true);
+        product.setId(rs.getInt(idColumn));
+        return product;
+    }
+
+    /** Maps a {@code STOCK} row whose id column is {@code id} (the locked lots query). */
+    private static Stock mapLot(ResultSet rs) throws SQLException {
+        Product product = lightProduct(rs, "product_id", "product_name", "product_sku");
+        Purchase purchase = new Purchase(rs.getInt("purchase_id"), null, null, null,
+                null, null, null);
+        return new Stock(rs.getInt("id"), rs.getInt("initial_quantity"),
+                rs.getInt("available_quantity"), rs.getBigDecimal("purchase_price"),
+                rs.getTimestamp("entry_date").toLocalDateTime(), product, purchase);
     }
 }
