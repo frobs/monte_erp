@@ -9,6 +9,7 @@ import com.entidaddesconocida.monte_erp.domain.repository.CustomerRepository;
 import com.entidaddesconocida.monte_erp.domain.repository.ProductRepository;
 import com.entidaddesconocida.monte_erp.domain.repository.PurchaseRepository;
 import com.entidaddesconocida.monte_erp.domain.repository.SalesOrderRepository;
+import com.entidaddesconocida.monte_erp.domain.repository.StockRepository;
 import com.entidaddesconocida.monte_erp.domain.repository.SupplierRepository;
 import com.entidaddesconocida.monte_erp.domain.repository.UserRepository;
 import com.entidaddesconocida.monte_erp.domain.service.SetupService;
@@ -17,6 +18,7 @@ import com.entidaddesconocida.monte_erp.infrastructure.MySqlCustomerRepository;
 import com.entidaddesconocida.monte_erp.infrastructure.MySqlProductRepository;
 import com.entidaddesconocida.monte_erp.infrastructure.MySqlPurchaseRepository;
 import com.entidaddesconocida.monte_erp.infrastructure.MySqlSalesOrderRepository;
+import com.entidaddesconocida.monte_erp.infrastructure.MySqlStockRepository;
 import com.entidaddesconocida.monte_erp.infrastructure.MySqlSupplierRepository;
 import com.entidaddesconocida.monte_erp.infrastructure.MySqlUserRepository;
 import com.entidaddesconocida.monte_erp.infrastructure.config.DatabaseConfig;
@@ -57,14 +59,15 @@ public class MonteErpApplication extends Application {
         CustomerRepository customerRepository = new MySqlCustomerRepository();
         SalesOrderRepository salesOrderRepository = new MySqlSalesOrderRepository();
         PurchaseRepository purchaseRepository = new MySqlPurchaseRepository();
+        StockRepository stockRepository = new MySqlStockRepository();
         SetupService setupService = new DatabaseSetupService(databaseConfig, userRepository);
 
         SessionState session = new SessionState();
         AppShell appShell = new AppShell(session);
         AppContext context = new AppContext(session, appShell, userRepository,
                 categoryRepository, supplierRepository, productRepository, customerRepository,
-                salesOrderRepository, purchaseRepository, databaseConfig, setupService,
-                () -> new DatabaseUrl(DatabaseConnection.getUrl()));
+                salesOrderRepository, purchaseRepository, stockRepository, databaseConfig,
+                setupService, () -> new DatabaseUrl(DatabaseConnection.getUrl()));
 
         MvvmFX.setCustomDependencyInjector(context::create);
         appShell.setStage(stage);

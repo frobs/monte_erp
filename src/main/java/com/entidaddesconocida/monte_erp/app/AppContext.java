@@ -5,6 +5,7 @@ import com.entidaddesconocida.monte_erp.domain.repository.CustomerRepository;
 import com.entidaddesconocida.monte_erp.domain.repository.ProductRepository;
 import com.entidaddesconocida.monte_erp.domain.repository.PurchaseRepository;
 import com.entidaddesconocida.monte_erp.domain.repository.SalesOrderRepository;
+import com.entidaddesconocida.monte_erp.domain.repository.StockRepository;
 import com.entidaddesconocida.monte_erp.domain.repository.SupplierRepository;
 import com.entidaddesconocida.monte_erp.domain.repository.UserRepository;
 import com.entidaddesconocida.monte_erp.domain.service.SetupService;
@@ -18,6 +19,7 @@ import com.entidaddesconocida.monte_erp.view.ProductsView;
 import com.entidaddesconocida.monte_erp.view.PurchasesView;
 import com.entidaddesconocida.monte_erp.view.SalesOrdersView;
 import com.entidaddesconocida.monte_erp.view.SetupView;
+import com.entidaddesconocida.monte_erp.view.StockView;
 import com.entidaddesconocida.monte_erp.view.SuppliersView;
 import com.entidaddesconocida.monte_erp.view.UsersView;
 import com.entidaddesconocida.monte_erp.viewmodel.CategoriesViewModel;
@@ -28,6 +30,7 @@ import com.entidaddesconocida.monte_erp.viewmodel.ProductsViewModel;
 import com.entidaddesconocida.monte_erp.viewmodel.PurchasesViewModel;
 import com.entidaddesconocida.monte_erp.viewmodel.SalesOrdersViewModel;
 import com.entidaddesconocida.monte_erp.viewmodel.SetupViewModel;
+import com.entidaddesconocida.monte_erp.viewmodel.StockViewModel;
 import com.entidaddesconocida.monte_erp.viewmodel.SuppliersViewModel;
 import com.entidaddesconocida.monte_erp.viewmodel.UsersViewModel;
 
@@ -61,6 +64,7 @@ public final class AppContext {
                       ProductRepository productRepository, CustomerRepository customerRepository,
                       SalesOrderRepository salesOrderRepository,
                       PurchaseRepository purchaseRepository,
+                      StockRepository stockRepository,
                       DatabaseConfig databaseConfig, SetupService setupService,
                       Supplier<DatabaseUrl> databaseUrl) {
         // Stateless resources: single instance for the whole application.
@@ -71,6 +75,7 @@ public final class AppContext {
         bind(CustomerRepository.class, () -> customerRepository);
         bind(SalesOrderRepository.class, () -> salesOrderRepository);
         bind(PurchaseRepository.class, () -> purchaseRepository);
+        bind(StockRepository.class, () -> stockRepository);
         bind(DatabaseConfig.class, () -> databaseConfig);
         bind(SetupService.class, () -> setupService);
         bind(DatabaseUrl.class, databaseUrl); // configuration (current JDBC URL)
@@ -86,6 +91,7 @@ public final class AppContext {
         bind(CustomersView.class, () -> new CustomersView(appShell));
         bind(SalesOrdersView.class, () -> new SalesOrdersView(appShell));
         bind(PurchasesView.class, () -> new PurchasesView(appShell));
+        bind(StockView.class, () -> new StockView(appShell));
 
         // ViewModels: constructor injection, one new instance per view load.
         bind(LoginViewModel.class, () -> new LoginViewModel(userRepository));
@@ -103,10 +109,11 @@ public final class AppContext {
                 () -> new CustomersViewModel(customerRepository));
         bind(SalesOrdersViewModel.class,
                 () -> new SalesOrdersViewModel(salesOrderRepository, customerRepository,
-                        productRepository, session.requireCurrentUser()));
+                        productRepository, stockRepository, session.requireCurrentUser()));
         bind(PurchasesViewModel.class,
                 () -> new PurchasesViewModel(purchaseRepository, supplierRepository,
                         productRepository, session.requireCurrentUser()));
+        bind(StockViewModel.class, () -> new StockViewModel(stockRepository));
         bind(SetupViewModel.class,
                 () -> new SetupViewModel(setupService, appShell.isOnboarding()));
     }

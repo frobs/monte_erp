@@ -13,6 +13,7 @@ import com.entidaddesconocida.monte_erp.view.ProductsView;
 import com.entidaddesconocida.monte_erp.view.PurchasesView;
 import com.entidaddesconocida.monte_erp.view.SalesOrdersView;
 import com.entidaddesconocida.monte_erp.view.SetupView;
+import com.entidaddesconocida.monte_erp.view.StockView;
 import com.entidaddesconocida.monte_erp.view.UsersView;
 import com.entidaddesconocida.monte_erp.viewmodel.CategoriesViewModel;
 import com.entidaddesconocida.monte_erp.viewmodel.CustomersViewModel;
@@ -22,6 +23,7 @@ import com.entidaddesconocida.monte_erp.viewmodel.ProductsViewModel;
 import com.entidaddesconocida.monte_erp.viewmodel.PurchasesViewModel;
 import com.entidaddesconocida.monte_erp.viewmodel.SalesOrdersViewModel;
 import com.entidaddesconocida.monte_erp.viewmodel.SetupViewModel;
+import com.entidaddesconocida.monte_erp.viewmodel.StockViewModel;
 import com.entidaddesconocida.monte_erp.viewmodel.UsersViewModel;
 import com.entidaddesconocida.monte_erp.viewmodel.support.FakeCategoryRepository;
 import com.entidaddesconocida.monte_erp.viewmodel.support.FakeCustomerRepository;
@@ -29,6 +31,7 @@ import com.entidaddesconocida.monte_erp.viewmodel.support.FakeProductRepository;
 import com.entidaddesconocida.monte_erp.viewmodel.support.FakePurchaseRepository;
 import com.entidaddesconocida.monte_erp.viewmodel.support.FakeSalesOrderRepository;
 import com.entidaddesconocida.monte_erp.viewmodel.support.FakeSetupService;
+import com.entidaddesconocida.monte_erp.viewmodel.support.FakeStockRepository;
 import com.entidaddesconocida.monte_erp.viewmodel.support.FakeSupplierRepository;
 import com.entidaddesconocida.monte_erp.viewmodel.support.FakeUserRepository;
 
@@ -58,7 +61,7 @@ class AppContextTest {
         return new AppContext(session, new AppShell(session), repo,
                 new FakeCategoryRepository(), new FakeSupplierRepository(), new FakeProductRepository(),
                 new FakeCustomerRepository(), new FakeSalesOrderRepository(),
-                new FakePurchaseRepository(),
+                new FakePurchaseRepository(), new FakeStockRepository(),
                 config, setup, () -> new DatabaseUrl("jdbc:test"));
     }
 
@@ -221,6 +224,19 @@ class AppContextTest {
     }
 
     @Test
+    @DisplayName("create(StockViewModel) devuelve un VM con el repositorio de stock inyectado")
+    void stockViewModelIsCreatedWithRepository() {
+        AppContext context = context(new SessionState());
+
+        StockViewModel vm = (StockViewModel) context.create(StockViewModel.class);
+        vm.load();
+
+        assertNotNull(vm);
+        assertEquals(0, vm.levels().size());
+        assertEquals("Productos bajo mínimo: 0", vm.alertCountProperty().get());
+    }
+
+    @Test
     @DisplayName("Las vistas se crean como instancias nuevas (no null)")
     void viewsAreCreated() {
         AppContext context = context(new SessionState());
@@ -233,5 +249,6 @@ class AppContextTest {
         assertNotNull(context.create(CustomersView.class));
         assertNotNull(context.create(SalesOrdersView.class));
         assertNotNull(context.create(PurchasesView.class));
+        assertNotNull(context.create(StockView.class));
     }
 }

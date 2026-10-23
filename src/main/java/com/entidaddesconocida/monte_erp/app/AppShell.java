@@ -9,6 +9,7 @@ import com.entidaddesconocida.monte_erp.view.ProductsView;
 import com.entidaddesconocida.monte_erp.view.PurchasesView;
 import com.entidaddesconocida.monte_erp.view.SalesOrdersView;
 import com.entidaddesconocida.monte_erp.view.SetupView;
+import com.entidaddesconocida.monte_erp.view.StockView;
 import com.entidaddesconocida.monte_erp.view.SuppliersView;
 import com.entidaddesconocida.monte_erp.view.UsersView;
 import com.entidaddesconocida.monte_erp.viewmodel.CategoriesViewModel;
@@ -18,6 +19,7 @@ import com.entidaddesconocida.monte_erp.viewmodel.ProductsViewModel;
 import com.entidaddesconocida.monte_erp.viewmodel.PurchasesViewModel;
 import com.entidaddesconocida.monte_erp.viewmodel.SalesOrdersViewModel;
 import com.entidaddesconocida.monte_erp.viewmodel.SetupViewModel;
+import com.entidaddesconocida.monte_erp.viewmodel.StockViewModel;
 import com.entidaddesconocida.monte_erp.viewmodel.SuppliersViewModel;
 import com.entidaddesconocida.monte_erp.viewmodel.UsersViewModel;
 
@@ -167,6 +169,18 @@ public class AppShell {
                 FluentViewLoader.fxmlView(PurchasesView.class).load();
         SceneNavigator.show(stage, tuple, "Monte ERP · Gestión de compras",
                 SceneNavigator.PURCHASES_WIDTH, SceneNavigator.PURCHASES_HEIGHT);
+    }
+
+    /**
+     * Loads the stock screen (RF-09/RF-10, CU-08). Every signed-in user may
+     * consult the stock (CU-08 actor is the employee), so there is no role guard.
+     */
+    public void showStock() {
+        session.requireCurrentUser();
+        ViewTuple<StockView, StockViewModel> tuple =
+                FluentViewLoader.fxmlView(StockView.class).load();
+        SceneNavigator.show(stage, tuple, "Monte ERP · Control de stock",
+                SceneNavigator.STOCK_WIDTH, SceneNavigator.STOCK_HEIGHT);
     }
 
     /**
