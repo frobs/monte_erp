@@ -13,7 +13,6 @@ import javafx.collections.transformation.FilteredList;
 
 import java.sql.SQLException;
 import java.util.List;
-import java.util.Locale;
 import java.util.regex.Pattern;
 
 /**
@@ -132,12 +131,9 @@ public class SuppliersViewModel extends FilterableCrudViewModel<Supplier> {
 
     @Override
     protected boolean matches(Supplier supplier) {
-        String text = trimmed(searchText.get()).toLowerCase(Locale.ROOT);
-        if (text.isEmpty()) {
-            return true;
-        }
-        return supplier.getName() != null
-                && supplier.getName().toLowerCase(Locale.ROOT).contains(text);
+        // Case- and accent-insensitive over name, phone and email (decision D5).
+        return SearchText.matches(searchText.get(), supplier.getName(), supplier.getPhone(),
+                supplier.getEmail());
     }
 
     @Override

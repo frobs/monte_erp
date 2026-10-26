@@ -87,6 +87,15 @@ class StockViewModelTest {
     }
 
     @Test
+    @DisplayName("El buscador de stock es insensible a acentos: 'raton' encuentra 'Ratón'")
+    void searchIsAccentInsensitive() {
+        viewModel.searchTextProperty().set("raton");
+
+        assertEquals(1, viewModel.filteredLevels().size());
+        assertEquals("Ratón", viewModel.filteredLevels().get(0).getProduct().getName());
+    }
+
+    @Test
     @DisplayName("selectLevel carga los lotes del producto y null los vacía")
     void selectLevelLoadsAndClearsLots() {
         viewModel.selectLevel(tecladoBelow);

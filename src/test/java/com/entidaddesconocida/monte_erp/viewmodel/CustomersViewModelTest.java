@@ -348,6 +348,30 @@ class CustomersViewModelTest {
     }
 
     @Test
+    @DisplayName("La búsqueda por teléfono acota la tabla")
+    void searchFiltersByPhone() throws Exception {
+        fakeRepository.withCustomer(new Customer(2, "Globex", "600333444", null, null));
+        viewModel.load();
+
+        viewModel.searchTextProperty().set("600333444");
+
+        assertEquals(1, viewModel.filteredCustomers().size());
+        assertEquals("Globex", viewModel.filteredCustomers().get(0).getName());
+    }
+
+    @Test
+    @DisplayName("La búsqueda por correo acota la tabla")
+    void searchFiltersByEmail() throws Exception {
+        fakeRepository.withCustomer(new Customer(2, "Globex", null, "globex@example.com", null));
+        viewModel.load();
+
+        viewModel.searchTextProperty().set("globex@");
+
+        assertEquals(1, viewModel.filteredCustomers().size());
+        assertEquals("Globex", viewModel.filteredCustomers().get(0).getName());
+    }
+
+    @Test
     @DisplayName("Error de base de datos al cargar: muestra mensaje de conexión")
     void databaseErrorOnLoadShowsMessage() {
         fakeRepository.throwOnAccess();

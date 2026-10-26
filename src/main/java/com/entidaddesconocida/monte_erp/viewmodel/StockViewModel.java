@@ -19,7 +19,6 @@ import javafx.collections.ObservableList;
 import javafx.collections.transformation.FilteredList;
 
 import java.sql.SQLException;
-import java.util.Locale;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -140,15 +139,9 @@ public class StockViewModel implements ViewModel {
         if (onlyBelowMinimum.get() && !level.isBelowMinimum()) {
             return false;
         }
-        String text = searchText.get() == null ? "" : searchText.get().trim().toLowerCase(Locale.ROOT);
-        if (text.isEmpty()) {
-            return true;
-        }
-        String name = level.getProduct().getName() == null
-                ? "" : level.getProduct().getName().toLowerCase(Locale.ROOT);
-        String sku = level.getProduct().getSku() == null
-                ? "" : level.getProduct().getSku().toLowerCase(Locale.ROOT);
-        return name.contains(text) || sku.contains(text);
+        // Case- and accent-insensitive over name/SKU, like the product screen.
+        return SearchText.matches(searchText.get(), level.getProduct().getName(),
+                level.getProduct().getSku());
     }
 
     private void applyFilter() {
