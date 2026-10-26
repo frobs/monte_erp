@@ -20,7 +20,6 @@ import javafx.scene.control.Button;
 import javafx.scene.control.ButtonType;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
-import javafx.scene.control.ListCell;
 import javafx.scene.control.TableColumn;
 import javafx.scene.control.TableView;
 import javafx.scene.control.TextField;
@@ -214,11 +213,12 @@ public class SalesOrdersView implements FxmlView<SalesOrdersViewModel> {
         draftLinesTable.setItems(viewModel.draftLines());
 
         customerCombo.setItems(viewModel.customers());
+        SearchableCombos.install(customerCombo,
+                customer -> customer == null ? "" : customer.getName());
         customerCombo.valueProperty().bindBidirectional(viewModel.selectedCustomerProperty());
 
         productCombo.setItems(viewModel.products());
-        productCombo.setCellFactory(list -> productCell());
-        productCombo.setButtonCell(productCell());
+        SearchableCombos.install(productCombo, SalesOrdersView::productLabel);
         productCombo.valueProperty().bindBidirectional(viewModel.selectedProductProperty());
 
         // RF-09: the available units of the chosen product are shown and become
@@ -368,17 +368,6 @@ public class SalesOrdersView implements FxmlView<SalesOrdersViewModel> {
     @FXML
     private void onBack() {
         appShell.showMain();
-    }
-
-    /** Product combo cell: the entity {@code toString} is a debug rendering, so the name is shown here. */
-    private static ListCell<Product> productCell() {
-        return new ListCell<>() {
-            @Override
-            protected void updateItem(Product item, boolean empty) {
-                super.updateItem(item, empty);
-                setText(empty || item == null ? null : productLabel(item));
-            }
-        };
     }
 
     private static String productLabel(Product product) {

@@ -251,6 +251,22 @@
     -fx-text-fill: #1f2a44;
 }
 
+/* ---------- Searchable combo boxes (ControlSFX SearchableComboBox) ----------
+   The popup search field (`.combo-box-search`) is styled like the other
+   text fields so it blends with the form; its "Buscar…" prompt is set from
+   SearchableCombos.install(...). */
+.searchable-combo-box .combo-box-search {
+    -fx-background-color: #ffffff;
+    -fx-background-radius: 8;
+    -fx-border-radius: 8;
+    -fx-border-color: #cbd5e1;
+    -fx-font-size: 13.5px;
+}
+
+.searchable-combo-box .combo-box-search:focused {
+    -fx-border-color: #2563eb;
+}
+
 .table-view {
     -fx-background-color: #ffffff;
     -fx-border-color: #cbd5e1;

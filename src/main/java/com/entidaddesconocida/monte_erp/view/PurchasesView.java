@@ -15,7 +15,6 @@ import javafx.beans.property.ReadOnlyStringWrapper;
 import javafx.fxml.FXML;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
-import javafx.scene.control.ListCell;
 import javafx.scene.control.TableColumn;
 import javafx.scene.control.TableView;
 import javafx.scene.control.TextField;
@@ -173,11 +172,12 @@ public class PurchasesView implements FxmlView<PurchasesViewModel> {
         draftLotsTable.setItems(viewModel.draftLots());
 
         supplierCombo.setItems(viewModel.suppliers());
+        SearchableCombos.install(supplierCombo,
+                supplier -> supplier == null ? "" : supplier.getName());
         supplierCombo.valueProperty().bindBidirectional(viewModel.selectedSupplierProperty());
 
         productCombo.setItems(viewModel.products());
-        productCombo.setCellFactory(list -> productCell());
-        productCombo.setButtonCell(productCell());
+        SearchableCombos.install(productCombo, PurchasesView::productLabel);
         productCombo.valueProperty().bindBidirectional(viewModel.selectedProductProperty());
 
         quantityField.textProperty().bindBidirectional(viewModel.quantityProperty());
@@ -252,17 +252,6 @@ public class PurchasesView implements FxmlView<PurchasesViewModel> {
     @FXML
     private void onBack() {
         appShell.showMain();
-    }
-
-    /** Product combo cell: the entity {@code toString} is a debug rendering, so the name is shown here. */
-    private static ListCell<Product> productCell() {
-        return new ListCell<>() {
-            @Override
-            protected void updateItem(Product item, boolean empty) {
-                super.updateItem(item, empty);
-                setText(empty || item == null ? null : productLabel(item));
-            }
-        };
     }
 
     private static String productLabel(Product product) {

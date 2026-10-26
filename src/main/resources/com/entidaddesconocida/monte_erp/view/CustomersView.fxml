@@ -46,7 +46,7 @@
                        styleClass="subtitle" wrapText="true"/>
 
                 <HBox alignment="CENTER_LEFT" spacing="10.0">
-                    <TextField fx:id="searchField" promptText="Buscar por nombre"
+                    <TextField fx:id="searchField" promptText="Buscar por nombre, teléfono o correo"
                                HBox.hgrow="ALWAYS" maxWidth="Infinity"/>
                     <CheckBox fx:id="showInactiveCheck" text="Mostrar inactivos"/>
                 </HBox>
