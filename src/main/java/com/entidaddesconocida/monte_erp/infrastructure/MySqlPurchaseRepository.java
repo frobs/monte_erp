@@ -1,6 +1,7 @@
 package com.entidaddesconocida.monte_erp.infrastructure;
 
 import com.entidaddesconocida.monte_erp.domain.model.Product;
+import com.entidaddesconocida.monte_erp.domain.model.ProductSupplier;
 import com.entidaddesconocida.monte_erp.domain.model.Purchase;
 import com.entidaddesconocida.monte_erp.domain.model.Stock;
 import com.entidaddesconocida.monte_erp.domain.model.Supplier;
@@ -31,6 +32,12 @@ import java.util.List;
  * {@code PRODUCT} to build <em>light</em> entities carrying the name the table
  * shows. {@link #findLots(int)} does not filter {@code p.active}: an old purchase
  * must keep showing a product that has since been given up.</p>
+ *
+ * <p>{@link #findProductSuppliers()} projects the product ↔ supplier pairs of the
+ * whole history with a {@code DISTINCT} over {@code STOCK JOIN PURCHASE}; it does
+ * <strong>not</strong> filter {@code available_quantity} nor {@code PRODUCT.active}
+ * (decision D3: the filter asks where the product comes from, so a lot at 0 still
+ * counts and an inactive product is still listed with its suppliers).</p>
  */
 public class MySqlPurchaseRepository implements PurchaseRepository {
 
@@ -52,6 +59,12 @@ public class MySqlPurchaseRepository implements PurchaseRepository {
               JOIN PRODUCT p ON p.id = s.product_id
              WHERE s.purchase_id = ?
              ORDER BY s.entry_date, s.id
+            """;
+    private static final String SELECT_PRODUCT_SUPPLIERS = """
+            SELECT DISTINCT s.product_id, p.supplier_id
+              FROM STOCK s
+              JOIN PURCHASE p ON p.id = s.purchase_id
+             ORDER BY s.product_id, p.supplier_id
             """;
 
     @Override
@@ -104,6 +117,18 @@ public class MySqlPurchaseRepository implements PurchaseRepository {
             }
         }
         return lots;
+    }
+
+    @Override
+    public List<ProductSupplier> findProductSuppliers() throws SQLException {
+        List<ProductSupplier> pairs = new ArrayList<>();
+        try (Statement statement = DatabaseConnection.getConnection().createStatement();
+             ResultSet rs = statement.executeQuery(SELECT_PRODUCT_SUPPLIERS)) {
+            while (rs.next()) {
+                pairs.add(new ProductSupplier(rs.getInt("product_id"), rs.getInt("supplier_id")));
+            }
+        }
+        return pairs;
     }
 
     private int insertPurchase(Connection connection, Purchase purchase) throws SQLException {

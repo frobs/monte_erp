@@ -1,5 +1,6 @@
 package com.entidaddesconocida.monte_erp.domain.repository;
 
+import com.entidaddesconocida.monte_erp.domain.model.ProductSupplier;
 import com.entidaddesconocida.monte_erp.domain.model.Purchase;
 import com.entidaddesconocida.monte_erp.domain.model.Stock;
 
@@ -37,4 +38,14 @@ public interface PurchaseRepository {
 
     /** Lots of the given purchase, with their product, ordered by entry date and id. */
     List<Stock> findLots(int purchaseId) throws SQLException;
+
+    /**
+     * Pairs (product, supplier) of the whole purchase history: a product appears
+     * with a supplier when it has at least one lot of a purchase from that
+     * supplier, <strong>even if the lot is at 0</strong> (decision D3, it asks
+     * "where does this product come from", not "what is available"). It feeds
+     * the supplier filter of RF-11, because the supplier is not an attribute of
+     * the product.
+     */
+    List<ProductSupplier> findProductSuppliers() throws SQLException;
 }
