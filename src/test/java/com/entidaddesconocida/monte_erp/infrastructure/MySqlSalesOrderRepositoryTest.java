@@ -2,8 +2,10 @@ package com.entidaddesconocida.monte_erp.infrastructure;
 
 import com.entidaddesconocida.monte_erp.domain.model.Customer;
 import com.entidaddesconocida.monte_erp.domain.model.Product;
+import com.entidaddesconocida.monte_erp.domain.model.ReportPeriod;
 import com.entidaddesconocida.monte_erp.domain.model.SalesOrder;
 import com.entidaddesconocida.monte_erp.domain.model.SalesOrderLine;
+import com.entidaddesconocida.monte_erp.domain.model.SalesReportLine;
 import com.entidaddesconocida.monte_erp.domain.model.StockIssue;
 import com.entidaddesconocida.monte_erp.domain.model.User;
 import com.entidaddesconocida.monte_erp.domain.service.InsufficientStockException;
@@ -18,12 +20,14 @@ import org.junit.jupiter.api.Test;
 import java.math.BigDecimal;
 import java.sql.SQLException;
 import java.sql.Timestamp;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -297,6 +301,55 @@ class MySqlSalesOrderRepositoryTest {
         assertTrue(sql.contains("FROM STOCK_ISSUE"));
         assertTrue(sql.contains("WHERE l.sales_order_id = ?"));
         assertEquals(7, fake.boundParameters().get(0).get(1));
+    }
+
+    // --- RF-12: sales report projection ----------------------------------
+
+    @Test
+    @DisplayName("RF-12: findReportLines une pedido/línea/producto y filtra por período")
+    void findReportLinesJoinsAndFiltersByPeriod() throws SQLException {
+        fake.withRows(FakeJdbc.row(
+                "order_id", 5,
+                "order_date", Timestamp.valueOf(LocalDateTime.of(2025, 1, 15, 10, 0)),
+                "status", SalesOrder.STATUS_PENDING,
+                "quantity", 3,
+                "unit_price", new BigDecimal("10.00"),
+                "product_id", 1,
+                "product_name", "Teclado",
+                "product_sku", "SKU-1"));
+        ReportPeriod period = ReportPeriod.of(LocalDate.of(2025, 1, 1), LocalDate.of(2025, 1, 31));
+
+        List<SalesReportLine> lines = repository.findReportLines(period);
+
+        assertEquals(1, lines.size());
+        SalesReportLine line = lines.get(0);
+        assertEquals(5, line.getOrderId());
+        assertEquals(SalesOrder.STATUS_PENDING, line.getStatus());
+        assertEquals(3, line.getQuantity());
+        assertEquals("Teclado", line.getProduct().getName());
+        String sql = fake.preparedSql().get(0);
+        assertTrue(sql.contains("FROM SALES_ORDER o"));
+        assertTrue(sql.contains("JOIN SALES_ORDER_LINE l"));
+        assertTrue(sql.contains("JOIN PRODUCT p"));
+        assertTrue(sql.contains("(? IS NULL OR o.order_date >= ?)"));
+        assertTrue(sql.contains("ORDER BY p.name, o.order_date, o.id"));
+        Map<Integer, Object> parameters = fake.boundParameters().get(0);
+        assertEquals(java.sql.Date.valueOf(LocalDate.of(2025, 1, 1)), parameters.get(1));
+        assertEquals(parameters.get(1), parameters.get(2));
+        assertEquals(java.sql.Date.valueOf(LocalDate.of(2025, 1, 31)), parameters.get(3));
+        assertEquals(parameters.get(3), parameters.get(4));
+    }
+
+    @Test
+    @DisplayName("RF-12: findReportLines sin período liga NULL (sin filtro de fechas)")
+    void findReportLinesWithoutPeriodBindsNull() throws SQLException {
+        repository.findReportLines(ReportPeriod.all());
+
+        Map<Integer, Object> parameters = fake.boundParameters().get(0);
+        assertNull(parameters.get(1));
+        assertNull(parameters.get(2));
+        assertNull(parameters.get(3));
+        assertNull(parameters.get(4));
     }
 
     // --- RF-08: status change -------------------------------------------

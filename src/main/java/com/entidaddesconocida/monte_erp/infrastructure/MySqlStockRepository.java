@@ -2,6 +2,7 @@ package com.entidaddesconocida.monte_erp.infrastructure;
 
 import com.entidaddesconocida.monte_erp.domain.model.Product;
 import com.entidaddesconocida.monte_erp.domain.model.Purchase;
+import com.entidaddesconocida.monte_erp.domain.model.ReportPeriod;
 import com.entidaddesconocida.monte_erp.domain.model.Stock;
 import com.entidaddesconocida.monte_erp.domain.model.StockLevel;
 import com.entidaddesconocida.monte_erp.domain.repository.StockRepository;
@@ -11,6 +12,8 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.sql.Types;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -56,6 +59,22 @@ public class MySqlStockRepository implements StockRepository {
              WHERE s.product_id = ? AND s.available_quantity > 0
              ORDER BY s.entry_date, s.id
             """;
+    /**
+     * Lots of the stock report (RF-12): the whole table joined to its product,
+     * optionally bounded by {@code entry_date}. The {@code ? IS NULL} guards let
+     * the same statement serve the whole history and a period without
+     * concatenating SQL; the upper bound is exclusive at {@code + 1 day} so a
+     * whole "hasta" day is included without a time component.
+     */
+    private static final String SELECT_ALL_LOTS = """
+            SELECT s.id, s.initial_quantity, s.available_quantity, s.purchase_price, s.entry_date,
+                   s.purchase_id, p.id AS product_id, p.name AS product_name, p.sku AS product_sku
+              FROM STOCK s
+              JOIN PRODUCT p ON p.id = s.product_id
+             WHERE (? IS NULL OR s.entry_date >= ?)
+               AND (? IS NULL OR s.entry_date < DATE_ADD(?, INTERVAL 1 DAY))
+             ORDER BY p.name, s.entry_date, s.id
+            """;
 
     @Override
     public List<StockLevel> findLevels() throws SQLException {
@@ -77,6 +96,36 @@ public class MySqlStockRepository implements StockRepository {
     @Override
     public List<Stock> findAvailable(int productId) throws SQLException {
         return findLots(SELECT_AVAILABLE, productId);
+    }
+
+    @Override
+    public List<Stock> findAllLots(ReportPeriod period) throws SQLException {
+        List<Stock> lots = new ArrayList<>();
+        try (PreparedStatement ps = DatabaseConnection.getConnection()
+                .prepareStatement(SELECT_ALL_LOTS)) {
+            // Both placeholders of the lower bound (the IS NULL guard and the
+            // comparison) receive the same date, and the same for the upper one.
+            bindDate(ps, 1, period.from());
+            bindDate(ps, 2, period.from());
+            bindDate(ps, 3, period.to());
+            bindDate(ps, 4, period.to());
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    lots.add(mapLot(rs));
+                }
+            }
+        }
+        return lots;
+    }
+
+    /** Binds an optional date, using SQL NULL (with an explicit type) when absent. */
+    private static void bindDate(PreparedStatement ps, int index, LocalDate date)
+            throws SQLException {
+        if (date == null) {
+            ps.setNull(index, Types.DATE);
+        } else {
+            ps.setDate(index, java.sql.Date.valueOf(date));
+        }
     }
 
     private List<Stock> findLots(String sql, int productId) throws SQLException {

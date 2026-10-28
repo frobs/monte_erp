@@ -1,5 +1,6 @@
 package com.entidaddesconocida.monte_erp.infrastructure;
 
+import com.entidaddesconocida.monte_erp.domain.model.ReportPeriod;
 import com.entidaddesconocida.monte_erp.domain.model.Stock;
 import com.entidaddesconocida.monte_erp.domain.model.StockLevel;
 import com.entidaddesconocida.monte_erp.infrastructure.config.DatabaseConnection;
@@ -13,11 +14,14 @@ import org.junit.jupiter.api.Test;
 import java.math.BigDecimal;
 import java.sql.SQLException;
 import java.sql.Timestamp;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -127,6 +131,40 @@ class MySqlStockRepositoryTest {
         assertTrue(sql.contains("available_quantity > 0"));
         assertTrue(sql.contains("ORDER BY s.entry_date, s.id"));
         assertEquals(1, fake.boundParameters().get(0).get(1));
+    }
+
+    @Test
+    @DisplayName("findAllLots uno el producto, filtra por período y ordena por nombre/fecha")
+    void findAllLotsJoinsAndFiltersByPeriod() throws SQLException {
+        fake.withRows(lotRow(11, 10, 7, 5));
+        ReportPeriod period = ReportPeriod.of(LocalDate.of(2025, 1, 1), LocalDate.of(2025, 1, 31));
+
+        List<Stock> lots = repository.findAllLots(period);
+
+        assertEquals(1, lots.size());
+        assertEquals("Teclado", lots.get(0).getProduct().getName());
+        String sql = fake.preparedSql().get(0);
+        assertTrue(sql.contains("JOIN PRODUCT"));
+        assertTrue(sql.contains("(? IS NULL OR s.entry_date >= ?)"));
+        assertTrue(sql.contains("DATE_ADD(?, INTERVAL 1 DAY)"));
+        assertTrue(sql.contains("ORDER BY p.name, s.entry_date, s.id"));
+        Map<Integer, Object> parameters = fake.boundParameters().get(0);
+        assertEquals(java.sql.Date.valueOf(LocalDate.of(2025, 1, 1)), parameters.get(1));
+        assertEquals(parameters.get(1), parameters.get(2));
+        assertEquals(java.sql.Date.valueOf(LocalDate.of(2025, 1, 31)), parameters.get(3));
+        assertEquals(parameters.get(3), parameters.get(4));
+    }
+
+    @Test
+    @DisplayName("findAllLots sin período liga NULL en las cuatro marcas (sin filtro)")
+    void findAllLotsWithoutPeriodBindsNull() throws SQLException {
+        repository.findAllLots(ReportPeriod.all());
+
+        Map<Integer, Object> parameters = fake.boundParameters().get(0);
+        assertNull(parameters.get(1));
+        assertNull(parameters.get(2));
+        assertNull(parameters.get(3));
+        assertNull(parameters.get(4));
     }
 
     @Test

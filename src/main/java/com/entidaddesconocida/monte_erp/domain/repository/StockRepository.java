@@ -1,5 +1,6 @@
 package com.entidaddesconocida.monte_erp.domain.repository;
 
+import com.entidaddesconocida.monte_erp.domain.model.ReportPeriod;
 import com.entidaddesconocida.monte_erp.domain.model.Stock;
 import com.entidaddesconocida.monte_erp.domain.model.StockLevel;
 
@@ -36,4 +37,14 @@ public interface StockRepository {
      * sale screen.
      */
     List<Stock> findAvailable(int productId) throws SQLException;
+
+    /**
+     * Every lot inside the given period, with its product and origin purchase,
+     * ordered by product name and then FIFO ({@code entry_date, id}): the
+     * projection of the stock report (RF-12 / CU-09, decision D8). The period
+     * filters {@code STOCK.entry_date} with inclusive bounds and an empty period
+     * means no filter. A lot at 0 is still listed: the report totals decide
+     * whether it adds value.
+     */
+    List<Stock> findAllLots(ReportPeriod period) throws SQLException;
 }

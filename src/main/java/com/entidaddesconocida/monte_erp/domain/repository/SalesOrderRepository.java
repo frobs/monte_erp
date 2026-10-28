@@ -1,7 +1,9 @@
 package com.entidaddesconocida.monte_erp.domain.repository;
 
+import com.entidaddesconocida.monte_erp.domain.model.ReportPeriod;
 import com.entidaddesconocida.monte_erp.domain.model.SalesOrder;
 import com.entidaddesconocida.monte_erp.domain.model.SalesOrderLine;
+import com.entidaddesconocida.monte_erp.domain.model.SalesReportLine;
 import com.entidaddesconocida.monte_erp.domain.model.StockIssue;
 import com.entidaddesconocida.monte_erp.domain.service.InsufficientStockException;
 
@@ -63,4 +65,14 @@ public interface SalesOrderRepository {
      * only after the guard matched (0 rows means no stock is touched).</p>
      */
     int changeStatus(int id, String currentStatus, String newStatus) throws SQLException;
+
+    /**
+     * Flat projection of the order lines inside the given period, used as the raw
+     * input of the sales report (RF-12 / CU-09, decisions D2/D3/D8). The period
+     * filters {@code SALES_ORDER.order_date} with inclusive bounds and an empty
+     * period means no filter. It does <strong>not</strong> filter by status:
+     * excluding the cancelled orders is a domain invariant
+     * ({@code SalesReportCalculator}, decision D3), not a {@code WHERE}.
+     */
+    List<SalesReportLine> findReportLines(ReportPeriod period) throws SQLException;
 }

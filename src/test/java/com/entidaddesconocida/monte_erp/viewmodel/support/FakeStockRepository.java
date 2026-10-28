@@ -2,6 +2,7 @@ package com.entidaddesconocida.monte_erp.viewmodel.support;
 
 import com.entidaddesconocida.monte_erp.domain.model.Product;
 import com.entidaddesconocida.monte_erp.domain.model.Purchase;
+import com.entidaddesconocida.monte_erp.domain.model.ReportPeriod;
 import com.entidaddesconocida.monte_erp.domain.model.Stock;
 import com.entidaddesconocida.monte_erp.domain.model.StockLevel;
 import com.entidaddesconocida.monte_erp.domain.repository.StockRepository;
@@ -88,6 +89,25 @@ public class FakeStockRepository implements StockRepository {
     public List<Stock> findAvailable(int productId) throws SQLException {
         maybeThrow("findAvailable");
         return orderedLots(productId, true);
+    }
+
+    @Override
+    public List<Stock> findAllLots(ReportPeriod period) throws SQLException {
+        maybeThrow("findAllLots");
+        List<Stock> result = new ArrayList<>();
+        for (List<Stock> lots : lotsByProduct.values()) {
+            for (Stock lot : lots) {
+                if (period == null || period.contains(lot.getEntryDate())) {
+                    result.add(copy(lot));
+                }
+            }
+        }
+        // Mimics the database ORDER BY: product name, then entry_date, then id.
+        result.sort(Comparator
+                .comparing((Stock lot) -> lot.getProduct() == null ? "" : lot.getProduct().getName())
+                .thenComparing(Stock::getEntryDate, Comparator.nullsLast(Comparator.naturalOrder()))
+                .thenComparingInt(Stock::getId));
+        return result;
     }
 
     private List<Stock> orderedLots(int productId, boolean onlyAvailable) {

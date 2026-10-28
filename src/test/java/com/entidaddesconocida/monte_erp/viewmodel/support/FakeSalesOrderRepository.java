@@ -3,8 +3,10 @@ package com.entidaddesconocida.monte_erp.viewmodel.support;
 import com.entidaddesconocida.monte_erp.domain.model.Customer;
 import com.entidaddesconocida.monte_erp.domain.model.Product;
 import com.entidaddesconocida.monte_erp.domain.model.Purchase;
+import com.entidaddesconocida.monte_erp.domain.model.ReportPeriod;
 import com.entidaddesconocida.monte_erp.domain.model.SalesOrder;
 import com.entidaddesconocida.monte_erp.domain.model.SalesOrderLine;
+import com.entidaddesconocida.monte_erp.domain.model.SalesReportLine;
 import com.entidaddesconocida.monte_erp.domain.model.Stock;
 import com.entidaddesconocida.monte_erp.domain.model.StockIssue;
 import com.entidaddesconocida.monte_erp.domain.model.User;
@@ -140,6 +142,29 @@ public class FakeSalesOrderRepository implements SalesOrderRepository {
             result.add(copy(issue));
         }
         return result;
+    }
+
+    @Override
+    public List<SalesReportLine> findReportLines(ReportPeriod period) throws SQLException {
+        maybeThrow("findReportLines");
+        List<SalesReportLine> lines = new ArrayList<>();
+        for (SalesOrder order : orders.values()) {
+            if (period != null && !period.contains(order.getOrderDate())) {
+                continue;
+            }
+            for (SalesOrderLine line : linesByOrder.getOrDefault(order.getId(), List.of())) {
+                lines.add(new SalesReportLine(order.getId(), order.getOrderDate(), order.getStatus(),
+                        line.getQuantity(), line.getUnitPrice(), copy(line.getProduct())));
+            }
+        }
+        // Mimics the database ORDER BY: product name, then order_date, then id.
+        lines.sort(Comparator
+                .comparing((SalesReportLine line) -> line.getProduct() == null
+                        ? "" : line.getProduct().getName())
+                .thenComparing(SalesReportLine::getOrderDate,
+                        Comparator.nullsLast(Comparator.naturalOrder()))
+                .thenComparingInt(SalesReportLine::getOrderId));
+        return lines;
     }
 
     @Override

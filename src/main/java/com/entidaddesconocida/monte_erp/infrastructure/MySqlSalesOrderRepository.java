@@ -3,8 +3,10 @@ package com.entidaddesconocida.monte_erp.infrastructure;
 import com.entidaddesconocida.monte_erp.domain.model.Customer;
 import com.entidaddesconocida.monte_erp.domain.model.Product;
 import com.entidaddesconocida.monte_erp.domain.model.Purchase;
+import com.entidaddesconocida.monte_erp.domain.model.ReportPeriod;
 import com.entidaddesconocida.monte_erp.domain.model.SalesOrder;
 import com.entidaddesconocida.monte_erp.domain.model.SalesOrderLine;
+import com.entidaddesconocida.monte_erp.domain.model.SalesReportLine;
 import com.entidaddesconocida.monte_erp.domain.model.Stock;
 import com.entidaddesconocida.monte_erp.domain.model.StockIssue;
 import com.entidaddesconocida.monte_erp.domain.repository.SalesOrderRepository;
@@ -17,6 +19,8 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.sql.Types;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -111,6 +115,24 @@ public class MySqlSalesOrderRepository implements SalesOrderRepository {
             "DELETE FROM STOCK_ISSUE WHERE sales_order_line_id IN"
                     + " (SELECT id FROM SALES_ORDER_LINE WHERE sales_order_id = ?)";
     /**
+     * Flat projection of the order lines of the sales report (RF-12): one row per
+     * line with its order, product, quantity and unit price. The period bounds
+     * {@code order_date} with the same {@code ? IS NULL} pattern as the stock
+     * report; the status is returned but not filtered (the exclusion of cancelled
+     * orders is a domain invariant, decision D3).
+     */
+    private static final String SELECT_REPORT_LINES = """
+            SELECT o.id AS order_id, o.order_date, o.status,
+                   l.quantity, l.unit_price,
+                   p.id AS product_id, p.name AS product_name, p.sku AS product_sku
+              FROM SALES_ORDER o
+              JOIN SALES_ORDER_LINE l ON l.sales_order_id = o.id
+              JOIN PRODUCT p ON p.id = l.product_id
+             WHERE (? IS NULL OR o.order_date >= ?)
+               AND (? IS NULL OR o.order_date < DATE_ADD(?, INTERVAL 1 DAY))
+             ORDER BY p.name, o.order_date, o.id
+            """;
+    /**
      * Optimistic guard (decision D9): the row is only updated while it still has
      * the status the caller read, so a concurrent change cannot be overwritten.
      */
@@ -181,6 +203,34 @@ public class MySqlSalesOrderRepository implements SalesOrderRepository {
             }
         }
         return issues;
+    }
+
+    @Override
+    public List<SalesReportLine> findReportLines(ReportPeriod period) throws SQLException {
+        List<SalesReportLine> lines = new ArrayList<>();
+        try (PreparedStatement ps = DatabaseConnection.getConnection()
+                .prepareStatement(SELECT_REPORT_LINES)) {
+            bindDate(ps, 1, period.from());
+            bindDate(ps, 2, period.from());
+            bindDate(ps, 3, period.to());
+            bindDate(ps, 4, period.to());
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    lines.add(mapReportLine(rs));
+                }
+            }
+        }
+        return lines;
+    }
+
+    /** Binds an optional date, using SQL NULL (with an explicit type) when absent. */
+    private static void bindDate(PreparedStatement ps, int index, LocalDate date)
+            throws SQLException {
+        if (date == null) {
+            ps.setNull(index, Types.DATE);
+        } else {
+            ps.setDate(index, java.sql.Date.valueOf(date));
+        }
     }
 
     @Override
@@ -358,6 +408,13 @@ public class MySqlSalesOrderRepository implements SalesOrderRepository {
         Product product = lightProduct(rs, "product_id", "product_name", "product_sku");
         return new SalesOrderLine(rs.getInt("id"), rs.getInt("quantity"),
                 rs.getBigDecimal("unit_price"), product);
+    }
+
+    private SalesReportLine mapReportLine(ResultSet rs) throws SQLException {
+        Product product = lightProduct(rs, "product_id", "product_name", "product_sku");
+        return new SalesReportLine(rs.getInt("order_id"),
+                rs.getTimestamp("order_date").toLocalDateTime(), rs.getString("status"),
+                rs.getInt("quantity"), rs.getBigDecimal("unit_price"), product);
     }
 
     private StockIssue mapIssue(ResultSet rs) throws SQLException {        Product product = lightProduct(rs, "product_id", "product_name", "product_sku");
