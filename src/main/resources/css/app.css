@@ -318,3 +318,45 @@
     -fx-border-width: 1.5;
     -fx-border-radius: 4;
 }
+
+/* ---------- Reports (RF-12) ----------
+   The period pickers and the tab pane of the reports screen, kept coherent with
+   the light theme of the cards (no inline styles). */
+.date-picker {
+    -fx-background-color: #ffffff;
+    -fx-background-radius: 8;
+    -fx-border-radius: 8;
+    -fx-border-color: #cbd5e1;
+    -fx-font-size: 13.5px;
+}
+
+.date-picker:focused {
+    -fx-border-color: #2563eb;
+}
+
+.reports-tab-pane > .tab-header-area > .tab-header-background {
+    -fx-background-color: transparent;
+}
+
+.reports-tab-pane > .tab-header-area > .headers-region > .tab {
+    -fx-background-color: #e2e8f0;
+    -fx-background-radius: 8 8 0 0;
+    -fx-padding: 8 18 8 18;
+}
+
+.reports-tab-pane > .tab-header-area > .headers-region > .tab:selected {
+    -fx-background-color: #ffffff;
+}
+
+.reports-tab-pane > .tab-header-area > .headers-region > .tab .tab-label {
+    -fx-text-fill: #334155;
+    -fx-font-size: 13px;
+    -fx-font-weight: bold;
+}
+
+.reports-tab-pane > .tab-content-area {
+    -fx-background-color: #ffffff;
+    -fx-background-radius: 0 8 8 8;
+    -fx-border-color: #cbd5e1;
+    -fx-border-radius: 0 8 8 8;
+}

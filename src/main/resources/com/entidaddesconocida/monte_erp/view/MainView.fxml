@@ -57,6 +57,7 @@
                 <Button text="Compras" onAction="#onPurchases" styleClass="module-button"/>
                 <Button text="Pedidos" onAction="#onSalesOrders" styleClass="module-button"/>
                 <Button text="Stock" onAction="#onStock" styleClass="module-button"/>
+                <Button text="Informes" onAction="#onReports" styleClass="module-button"/>
                 <Button fx:id="manageUsersButton" text="Gestión de usuarios"
                         onAction="#onManageUsers" styleClass="admin-module-button"/>
             </TilePane>

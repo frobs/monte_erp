@@ -7,6 +7,7 @@ import com.entidaddesconocida.monte_erp.view.LoginView;
 import com.entidaddesconocida.monte_erp.view.MainView;
 import com.entidaddesconocida.monte_erp.view.ProductsView;
 import com.entidaddesconocida.monte_erp.view.PurchasesView;
+import com.entidaddesconocida.monte_erp.view.ReportsView;
 import com.entidaddesconocida.monte_erp.view.SalesOrdersView;
 import com.entidaddesconocida.monte_erp.view.SetupView;
 import com.entidaddesconocida.monte_erp.view.StockView;
@@ -17,6 +18,7 @@ import com.entidaddesconocida.monte_erp.viewmodel.CustomersViewModel;
 import com.entidaddesconocida.monte_erp.viewmodel.LoginViewModel;
 import com.entidaddesconocida.monte_erp.viewmodel.ProductsViewModel;
 import com.entidaddesconocida.monte_erp.viewmodel.PurchasesViewModel;
+import com.entidaddesconocida.monte_erp.viewmodel.ReportsViewModel;
 import com.entidaddesconocida.monte_erp.viewmodel.SalesOrdersViewModel;
 import com.entidaddesconocida.monte_erp.viewmodel.SetupViewModel;
 import com.entidaddesconocida.monte_erp.viewmodel.StockViewModel;
@@ -181,6 +183,18 @@ public class AppShell {
                 FluentViewLoader.fxmlView(StockView.class).load();
         SceneNavigator.show(stage, tuple, "Monte ERP · Control de stock",
                 SceneNavigator.STOCK_WIDTH, SceneNavigator.STOCK_HEIGHT);
+    }
+
+    /**
+     * Loads the reports screen (RF-12, CU-09). Every signed-in user may generate
+     * reports (CU-09 actor is the employee), so there is no role guard.
+     */
+    public void showReports() {
+        session.requireCurrentUser();
+        ViewTuple<ReportsView, ReportsViewModel> tuple =
+                FluentViewLoader.fxmlView(ReportsView.class).load();
+        SceneNavigator.show(stage, tuple, "Monte ERP · Informes",
+                SceneNavigator.REPORTS_WIDTH, SceneNavigator.REPORTS_HEIGHT);
     }
 
     /**

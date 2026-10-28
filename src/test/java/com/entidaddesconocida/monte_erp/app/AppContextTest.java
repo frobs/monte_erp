@@ -11,6 +11,7 @@ import com.entidaddesconocida.monte_erp.view.LoginView;
 import com.entidaddesconocida.monte_erp.view.MainView;
 import com.entidaddesconocida.monte_erp.view.ProductsView;
 import com.entidaddesconocida.monte_erp.view.PurchasesView;
+import com.entidaddesconocida.monte_erp.view.ReportsView;
 import com.entidaddesconocida.monte_erp.view.SalesOrdersView;
 import com.entidaddesconocida.monte_erp.view.SetupView;
 import com.entidaddesconocida.monte_erp.view.StockView;
@@ -21,6 +22,7 @@ import com.entidaddesconocida.monte_erp.viewmodel.LoginViewModel;
 import com.entidaddesconocida.monte_erp.viewmodel.MainViewModel;
 import com.entidaddesconocida.monte_erp.viewmodel.ProductsViewModel;
 import com.entidaddesconocida.monte_erp.viewmodel.PurchasesViewModel;
+import com.entidaddesconocida.monte_erp.viewmodel.ReportsViewModel;
 import com.entidaddesconocida.monte_erp.viewmodel.SalesOrdersViewModel;
 import com.entidaddesconocida.monte_erp.viewmodel.SetupViewModel;
 import com.entidaddesconocida.monte_erp.viewmodel.StockViewModel;
@@ -237,6 +239,21 @@ class AppContextTest {
     }
 
     @Test
+    @DisplayName("create(ReportsViewModel) devuelve un VM con los repositorios inyectados")
+    void reportsViewModelIsCreatedWithRepositories() {
+        AppContext context = context(new SessionState());
+
+        ReportsViewModel vm = (ReportsViewModel) context.create(ReportsViewModel.class);
+        vm.load();
+
+        assertNotNull(vm);
+        assertEquals(0, vm.stockLots().size());
+        assertEquals(0, vm.salesRows().size());
+        assertTrue(vm.stockTotalsProperty().get().startsWith("Lotes: 0"));
+        assertTrue(vm.salesTotalsProperty().get().startsWith("Pedidos: 0"));
+    }
+
+    @Test
     @DisplayName("Las vistas se crean como instancias nuevas (no null)")
     void viewsAreCreated() {
         AppContext context = context(new SessionState());
@@ -250,5 +267,6 @@ class AppContextTest {
         assertNotNull(context.create(SalesOrdersView.class));
         assertNotNull(context.create(PurchasesView.class));
         assertNotNull(context.create(StockView.class));
+        assertNotNull(context.create(ReportsView.class));
     }
 }

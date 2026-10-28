@@ -17,6 +17,7 @@ import com.entidaddesconocida.monte_erp.view.LoginView;
 import com.entidaddesconocida.monte_erp.view.MainView;
 import com.entidaddesconocida.monte_erp.view.ProductsView;
 import com.entidaddesconocida.monte_erp.view.PurchasesView;
+import com.entidaddesconocida.monte_erp.view.ReportsView;
 import com.entidaddesconocida.monte_erp.view.SalesOrdersView;
 import com.entidaddesconocida.monte_erp.view.SetupView;
 import com.entidaddesconocida.monte_erp.view.StockView;
@@ -28,6 +29,7 @@ import com.entidaddesconocida.monte_erp.viewmodel.LoginViewModel;
 import com.entidaddesconocida.monte_erp.viewmodel.MainViewModel;
 import com.entidaddesconocida.monte_erp.viewmodel.ProductsViewModel;
 import com.entidaddesconocida.monte_erp.viewmodel.PurchasesViewModel;
+import com.entidaddesconocida.monte_erp.viewmodel.ReportsViewModel;
 import com.entidaddesconocida.monte_erp.viewmodel.SalesOrdersViewModel;
 import com.entidaddesconocida.monte_erp.viewmodel.SetupViewModel;
 import com.entidaddesconocida.monte_erp.viewmodel.StockViewModel;
@@ -92,6 +94,7 @@ public final class AppContext {
         bind(SalesOrdersView.class, () -> new SalesOrdersView(appShell));
         bind(PurchasesView.class, () -> new PurchasesView(appShell));
         bind(StockView.class, () -> new StockView(appShell));
+        bind(ReportsView.class, () -> new ReportsView(appShell));
 
         // ViewModels: constructor injection, one new instance per view load.
         bind(LoginViewModel.class, () -> new LoginViewModel(userRepository));
@@ -115,6 +118,8 @@ public final class AppContext {
                 () -> new PurchasesViewModel(purchaseRepository, supplierRepository,
                         productRepository, session.requireCurrentUser()));
         bind(StockViewModel.class, () -> new StockViewModel(stockRepository));
+        bind(ReportsViewModel.class,
+                () -> new ReportsViewModel(salesOrderRepository, stockRepository));
         bind(SetupViewModel.class,
                 () -> new SetupViewModel(setupService, appShell.isOnboarding()));
     }

@@ -6,14 +6,9 @@ import com.entidaddesconocida.monte_erp.viewmodel.MainViewModel;
 import de.saxsys.mvvmfx.FxmlView;
 import de.saxsys.mvvmfx.InjectViewModel;
 
-import javafx.event.ActionEvent;
 import javafx.fxml.FXML;
-import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
-
-import java.util.logging.Level;
-import java.util.logging.Logger;
 
 /**
  * Code-behind of the main FXML.
@@ -22,8 +17,6 @@ import java.util.logging.Logger;
  * navigation to the {@link AppShell}.</p>
  */
 public class MainView implements FxmlView<MainViewModel> {
-
-    private static final Logger LOGGER = Logger.getLogger(MainView.class.getName());
 
     private final AppShell appShell;
 
@@ -101,9 +94,8 @@ public class MainView implements FxmlView<MainViewModel> {
     }
 
     @FXML
-    private void onPendingModule(ActionEvent event) {
-        String module = event.getSource() instanceof Button button ? button.getText() : "Módulo";
-        showPending(module, "Este módulo todavía no está implementado.");
+    private void onReports() {
+        appShell.showReports();
     }
 
     @FXML
@@ -114,14 +106,5 @@ public class MainView implements FxmlView<MainViewModel> {
     @FXML
     private void onExit() {
         appShell.exit();
-    }
-
-    private void showPending(String title, String message) {
-        Alert alert = new Alert(Alert.AlertType.INFORMATION);
-        alert.setTitle("Monte ERP");
-        alert.setHeaderText(title);
-        alert.setContentText(message);
-        alert.showAndWait();
-        LOGGER.log(Level.FINE, "Pending module requested: {0}", title);
     }
 }
