@@ -2,12 +2,8 @@ package com.entidaddesconocida.monte_erp.viewmodel;
 
 import com.entidaddesconocida.monte_erp.domain.model.Category;
 import com.entidaddesconocida.monte_erp.domain.model.Product;
-import com.entidaddesconocida.monte_erp.domain.model.ProductSupplier;
-import com.entidaddesconocida.monte_erp.domain.model.Supplier;
 import com.entidaddesconocida.monte_erp.domain.repository.CategoryRepository;
 import com.entidaddesconocida.monte_erp.domain.repository.ProductRepository;
-import com.entidaddesconocida.monte_erp.domain.repository.PurchaseRepository;
-import com.entidaddesconocida.monte_erp.domain.repository.SupplierRepository;
 
 import javafx.beans.property.ObjectProperty;
 import javafx.beans.property.ReadOnlyStringProperty;
@@ -22,33 +18,21 @@ import javafx.collections.transformation.FilteredList;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.sql.SQLException;
-import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.Locale;
 
 /**
  * ViewModel of the product management screen (RF-03 / CU-03, with the search
  * included from RF-11 / CU-10).
  *
- * <p>Holds the product list, the in-memory filters (text over name/SKU, category
- * and supplier combos) and the edition form. Products are disabled logically,
- * never physically deleted, because {@code STOCK} and {@code SALES_ORDER_LINE}
+ * <p>Holds the product list, the in-memory filters (text over name/SKU and the
+ * category combo) and the edition form. Products are disabled logically, never
+ * physically deleted, because {@code STOCK} and {@code SALES_ORDER_LINE}
  * reference them with {@code ON DELETE RESTRICT}.</p>
  *
  * <p>The supplier is not a product attribute (it belongs to the purchase), so the
- * form does not offer it. The <strong>filter</strong> by supplier is fed from the
- * purchase/lot history (RF-14): {@link PurchaseRepository#findProductSuppliers()}
- * is loaded and grouped into {@code productId → supplierIds}. A product matches a
- * supplier when it has at least one lot of a purchase from that supplier, even if
- * the lot is at 0 (decision D3, the full history). The combo lists
- * {@code SupplierRepository.findAll()}, so an inactive supplier is still
- * filterable (decision D2, parallel to the category rule D5).</p>
- *
- * <p>The text search is case- and accent-insensitive through {@link SearchText}
- * (decision D5), so it matches the {@code utf8mb4_unicode_ci} collation of the
- * database: "cafe" finds "Café".</p>
+ * form and the filters do not offer it. Filtering a product by supplier would
+ * need the purchase/lot history (RF-14) and is out of scope here.</p>
  *
  * <p>The stock is out of scope: it is computed from the lots ({@code STOCK}) in
  * RF-09/RF-10. The category is optional: a product saved with an empty combo is
@@ -57,7 +41,7 @@ import java.util.Set;
  * <p>Only the product specific parts live here: the field rules, the SKU
  * duplicate check, the inactive category rule (decision D4) and the labels. The
  * CRUD skeleton comes from {@link FilterableCrudViewModel} (search, inactive
- * toggle and category/supplier filters) and {@link CrudViewModel}.</p>
+ * toggle and category filter) and {@link CrudViewModel}.</p>
  */
 public class ProductsViewModel extends FilterableCrudViewModel<Product> {
 
@@ -69,44 +53,34 @@ public class ProductsViewModel extends FilterableCrudViewModel<Product> {
 
     private static final int MAX_NAME_LENGTH = 100;
     private static final int MAX_SKU_LENGTH = 50;
+    private static final int MAX_DESCRIPTION_LENGTH = 255;
     private static final BigDecimal MAX_PRICE = new BigDecimal("99999999.99");
 
     private final ProductRepository productRepository;
     private final CategoryRepository categoryRepository;
-    private final SupplierRepository supplierRepository;
-    private final PurchaseRepository purchaseRepository;
 
     private final StringProperty name = new SimpleStringProperty("");
     private final StringProperty sku = new SimpleStringProperty("");
+    private final StringProperty description = new SimpleStringProperty("");
     private final StringProperty price = new SimpleStringProperty("");
-    private final StringProperty minStock = new SimpleStringProperty("");
     private final ObjectProperty<Category> category = new SimpleObjectProperty<>();
     private final ObjectProperty<Category> categoryFilter = new SimpleObjectProperty<>();
-    private final ObjectProperty<Supplier> supplierFilter = new SimpleObjectProperty<>();
 
     private final ObservableList<Category> categoryOptions = FXCollections.observableArrayList();
     private final ObservableList<Category> categoryFilterOptions = FXCollections.observableArrayList();
-    private final ObservableList<Supplier> supplierFilterOptions = FXCollections.observableArrayList();
-
-    /** Suppliers of each product, from the purchase history (decision D3). */
-    private final Map<Integer, Set<Integer>> supplierIdsByProduct = new HashMap<>();
 
     private final ReadOnlyStringWrapper nameError = new ReadOnlyStringWrapper("");
     private final ReadOnlyStringWrapper skuError = new ReadOnlyStringWrapper("");
+    private final ReadOnlyStringWrapper descriptionError = new ReadOnlyStringWrapper("");
     private final ReadOnlyStringWrapper priceError = new ReadOnlyStringWrapper("");
-    private final ReadOnlyStringWrapper minStockError = new ReadOnlyStringWrapper("");
     private final ReadOnlyStringWrapper categoryError = new ReadOnlyStringWrapper("");
 
     public ProductsViewModel(ProductRepository productRepository,
-                             CategoryRepository categoryRepository,
-                             SupplierRepository supplierRepository,
-                             PurchaseRepository purchaseRepository) {
+                             CategoryRepository categoryRepository) {
         this.productRepository = productRepository;
         this.categoryRepository = categoryRepository;
-        this.supplierRepository = supplierRepository;
-        this.purchaseRepository = purchaseRepository;
-        bindFilter(searchText, categoryFilter, supplierFilter);
-        watchFields(name, sku, price, minStock, category);
+        bindFilter(searchText, categoryFilter);
+        watchFields(name, sku, description, price, category);
         updateCount();
     }
 
@@ -133,14 +107,14 @@ public class ProductsViewModel extends FilterableCrudViewModel<Product> {
         return sku;
     }
 
+    /** Optional description; a blank value is persisted as {@code NULL}. */
+    public StringProperty descriptionProperty() {
+        return description;
+    }
+
     /** Price as typed by the user; parsed in the save template. */
     public StringProperty priceProperty() {
         return price;
-    }
-
-    /** Minimum stock typed by the user (RF-10); empty means 0. */
-    public StringProperty minStockProperty() {
-        return minStock;
     }
 
     /** Category chosen in the form; {@code null} means "sin categoría" (optional since RF-03). */
@@ -166,20 +140,6 @@ public class ProductsViewModel extends FilterableCrudViewModel<Product> {
         return categoryFilterOptions;
     }
 
-    /** Supplier filter; {@code null} means "every supplier". */
-    public ObjectProperty<Supplier> supplierFilterProperty() {
-        return supplierFilter;
-    }
-
-    /**
-     * Suppliers for the filter combo: every supplier, active or not, so an
-     * inactive one is still filterable (decision D2/D5, via
-     * {@code SupplierRepository.findAll()}).
-     */
-    public ObservableList<Supplier> supplierFilterOptions() {
-        return supplierFilterOptions;
-    }
-
     /** Footer text with the number of products currently shown. */
     public ReadOnlyStringProperty productCountProperty() {
         return itemCountProperty();
@@ -195,14 +155,14 @@ public class ProductsViewModel extends FilterableCrudViewModel<Product> {
         return skuError.getReadOnlyProperty();
     }
 
+    /** Empty when the description is valid; the message to show otherwise. */
+    public ReadOnlyStringProperty descriptionErrorProperty() {
+        return descriptionError.getReadOnlyProperty();
+    }
+
     /** Empty when the price is valid; the message to show otherwise. */
     public ReadOnlyStringProperty priceErrorProperty() {
         return priceError.getReadOnlyProperty();
-    }
-
-    /** Empty when the minimum stock is valid; the message to show otherwise (RF-10). */
-    public ReadOnlyStringProperty minStockErrorProperty() {
-        return minStockError.getReadOnlyProperty();
     }
 
     /**
@@ -218,35 +178,12 @@ public class ProductsViewModel extends FilterableCrudViewModel<Product> {
         newItem();
     }
 
-    /**
-     * Resets every filter to its default so the screen looks as if it had just
-     * been opened (decision D6): empty search text, no category, no supplier and
-     * "Mostrar inactivos" unchecked. The checkbox is set <strong>last</strong>
-     * because it is the only one that triggers a reload, and only when it was
-     * checked (the listeners of the other filters update the counter).
-     */
-    public void clearFilters() {
-        searchText.set("");
-        categoryFilter.set(null);
-        supplierFilter.set(null);
-        showInactive.set(false);
-    }
-
     @Override
     protected void loadAuxiliaryData() throws SQLException {
         // The form only offers assignable (active) categories; the filter still
         // lists the ones given up so their products can be found (D4 / D5).
         categoryOptions.setAll(categoryRepository.findActive());
         categoryFilterOptions.setAll(categoryRepository.findAll());
-        // The supplier filter lists every supplier (active or not, D2) and the
-        // product↔supplier map comes from the whole purchase history (D3).
-        supplierFilterOptions.setAll(supplierRepository.findAll());
-        supplierIdsByProduct.clear();
-        for (ProductSupplier pair : purchaseRepository.findProductSuppliers()) {
-            supplierIdsByProduct
-                    .computeIfAbsent(pair.getProductId(), key -> new HashSet<>())
-                    .add(pair.getSupplierId());
-        }
     }
 
     @Override
@@ -261,39 +198,39 @@ public class ProductsViewModel extends FilterableCrudViewModel<Product> {
 
     @Override
     protected boolean matches(Product product) {
-        // Case- and accent-insensitive over name/SKU (decision D5).
-        if (!SearchText.matches(searchText.get(), product.getName(), product.getSku())) {
-            return false;
+        String text = trimmed(searchText.get()).toLowerCase(Locale.ROOT);
+        if (!text.isEmpty()) {
+            boolean nameMatches = product.getName() != null
+                    && product.getName().toLowerCase(Locale.ROOT).contains(text);
+            boolean skuMatches = product.getSku() != null
+                    && product.getSku().toLowerCase(Locale.ROOT).contains(text);
+            if (!nameMatches && !skuMatches) {
+                return false;
+            }
         }
         Category selectedCategory = categoryFilter.get();
-        if (selectedCategory != null && (product.getCategory() == null
-                || product.getCategory().getId() != selectedCategory.getId())) {
-            return false;
-        }
-        Supplier selectedSupplier = supplierFilter.get();
-        return selectedSupplier == null || supplierIdsByProduct
-                .getOrDefault(product.getId(), Set.of())
-                .contains(selectedSupplier.getId());
+        return selectedCategory == null || (product.getCategory() != null
+                && product.getCategory().getId() == selectedCategory.getId());
     }
 
     @Override
     protected void write() throws SQLException {
         String nameValue = trimmed(name.get());
         String skuValue = trimmed(sku.get());
+        String descriptionValue = blankToNull(trimmed(description.get()));
         BigDecimal priceValue = parsePrice(price.get());
-        int minStockValue = parseMinStock(minStock.get());
         Product selected = selectedItem.get();
         if (selected == null) {
-            Product product = new Product(nameValue, skuValue, null, priceValue, minStockValue,
+            Product product = new Product(nameValue, skuValue, descriptionValue, priceValue, 0,
                     category.get(), true);
             productRepository.insert(product);
         } else {
             // Persist a detached copy: a failed write must never leave the
             // rendered row with values that are not in the database. The
-            // description of the edited row is preserved (it is not part of the
-            // RF-03 form).
-            Product updated = new Product(nameValue, skuValue, selected.getDescription(),
-                    priceValue, minStockValue, category.get(), selected.isActive());
+            // description is edited in the form; min_stock is preserved (it is
+            // not part of the RF-03 form).
+            Product updated = new Product(nameValue, skuValue, descriptionValue,
+                    priceValue, selected.getMinStock(), category.get(), selected.isActive());
             updated.setId(selected.getId());
             productRepository.update(updated);
         }
@@ -345,8 +282,8 @@ public class ProductsViewModel extends FilterableCrudViewModel<Product> {
         validateOnEdit = false;
         name.set(product.getName());
         sku.set(product.getSku());
+        description.set(product.getDescription() == null ? "" : product.getDescription());
         price.set(product.getPrice() == null ? "" : product.getPrice().toPlainString());
-        minStock.set(String.valueOf(product.getMinStock()));
         category.set(optionForCategory(product.getCategory()));
         setFormTitle(editFormTitle());
         clearErrorMessage();
@@ -358,8 +295,8 @@ public class ProductsViewModel extends FilterableCrudViewModel<Product> {
         validateOnEdit = false;
         name.set("");
         sku.set("");
+        description.set("");
         price.set("");
-        minStock.set("");
         category.set(null);
         setFormTitle(newFormTitle());
         clearFieldErrors();
@@ -370,8 +307,8 @@ public class ProductsViewModel extends FilterableCrudViewModel<Product> {
     protected void refreshFieldErrors() {
         nameError.set(validateName());
         skuError.set(validateSku());
+        descriptionError.set(validateDescription());
         priceError.set(validatePrice());
-        minStockError.set(validateMinStock());
         categoryError.set(validateCategory());
     }
 
@@ -379,22 +316,22 @@ public class ProductsViewModel extends FilterableCrudViewModel<Product> {
     protected void clearFieldErrors() {
         nameError.set("");
         skuError.set("");
+        descriptionError.set("");
         priceError.set("");
-        minStockError.set("");
         categoryError.set("");
     }
 
     @Override
     protected boolean hasFieldErrors() {
         return !nameError.get().isBlank() || !skuError.get().isBlank()
-                || !priceError.get().isBlank() || !minStockError.get().isBlank()
+                || !descriptionError.get().isBlank() || !priceError.get().isBlank()
                 || !categoryError.get().isBlank();
     }
 
     @Override
     protected String fieldErrorsSummary() {
-        return joinedErrors(nameError.get(), skuError.get(), priceError.get(),
-                minStockError.get(), categoryError.get());
+        return joinedErrors(nameError.get(), skuError.get(), descriptionError.get(),
+                priceError.get(), categoryError.get());
     }
 
     @Override
@@ -474,6 +411,14 @@ public class ProductsViewModel extends FilterableCrudViewModel<Product> {
         return "";
     }
 
+    private String validateDescription() {
+        String value = trimmed(description.get());
+        if (value.length() > MAX_DESCRIPTION_LENGTH) {
+            return "La descripción no puede superar los " + MAX_DESCRIPTION_LENGTH + " caracteres.";
+        }
+        return "";
+    }
+
     private String validatePrice() {
         String value = trimmed(price.get());
         if (value.isEmpty()) {
@@ -490,27 +435,6 @@ public class ProductsViewModel extends FilterableCrudViewModel<Product> {
         }
         if (parsed.compareTo(MAX_PRICE) > 0) {
             return "El precio no puede superar 99999999.99.";
-        }
-        return "";
-    }
-
-    /**
-     * Minimum stock is optional: empty means 0. When typed it must be a
-     * non-negative integer, mirroring {@code chk_product_min_stock} (RF-10).
-     */
-    private String validateMinStock() {
-        String value = trimmed(minStock.get());
-        if (value.isEmpty()) {
-            return "";
-        }
-        int parsed;
-        try {
-            parsed = Integer.parseInt(value);
-        } catch (NumberFormatException e) {
-            return "El stock mínimo debe ser un número entero.";
-        }
-        if (parsed < 0) {
-            return "El stock mínimo no puede ser negativo.";
         }
         return "";
     }
@@ -553,8 +477,7 @@ public class ProductsViewModel extends FilterableCrudViewModel<Product> {
         return new BigDecimal(trimmed(value).replace(',', '.')).setScale(2, RoundingMode.HALF_UP);
     }
 
-    private static int parseMinStock(String value) {
-        String trimmedValue = trimmed(value);
-        return trimmedValue.isEmpty() ? 0 : Integer.parseInt(trimmedValue);
+    private static String blankToNull(String value) {
+        return value.isEmpty() ? null : value;
     }
 }
