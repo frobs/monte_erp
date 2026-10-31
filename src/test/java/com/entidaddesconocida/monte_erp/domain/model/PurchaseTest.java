@@ -29,7 +29,7 @@ class PurchaseTest {
     }
 
     private static Supplier supplier() {
-        return new Supplier(1, "Acme", null, null, true);
+        return new Supplier(1, "Acme", null, null, null, true);
     }
 
     private static User user() {

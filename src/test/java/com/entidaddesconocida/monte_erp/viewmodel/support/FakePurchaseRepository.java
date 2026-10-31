@@ -1,7 +1,6 @@
 package com.entidaddesconocida.monte_erp.viewmodel.support;
 
 import com.entidaddesconocida.monte_erp.domain.model.Product;
-import com.entidaddesconocida.monte_erp.domain.model.ProductSupplier;
 import com.entidaddesconocida.monte_erp.domain.model.Purchase;
 import com.entidaddesconocida.monte_erp.domain.model.Stock;
 import com.entidaddesconocida.monte_erp.domain.model.Supplier;
@@ -17,7 +16,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.TreeSet;
 
 /**
  * In-memory double of {@link PurchaseRepository} for unit tests (RF-14).
@@ -114,32 +112,6 @@ public class FakePurchaseRepository implements PurchaseRepository {
         return copyLots(lotsByPurchase.getOrDefault(purchaseId, List.of()));
     }
 
-    /**
-     * Derives the product ↔ supplier pairs from the stored purchases and their
-     * lots, like the SQL {@code SELECT DISTINCT s.product_id, p.supplier_id} of
-     * the real adapter: it does not look at {@code available_quantity} (a lot at
-     * 0 still counts, decision D3) and returns one pair per product/supplier.
-     */
-    @Override
-    public List<ProductSupplier> findProductSuppliers() throws SQLException {
-        maybeThrow("findProductSuppliers");
-        Set<ProductSupplier> pairs = new TreeSet<>(
-                Comparator.comparingInt(ProductSupplier::getProductId)
-                        .thenComparingInt(ProductSupplier::getSupplierId));
-        for (Purchase purchase : purchases.values()) {
-            if (purchase.getSupplier() == null) {
-                continue;
-            }
-            int supplierId = purchase.getSupplier().getId();
-            for (Stock lot : lotsByPurchase.getOrDefault(purchase.getId(), List.of())) {
-                if (lot.getProduct() != null) {
-                    pairs.add(new ProductSupplier(lot.getProduct().getId(), supplierId));
-                }
-            }
-        }
-        return new ArrayList<>(pairs);
-    }
-
     private static Purchase copy(Purchase purchase) {
         Purchase copy = new Purchase(purchase.getId(), purchase.getPurchaseDate(),
                 purchase.getStatus(), purchase.getTotal(), copy(purchase.getSupplier()),
@@ -176,7 +148,7 @@ public class FakePurchaseRepository implements PurchaseRepository {
             return null;
         }
         return new Supplier(supplier.getId(), supplier.getName(), supplier.getPhone(),
-                supplier.getEmail(), supplier.isActive());
+                supplier.getEmail(), supplier.getAddress(), supplier.isActive());
     }
 
     private static User copy(User user) {

@@ -52,6 +52,7 @@ class MySqlSupplierRepositoryTest {
                 "name", "Acme",
                 "phone", "600111222",
                 "email", "acme@example.com",
+                "address", "Calle Mayor 1",
                 "active", true);
     }
 
@@ -68,6 +69,7 @@ class MySqlSupplierRepositoryTest {
         assertEquals("Acme", supplier.getName());
         assertEquals("600111222", supplier.getPhone());
         assertEquals("acme@example.com", supplier.getEmail());
+        assertEquals("Calle Mayor 1", supplier.getAddress());
         assertTrue(supplier.isActive());
         assertEquals("Activo", supplier.getStatusLabel());
 
@@ -123,10 +125,10 @@ class MySqlSupplierRepositoryTest {
     }
 
     @Test
-    @DisplayName("insert escribe name, phone, email y active = 1 y devuelve la clave")
+    @DisplayName("insert escribe name, phone, email, address y active = 1 y devuelve la clave")
     void insertBindsColumnsAndReturnsGeneratedKey() throws SQLException {
         fake.withGeneratedKey(42);
-        Supplier supplier = new Supplier("Acme", "600111222", "acme@example.com");
+        Supplier supplier = new Supplier("Acme", "600111222", "acme@example.com", "Calle Mayor 1");
 
         int id = repository.insert(supplier);
 
@@ -138,24 +140,27 @@ class MySqlSupplierRepositoryTest {
         assertEquals("Acme", parameters.get(1));
         assertEquals("600111222", parameters.get(2));
         assertEquals("acme@example.com", parameters.get(3));
+        assertEquals("Calle Mayor 1", parameters.get(4));
     }
 
     @Test
-    @DisplayName("insert escribe NULL en phone y email cuando no hay contacto")
+    @DisplayName("insert escribe NULL en los campos opcionales cuando no hay contacto")
     void insertBindsNullContact() throws SQLException {
         fake.withGeneratedKey(7);
 
-        repository.insert(new Supplier("Acme", null, null));
+        repository.insert(new Supplier("Acme", null, null, null));
 
         Map<Integer, Object> parameters = fake.boundParameters().get(0);
         assertNull(parameters.get(2));
         assertNull(parameters.get(3));
+        assertNull(parameters.get(4));
     }
 
     @Test
-    @DisplayName("update escribe name/phone/email y no toca active")
+    @DisplayName("update escribe name/phone/email/address y no toca active")
     void updateWritesContactOnly() throws SQLException {
-        Supplier supplier = new Supplier(9, "Acme", "600111222", "acme@example.com", false);
+        Supplier supplier =
+                new Supplier(9, "Acme", "600111222", "acme@example.com", "Calle Mayor 1", false);
 
         repository.update(supplier);
 
@@ -164,13 +169,15 @@ class MySqlSupplierRepositoryTest {
         assertTrue(sql.contains("name = ?"));
         assertTrue(sql.contains("phone = ?"));
         assertTrue(sql.contains("email = ?"));
+        assertTrue(sql.contains("address = ?"));
         assertTrue(sql.contains("WHERE id = ?"));
         assertFalse(sql.contains("active = ?"));
         Map<Integer, Object> parameters = fake.boundParameters().get(0);
         assertEquals("Acme", parameters.get(1));
         assertEquals("600111222", parameters.get(2));
         assertEquals("acme@example.com", parameters.get(3));
-        assertEquals(9, parameters.get(4));
+        assertEquals("Calle Mayor 1", parameters.get(4));
+        assertEquals(9, parameters.get(5));
     }
 
     @Test

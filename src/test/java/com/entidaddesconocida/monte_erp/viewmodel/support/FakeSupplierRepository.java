@@ -141,6 +141,6 @@ public class FakeSupplierRepository implements SupplierRepository {
 
     private static Supplier copy(Supplier supplier) {
         return new Supplier(supplier.getId(), supplier.getName(), supplier.getPhone(),
-                supplier.getEmail(), supplier.isActive());
+                supplier.getEmail(), supplier.getAddress(), supplier.isActive());
     }
 }

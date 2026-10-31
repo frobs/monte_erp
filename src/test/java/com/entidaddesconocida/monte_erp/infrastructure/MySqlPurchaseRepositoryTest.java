@@ -1,7 +1,6 @@
 package com.entidaddesconocida.monte_erp.infrastructure;
 
 import com.entidaddesconocida.monte_erp.domain.model.Product;
-import com.entidaddesconocida.monte_erp.domain.model.ProductSupplier;
 import com.entidaddesconocida.monte_erp.domain.model.Purchase;
 import com.entidaddesconocida.monte_erp.domain.model.Stock;
 import com.entidaddesconocida.monte_erp.domain.model.Supplier;
@@ -60,7 +59,7 @@ class MySqlPurchaseRepositoryTest {
     }
 
     private static Supplier supplier() {
-        return new Supplier(3, "Acme", null, null, true);
+        return new Supplier(3, "Acme", null, null, null, true);
     }
 
     private static Product product(int id, String name, String sku) {
@@ -212,46 +211,5 @@ class MySqlPurchaseRepositoryTest {
         fake.failUpdateNumber(1);
 
         assertThrows(SQLException.class, () -> repository.insert(draftPurchase()));
-    }
-
-    @Test
-    @DisplayName("findProductSuppliers emite DISTINCT sobre STOCK JOIN PURCHASE y mapea el par")
-    void findProductSuppliersProjectsDistinctPairs() throws SQLException {
-        fake.withRows(
-                FakeJdbc.row("product_id", 1, "supplier_id", 3),
-                FakeJdbc.row("product_id", 1, "supplier_id", 4),
-                FakeJdbc.row("product_id", 2, "supplier_id", 3));
-
-        List<ProductSupplier> pairs = repository.findProductSuppliers();
-
-        assertEquals(3, pairs.size());
-        assertEquals(1, pairs.get(0).getProductId());
-        assertEquals(3, pairs.get(0).getSupplierId());
-        assertEquals(1, pairs.get(1).getProductId());
-        assertEquals(4, pairs.get(1).getSupplierId());
-        assertEquals(2, pairs.get(2).getProductId());
-        assertEquals(3, pairs.get(2).getSupplierId());
-    }
-
-    @Test
-    @DisplayName("findProductSuppliers no filtra available_quantity ni el producto activo (D3)")
-    void findProductSuppliersKeepsTheWholeHistory() throws SQLException {
-        fake.withRows(FakeJdbc.row("product_id", 1, "supplier_id", 3));
-
-        repository.findProductSuppliers();
-
-        String sql = fake.executedStatements().get(0);
-        assertTrue(sql.contains("SELECT DISTINCT s.product_id, p.supplier_id"));
-        assertTrue(sql.contains("FROM STOCK s"));
-        assertTrue(sql.contains("JOIN PURCHASE p ON p.id = s.purchase_id"));
-        assertTrue(sql.contains("ORDER BY s.product_id, p.supplier_id"));
-        assertFalse(sql.contains("available_quantity"));
-        assertFalse(sql.contains("active"));
-    }
-
-    @Test
-    @DisplayName("findProductSuppliers devuelve una lista vacía sin filas")
-    void findProductSuppliersReturnsEmptyList() throws SQLException {
-        assertEquals(List.of(), repository.findProductSuppliers());
     }
 }
