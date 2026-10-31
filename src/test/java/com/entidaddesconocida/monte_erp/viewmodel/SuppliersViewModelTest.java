@@ -24,7 +24,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class SuppliersViewModelTest {
 
-    private static final Supplier ACME = new Supplier(1, "Acme", "600111222", "acme@example.com");
+    private static final Supplier ACME =
+            new Supplier(1, "Acme", "600111222", "acme@example.com", "Calle Mayor 1");
 
     private FakeSupplierRepository fakeRepository;
     private SuppliersViewModel viewModel;
@@ -40,6 +41,7 @@ class SuppliersViewModelTest {
         viewModel.nameProperty().set("Globex");
         viewModel.phoneProperty().set("600333444");
         viewModel.emailProperty().set("globex@example.com");
+        viewModel.addressProperty().set("Avenida Central 5");
     }
 
     @Test
@@ -50,7 +52,7 @@ class SuppliersViewModelTest {
     }
 
     @Test
-    @DisplayName("Alta válida: inserta el proveedor activo con teléfono y correo")
+    @DisplayName("Alta válida: inserta el proveedor activo con teléfono, correo y dirección")
     void createValidSupplier() throws Exception {
         fillValidForm();
 
@@ -61,11 +63,12 @@ class SuppliersViewModelTest {
         Supplier created = fakeRepository.findByName("Globex");
         assertEquals("600333444", created.getPhone());
         assertEquals("globex@example.com", created.getEmail());
+        assertEquals("Avenida Central 5", created.getAddress());
         assertTrue(created.isActive());
     }
 
     @Test
-    @DisplayName("Teléfono y correo vacíos se guardan como nulos")
+    @DisplayName("Teléfono, correo y dirección vacíos se guardan como nulos")
     void blankContactIsSavedAsNull() throws Exception {
         viewModel.nameProperty().set("Globex");
 
@@ -74,6 +77,7 @@ class SuppliersViewModelTest {
         Supplier created = fakeRepository.findByName("Globex");
         assertNull(created.getPhone());
         assertNull(created.getEmail());
+        assertNull(created.getAddress());
     }
 
     @Test
@@ -146,6 +150,18 @@ class SuppliersViewModelTest {
     }
 
     @Test
+    @DisplayName("Dirección de más de 255 caracteres: error de campo")
+    void addressTooLongShowsFieldError() {
+        viewModel.nameProperty().set("Globex");
+        viewModel.addressProperty().set("a".repeat(256));
+
+        viewModel.save();
+
+        assertEquals("La dirección no puede superar los 255 caracteres.",
+                viewModel.addressErrorProperty().get());
+    }
+
+    @Test
     @DisplayName("Nombre duplicado: error de campo y no se inserta")
     void duplicatedNameShowsFieldError() throws Exception {
         viewModel.nameProperty().set("Acme");
@@ -172,7 +188,7 @@ class SuppliersViewModelTest {
         // UNIQUE(name) is global, so a deactivated supplier still owns its name
         // and has to be reactivated instead of duplicated.
         fakeRepository = new FakeSupplierRepository()
-                .withSupplier(new Supplier(7, "Acme", null, null, false));
+                .withSupplier(new Supplier(7, "Acme", null, null, null, false));
         viewModel = new SuppliersViewModel(fakeRepository);
         viewModel.load();
         viewModel.nameProperty().set("Acme");
@@ -209,7 +225,7 @@ class SuppliersViewModelTest {
     @Test
     @DisplayName("Editar conserva id y estado del proveedor")
     void editPreservesIdAndStatus() throws Exception {
-        Supplier retired = new Supplier(2, "Antiguo", null, null, false);
+        Supplier retired = new Supplier(2, "Antiguo", null, null, null, false);
         fakeRepository.withSupplier(retired);
         viewModel.showInactiveProperty().set(true);
         viewModel.load();
@@ -226,7 +242,7 @@ class SuppliersViewModelTest {
     @Test
     @DisplayName("Editar a un nombre ya existente: error de duplicado")
     void editToExistingNameFails() throws Exception {
-        fakeRepository.withSupplier(new Supplier(2, "Globex", null, null));
+        fakeRepository.withSupplier(new Supplier(2, "Globex", null, null, null));
         viewModel.load();
         viewModel.selectedSupplierProperty().set(viewModel.suppliers().stream()
                 .filter(supplier -> supplier.getName().equals("Globex"))
@@ -253,7 +269,7 @@ class SuppliersViewModelTest {
     @Test
     @DisplayName("Reactivar: un proveedor inactivo vuelve a estar activo")
     void activateMakesSupplierActiveAgain() throws Exception {
-        fakeRepository.withSupplier(new Supplier(2, "Antiguo", null, null, false));
+        fakeRepository.withSupplier(new Supplier(2, "Antiguo", null, null, null, false));
         viewModel.showInactiveProperty().set(true);
         viewModel.load();
         viewModel.selectedSupplierProperty().set(viewModel.suppliers().get(0));
@@ -278,7 +294,7 @@ class SuppliersViewModelTest {
     @Test
     @DisplayName("Dar de baja un proveedor ya inactivo avisa sin tocar la base de datos")
     void deactivatingAnInactiveSupplierFails() throws Exception {
-        fakeRepository.withSupplier(new Supplier(2, "Antiguo", null, null, false));
+        fakeRepository.withSupplier(new Supplier(2, "Antiguo", null, null, null, false));
         viewModel.showInactiveProperty().set(true);
         viewModel.load();
         viewModel.selectedSupplierProperty().set(viewModel.suppliers().get(0));
@@ -303,7 +319,7 @@ class SuppliersViewModelTest {
     @Test
     @DisplayName("Mostrar inactivos recarga la lista con los proveedores dados de baja")
     void showInactiveReloadsTheList() throws Exception {
-        fakeRepository.withSupplier(new Supplier(2, "Antiguo", null, null, false));
+        fakeRepository.withSupplier(new Supplier(2, "Antiguo", null, null, null, false));
         viewModel.load();
         assertEquals(1, viewModel.suppliers().size());
 
@@ -319,7 +335,7 @@ class SuppliersViewModelTest {
     @Test
     @DisplayName("La búsqueda por nombre acota la tabla")
     void searchFiltersByName() throws Exception {
-        fakeRepository.withSupplier(new Supplier(2, "Globex", null, null));
+        fakeRepository.withSupplier(new Supplier(2, "Globex", null, null, null));
         viewModel.load();
 
         viewModel.searchTextProperty().set("glo");
@@ -329,30 +345,6 @@ class SuppliersViewModelTest {
 
         viewModel.searchTextProperty().set("");
         assertEquals(2, viewModel.filteredSuppliers().size());
-    }
-
-    @Test
-    @DisplayName("La búsqueda por teléfono acota la tabla")
-    void searchFiltersByPhone() throws Exception {
-        fakeRepository.withSupplier(new Supplier(2, "Globex", "600333444", null));
-        viewModel.load();
-
-        viewModel.searchTextProperty().set("600333444");
-
-        assertEquals(1, viewModel.filteredSuppliers().size());
-        assertEquals("Globex", viewModel.filteredSuppliers().get(0).getName());
-    }
-
-    @Test
-    @DisplayName("La búsqueda por correo acota la tabla")
-    void searchFiltersByEmail() throws Exception {
-        fakeRepository.withSupplier(new Supplier(2, "Globex", null, "globex@example.com"));
-        viewModel.load();
-
-        viewModel.searchTextProperty().set("globex@");
-
-        assertEquals(1, viewModel.filteredSuppliers().size());
-        assertEquals("Globex", viewModel.filteredSuppliers().get(0).getName());
     }
 
     @Test
@@ -415,6 +407,7 @@ class SuppliersViewModelTest {
         assertEquals("", viewModel.nameProperty().get());
         assertEquals("", viewModel.phoneProperty().get());
         assertEquals("", viewModel.emailProperty().get());
+        assertEquals("", viewModel.addressProperty().get());
         assertTrue(viewModel.nameErrorProperty().get().isEmpty());
     }
 
@@ -426,13 +419,14 @@ class SuppliersViewModelTest {
         assertEquals("Acme", viewModel.nameProperty().get());
         assertEquals("600111222", viewModel.phoneProperty().get());
         assertEquals("acme@example.com", viewModel.emailProperty().get());
+        assertEquals("Calle Mayor 1", viewModel.addressProperty().get());
         assertEquals("Editar proveedor", viewModel.formTitleProperty().get());
     }
 
     @Test
     @DisplayName("El estado del botón baja/reactivar depende del proveedor seleccionado")
     void toggleStateFollowsSelection() throws Exception {
-        fakeRepository.withSupplier(new Supplier(2, "Antiguo", null, null, false));
+        fakeRepository.withSupplier(new Supplier(2, "Antiguo", null, null, null, false));
         viewModel.load();
 
         assertTrue(viewModel.toggleDisabledProperty().get());

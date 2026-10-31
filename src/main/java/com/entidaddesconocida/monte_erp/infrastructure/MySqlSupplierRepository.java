@@ -23,12 +23,12 @@ import java.util.List;
  */
 public class MySqlSupplierRepository implements SupplierRepository {
 
-    private static final String COLUMNS = "id, name, phone, email, active";
+    private static final String COLUMNS = "id, name, phone, email, address, active";
     private static final String SELECT_ALL = "SELECT " + COLUMNS + " FROM SUPPLIER";
     private static final String INSERT_SUPPLIER =
-            "INSERT INTO SUPPLIER (name, phone, email, active) VALUES (?, ?, ?, 1)";
+            "INSERT INTO SUPPLIER (name, phone, email, address, active) VALUES (?, ?, ?, ?, 1)";
     private static final String UPDATE_SUPPLIER =
-            "UPDATE SUPPLIER SET name = ?, phone = ?, email = ? WHERE id = ?";
+            "UPDATE SUPPLIER SET name = ?, phone = ?, email = ?, address = ? WHERE id = ?";
     private static final String DEACTIVATE_SUPPLIER = "UPDATE SUPPLIER SET active = 0 WHERE id = ?";
     private static final String ACTIVATE_SUPPLIER = "UPDATE SUPPLIER SET active = 1 WHERE id = ?";
 
@@ -65,6 +65,7 @@ public class MySqlSupplierRepository implements SupplierRepository {
             ps.setString(1, supplier.getName());
             ps.setString(2, supplier.getPhone());
             ps.setString(3, supplier.getEmail());
+            ps.setString(4, supplier.getAddress());
             ps.executeUpdate();
             try (ResultSet keys = ps.getGeneratedKeys()) {
                 int id = keys.next() ? keys.getInt(1) : 0;
@@ -81,7 +82,8 @@ public class MySqlSupplierRepository implements SupplierRepository {
             ps.setString(1, supplier.getName());
             ps.setString(2, supplier.getPhone());
             ps.setString(3, supplier.getEmail());
-            ps.setInt(4, supplier.getId());
+            ps.setString(4, supplier.getAddress());
+            ps.setInt(5, supplier.getId());
             ps.executeUpdate();
         }
     }
@@ -116,6 +118,6 @@ public class MySqlSupplierRepository implements SupplierRepository {
 
     private Supplier map(ResultSet rs) throws SQLException {
         return new Supplier(rs.getInt("id"), rs.getString("name"), rs.getString("phone"),
-                rs.getString("email"), rs.getBoolean("active"));
+                rs.getString("email"), rs.getString("address"), rs.getBoolean("active"));
     }
 }

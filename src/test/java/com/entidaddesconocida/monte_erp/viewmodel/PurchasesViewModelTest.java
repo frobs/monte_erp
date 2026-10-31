@@ -30,9 +30,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class PurchasesViewModelTest {
 
-    private static final Supplier ACME = new Supplier(1, "Acme", null, null, true);
-    private static final Supplier GLOBEX = new Supplier(2, "Globex", null, null, true);
-    private static final Supplier INACTIVE = new Supplier(3, "Old", null, null, false);
+    private static final Supplier ACME = new Supplier(1, "Acme", null, null, null, true);
+    private static final Supplier GLOBEX = new Supplier(2, "Globex", null, null, null, true);
+    private static final Supplier INACTIVE = new Supplier(3, "Old", null, null, null, false);
 
     private FakeSupplierRepository supplierRepository;
     private FakeProductRepository productRepository;

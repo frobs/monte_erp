@@ -5,7 +5,8 @@ package com.entidaddesconocida.monte_erp.domain.model;
  *
  * <p>RF-03 only reads suppliers to fill the product form combo box; RF-05 adds
  * the full CRUD and the logical deletion ({@code active}), exactly like
- * {@link User}, {@link Product} and {@link Category}.</p>
+ * {@link User}, {@link Product} and {@link Category}. Like {@link Customer}, a
+ * supplier carries an optional {@code address}.</p>
  */
 public class Supplier {
 
@@ -19,6 +20,7 @@ public class Supplier {
     private String name;
     private String phone;
     private String email;
+    private String address;
     private boolean active;
 
     public Supplier() {
@@ -28,22 +30,24 @@ public class Supplier {
      * Creates an active supplier: a brand new supplier is always enabled, so the
      * Java default ({@code false}) is deliberately overridden here.
      */
-    public Supplier(String name, String phone, String email) {
+    public Supplier(String name, String phone, String email, String address) {
         this.name = name;
         this.phone = phone;
         this.email = email;
+        this.address = address;
         this.active = true;
     }
 
-    public Supplier(int id, String name, String phone, String email) {
-        this(id, name, phone, email, true);
+    public Supplier(int id, String name, String phone, String email, String address) {
+        this(id, name, phone, email, address, true);
     }
 
-    public Supplier(int id, String name, String phone, String email, boolean active) {
+    public Supplier(int id, String name, String phone, String email, String address, boolean active) {
         this.id = id;
         this.name = name;
         this.phone = phone;
         this.email = email;
+        this.address = address;
         this.active = active;
     }
 
@@ -77,6 +81,14 @@ public class Supplier {
 
     public void setEmail(String email) {
         this.email = email;
+    }
+
+    public String getAddress() {
+        return address;
+    }
+
+    public void setAddress(String address) {
+        this.address = address;
     }
 
     public boolean isActive() {

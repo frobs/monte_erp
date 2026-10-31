@@ -13,6 +13,7 @@ import javafx.collections.transformation.FilteredList;
 
 import java.sql.SQLException;
 import java.util.List;
+import java.util.Locale;
 import java.util.regex.Pattern;
 
 /**
@@ -41,6 +42,7 @@ public class SuppliersViewModel extends FilterableCrudViewModel<Supplier> {
     private static final int MAX_NAME_LENGTH = 100;
     private static final int MAX_PHONE_LENGTH = 20;
     private static final int MAX_EMAIL_LENGTH = 100;
+    private static final int MAX_ADDRESS_LENGTH = 255;
 
     /** Pragmatic email shape: text@text.text, no spaces. Not a full RFC validator. */
     private static final Pattern EMAIL_PATTERN = Pattern.compile("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$");
@@ -53,15 +55,17 @@ public class SuppliersViewModel extends FilterableCrudViewModel<Supplier> {
     private final StringProperty name = new SimpleStringProperty("");
     private final StringProperty phone = new SimpleStringProperty("");
     private final StringProperty email = new SimpleStringProperty("");
+    private final StringProperty address = new SimpleStringProperty("");
 
     private final ReadOnlyStringWrapper nameError = new ReadOnlyStringWrapper("");
     private final ReadOnlyStringWrapper phoneError = new ReadOnlyStringWrapper("");
     private final ReadOnlyStringWrapper emailError = new ReadOnlyStringWrapper("");
+    private final ReadOnlyStringWrapper addressError = new ReadOnlyStringWrapper("");
 
     public SuppliersViewModel(SupplierRepository supplierRepository) {
         this.supplierRepository = supplierRepository;
         bindFilter(searchText);
-        watchFields(name, phone, email);
+        watchFields(name, phone, email, address);
         updateCount();
     }
 
@@ -94,6 +98,11 @@ public class SuppliersViewModel extends FilterableCrudViewModel<Supplier> {
         return email;
     }
 
+    /** Optional address; a blank value is persisted as {@code NULL}. */
+    public StringProperty addressProperty() {
+        return address;
+    }
+
     /** Footer text with the number of suppliers currently shown. */
     public ReadOnlyStringProperty supplierCountProperty() {
         return itemCountProperty();
@@ -114,6 +123,11 @@ public class SuppliersViewModel extends FilterableCrudViewModel<Supplier> {
         return emailError.getReadOnlyProperty();
     }
 
+    /** Empty when the address is valid; the message to show otherwise. */
+    public ReadOnlyStringProperty addressErrorProperty() {
+        return addressError.getReadOnlyProperty();
+    }
+
     /** Clears the form so a brand new supplier can be typed in. */
     public void newSupplier() {
         newItem();
@@ -131,9 +145,12 @@ public class SuppliersViewModel extends FilterableCrudViewModel<Supplier> {
 
     @Override
     protected boolean matches(Supplier supplier) {
-        // Case- and accent-insensitive over name, phone and email (decision D5).
-        return SearchText.matches(searchText.get(), supplier.getName(), supplier.getPhone(),
-                supplier.getEmail());
+        String text = trimmed(searchText.get()).toLowerCase(Locale.ROOT);
+        if (text.isEmpty()) {
+            return true;
+        }
+        return supplier.getName() != null
+                && supplier.getName().toLowerCase(Locale.ROOT).contains(text);
     }
 
     @Override
@@ -141,15 +158,16 @@ public class SuppliersViewModel extends FilterableCrudViewModel<Supplier> {
         String nameValue = trimmed(name.get());
         String phoneValue = blankToNull(trimmed(phone.get()));
         String emailValue = blankToNull(trimmed(email.get()));
+        String addressValue = blankToNull(trimmed(address.get()));
         Supplier selected = selectedItem.get();
         if (selected == null) {
-            // A brand new supplier is born active (see Supplier(String, String, String)).
-            supplierRepository.insert(new Supplier(nameValue, phoneValue, emailValue));
+            // A brand new supplier is born active (see Supplier(String, String, String, String)).
+            supplierRepository.insert(new Supplier(nameValue, phoneValue, emailValue, addressValue));
         } else {
             // Persist a detached copy: a failed write must never leave the
             // rendered row with values that are not in the database.
             supplierRepository.update(new Supplier(selected.getId(), nameValue, phoneValue,
-                    emailValue, selected.isActive()));
+                    emailValue, addressValue, selected.isActive()));
         }
     }
 
@@ -200,6 +218,7 @@ public class SuppliersViewModel extends FilterableCrudViewModel<Supplier> {
         name.set(supplier.getName());
         phone.set(supplier.getPhone() == null ? "" : supplier.getPhone());
         email.set(supplier.getEmail() == null ? "" : supplier.getEmail());
+        address.set(supplier.getAddress() == null ? "" : supplier.getAddress());
         setFormTitle(editFormTitle());
         clearErrorMessage();
         clearFieldErrors();
@@ -211,6 +230,7 @@ public class SuppliersViewModel extends FilterableCrudViewModel<Supplier> {
         name.set("");
         phone.set("");
         email.set("");
+        address.set("");
         setFormTitle(newFormTitle());
         clearFieldErrors();
         clearErrorMessage();
@@ -221,6 +241,7 @@ public class SuppliersViewModel extends FilterableCrudViewModel<Supplier> {
         nameError.set(validateName());
         phoneError.set(validatePhone());
         emailError.set(validateEmail());
+        addressError.set(validateAddress());
     }
 
     @Override
@@ -228,17 +249,18 @@ public class SuppliersViewModel extends FilterableCrudViewModel<Supplier> {
         nameError.set("");
         phoneError.set("");
         emailError.set("");
+        addressError.set("");
     }
 
     @Override
     protected boolean hasFieldErrors() {
         return !nameError.get().isBlank() || !phoneError.get().isBlank()
-                || !emailError.get().isBlank();
+                || !emailError.get().isBlank() || !addressError.get().isBlank();
     }
 
     @Override
     protected String fieldErrorsSummary() {
-        return joinedErrors(nameError.get(), phoneError.get(), emailError.get());
+        return joinedErrors(nameError.get(), phoneError.get(), emailError.get(), addressError.get());
     }
 
     @Override
@@ -325,6 +347,14 @@ public class SuppliersViewModel extends FilterableCrudViewModel<Supplier> {
         }
         if (!value.isEmpty() && !EMAIL_PATTERN.matcher(value).matches()) {
             return "Introduce un correo electrónico válido.";
+        }
+        return "";
+    }
+
+    private String validateAddress() {
+        String value = trimmed(address.get());
+        if (value.length() > MAX_ADDRESS_LENGTH) {
+            return "La dirección no puede superar los " + MAX_ADDRESS_LENGTH + " caracteres.";
         }
         return "";
     }

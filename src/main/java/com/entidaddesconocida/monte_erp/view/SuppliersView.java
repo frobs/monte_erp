@@ -41,6 +41,9 @@ public class SuppliersView extends CrudView<Supplier> implements FxmlView<Suppli
     private TableColumn<Supplier, String> emailColumn;
 
     @FXML
+    private TableColumn<Supplier, String> addressColumn;
+
+    @FXML
     private TableColumn<Supplier, String> statusColumn;
 
     @FXML
@@ -57,6 +60,9 @@ public class SuppliersView extends CrudView<Supplier> implements FxmlView<Suppli
 
     @FXML
     private TextField emailField;
+
+    @FXML
+    private TextField addressField;
 
     @FXML
     private Label formTitleLabel;
@@ -96,6 +102,7 @@ public class SuppliersView extends CrudView<Supplier> implements FxmlView<Suppli
         nameColumn.setCellValueFactory(cell -> new ReadOnlyStringWrapper(cell.getValue().getName()));
         phoneColumn.setCellValueFactory(cell -> new ReadOnlyStringWrapper(cell.getValue().getPhone()));
         emailColumn.setCellValueFactory(cell -> new ReadOnlyStringWrapper(cell.getValue().getEmail()));
+        addressColumn.setCellValueFactory(cell -> new ReadOnlyStringWrapper(cell.getValue().getAddress()));
         statusColumn.setCellValueFactory(cell ->
                 new ReadOnlyStringWrapper(cell.getValue().getStatusLabel()));
 
@@ -105,6 +112,7 @@ public class SuppliersView extends CrudView<Supplier> implements FxmlView<Suppli
         nameField.textProperty().bindBidirectional(viewModel.nameProperty());
         phoneField.textProperty().bindBidirectional(viewModel.phoneProperty());
         emailField.textProperty().bindBidirectional(viewModel.emailProperty());
+        addressField.textProperty().bindBidirectional(viewModel.addressProperty());
 
         countLabel.textProperty().bind(viewModel.supplierCountProperty());
     }
@@ -114,6 +122,7 @@ public class SuppliersView extends CrudView<Supplier> implements FxmlView<Suppli
         decorate(nameField, "name", viewModel.nameErrorProperty());
         decorate(phoneField, "phone", viewModel.phoneErrorProperty());
         decorate(emailField, "email", viewModel.emailErrorProperty());
+        decorate(addressField, "address", viewModel.addressErrorProperty());
     }
 
     @Override
