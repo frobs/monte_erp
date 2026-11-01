@@ -2,7 +2,12 @@ package com.entidaddesconocida.monte_erp.app;
 
 import de.saxsys.mvvmfx.ViewTuple;
 
+import javafx.scene.Node;
 import javafx.scene.Scene;
+import javafx.scene.control.ComboBoxBase;
+import javafx.scene.control.TextInputControl;
+import javafx.scene.input.KeyCode;
+import javafx.scene.input.KeyEvent;
 import javafx.stage.Stage;
 
 /**
@@ -55,13 +60,53 @@ public final class SceneNavigator {
      */
     public static void show(Stage stage, ViewTuple<?, ?> tuple, String title,
                             double width, double height) {
+        show(stage, tuple, title, width, height, null);
+    }
+
+    /**
+     * Replaces the stage scene and, when {@code onEscape} is not {@code null},
+     * makes the ESC key run it (US-12: ESC goes back to the main menu).
+     *
+     * <p>The handler is registered at scene level and is ignored while the focus
+     * is on a text input or a combo, so a half-typed form is never discarded. The
+     * popups of the searchable combos and the {@code DatePicker} live in their own
+     * scene, so closing them with ESC does not trigger the navigation.</p>
+     *
+     * <p>The maximize is applied only the first time a scene is shown: later
+     * navigations keep whatever size the user chose. The window is therefore
+     * always resizable and the user decides whether to restore, move or resize
+     * it; the application never forces the size back.</p>
+     */
+    public static void show(Stage stage, ViewTuple<?, ?> tuple, String title,
+                            double width, double height, Runnable onEscape) {
+        Scene scene = new Scene(tuple.getView(), width, height);
+        installEscapeHandler(scene, onEscape);
         stage.setTitle(title);
-        stage.setScene(new Scene(tuple.getView(), width, height));
+        stage.setScene(scene);
         if (!stage.isShowing()) {
             // Full screen by default, but never a non-resizable window: if the user
             // restores or resizes it, the choice is respected from then on.
             stage.setResizable(true);
             stage.setMaximized(true);
         }
+    }
+
+    /** Runs {@code onEscape} on ESC unless the user is editing a field. */
+    private static void installEscapeHandler(Scene scene, Runnable onEscape) {
+        if (onEscape == null) {
+            return;
+        }
+        scene.addEventHandler(KeyEvent.KEY_PRESSED, event -> {
+            if (event.getCode() != KeyCode.ESCAPE || isEditing(scene.getFocusOwner())) {
+                return;
+            }
+            onEscape.run();
+            event.consume();
+        });
+    }
+
+    /** A text field or a combo keeps the ESC key for itself while it has the focus. */
+    private static boolean isEditing(Node focusOwner) {
+        return focusOwner instanceof TextInputControl || focusOwner instanceof ComboBoxBase;
     }
 }

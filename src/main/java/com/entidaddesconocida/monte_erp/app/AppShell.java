@@ -98,7 +98,7 @@ public class AppShell {
         ViewTuple<UsersView, UsersViewModel> tuple =
                 FluentViewLoader.fxmlView(UsersView.class).load();
         SceneNavigator.show(stage, tuple, "Monte ERP · Gestión de usuarios",
-                SceneNavigator.USERS_WIDTH, SceneNavigator.USERS_HEIGHT);
+                SceneNavigator.USERS_WIDTH, SceneNavigator.USERS_HEIGHT, this::showMain);
     }
 
     /**
@@ -110,7 +110,7 @@ public class AppShell {
         ViewTuple<ProductsView, ProductsViewModel> tuple =
                 FluentViewLoader.fxmlView(ProductsView.class).load();
         SceneNavigator.show(stage, tuple, "Monte ERP · Gestión de productos",
-                SceneNavigator.PRODUCTS_WIDTH, SceneNavigator.PRODUCTS_HEIGHT);
+                SceneNavigator.PRODUCTS_WIDTH, SceneNavigator.PRODUCTS_HEIGHT, this::showMain);
     }
 
     /**
@@ -122,7 +122,7 @@ public class AppShell {
         ViewTuple<CategoriesView, CategoriesViewModel> tuple =
                 FluentViewLoader.fxmlView(CategoriesView.class).load();
         SceneNavigator.show(stage, tuple, "Monte ERP · Gestión de categorías",
-                SceneNavigator.CATEGORIES_WIDTH, SceneNavigator.CATEGORIES_HEIGHT);
+                SceneNavigator.CATEGORIES_WIDTH, SceneNavigator.CATEGORIES_HEIGHT, this::showMain);
     }
 
     /**
@@ -134,7 +134,7 @@ public class AppShell {
         ViewTuple<SuppliersView, SuppliersViewModel> tuple =
                 FluentViewLoader.fxmlView(SuppliersView.class).load();
         SceneNavigator.show(stage, tuple, "Monte ERP · Gestión de proveedores",
-                SceneNavigator.SUPPLIERS_WIDTH, SceneNavigator.SUPPLIERS_HEIGHT);
+                SceneNavigator.SUPPLIERS_WIDTH, SceneNavigator.SUPPLIERS_HEIGHT, this::showMain);
     }
 
     /**
@@ -146,7 +146,7 @@ public class AppShell {
         ViewTuple<CustomersView, CustomersViewModel> tuple =
                 FluentViewLoader.fxmlView(CustomersView.class).load();
         SceneNavigator.show(stage, tuple, "Monte ERP · Gestión de clientes",
-                SceneNavigator.CUSTOMERS_WIDTH, SceneNavigator.CUSTOMERS_HEIGHT);
+                SceneNavigator.CUSTOMERS_WIDTH, SceneNavigator.CUSTOMERS_HEIGHT, this::showMain);
     }
 
     /**
@@ -158,7 +158,7 @@ public class AppShell {
         ViewTuple<SalesOrdersView, SalesOrdersViewModel> tuple =
                 FluentViewLoader.fxmlView(SalesOrdersView.class).load();
         SceneNavigator.show(stage, tuple, "Monte ERP · Gestión de pedidos",
-                SceneNavigator.SALES_ORDERS_WIDTH, SceneNavigator.SALES_ORDERS_HEIGHT);
+                SceneNavigator.SALES_ORDERS_WIDTH, SceneNavigator.SALES_ORDERS_HEIGHT, this::showMain);
     }
 
     /**
@@ -170,7 +170,7 @@ public class AppShell {
         ViewTuple<PurchasesView, PurchasesViewModel> tuple =
                 FluentViewLoader.fxmlView(PurchasesView.class).load();
         SceneNavigator.show(stage, tuple, "Monte ERP · Gestión de compras",
-                SceneNavigator.PURCHASES_WIDTH, SceneNavigator.PURCHASES_HEIGHT);
+                SceneNavigator.PURCHASES_WIDTH, SceneNavigator.PURCHASES_HEIGHT, this::showMain);
     }
 
     /**
@@ -182,7 +182,7 @@ public class AppShell {
         ViewTuple<StockView, StockViewModel> tuple =
                 FluentViewLoader.fxmlView(StockView.class).load();
         SceneNavigator.show(stage, tuple, "Monte ERP · Control de stock",
-                SceneNavigator.STOCK_WIDTH, SceneNavigator.STOCK_HEIGHT);
+                SceneNavigator.STOCK_WIDTH, SceneNavigator.STOCK_HEIGHT, this::showMain);
     }
 
     /**
@@ -194,7 +194,7 @@ public class AppShell {
         ViewTuple<ReportsView, ReportsViewModel> tuple =
                 FluentViewLoader.fxmlView(ReportsView.class).load();
         SceneNavigator.show(stage, tuple, "Monte ERP · Informes",
-                SceneNavigator.REPORTS_WIDTH, SceneNavigator.REPORTS_HEIGHT);
+                SceneNavigator.REPORTS_WIDTH, SceneNavigator.REPORTS_HEIGHT, this::showMain);
     }
 
     /**

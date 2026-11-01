@@ -163,4 +163,13 @@
             </VBox>
         </HBox>
     </center>
+
+    <bottom>
+        <HBox styleClass="statusbar" alignment="CENTER_LEFT">
+            <padding>
+                <Insets top="8.0" right="18.0" bottom="8.0" left="18.0"/>
+            </padding>
+            <Label fx:id="countLabel" styleClass="statusbar-text"/>
+        </HBox>
+    </bottom>
 </BorderPane>

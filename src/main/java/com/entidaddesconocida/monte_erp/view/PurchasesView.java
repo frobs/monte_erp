@@ -121,6 +121,9 @@ public class PurchasesView implements FxmlView<PurchasesViewModel> {
     @FXML
     private Label statusLabel;
 
+    @FXML
+    private Label countLabel;
+
     @InjectViewModel
     private PurchasesViewModel viewModel;
 
@@ -189,6 +192,8 @@ public class PurchasesView implements FxmlView<PurchasesViewModel> {
         totalLabel.textProperty().bind(Bindings.createStringBinding(
                 () -> "Total: " + formatMoney(viewModel.purchaseTotalProperty().get()),
                 viewModel.purchaseTotalProperty()));
+
+        countLabel.textProperty().bind(Bindings.size(viewModel.purchases()).asString("%d compras"));
     }
 
     private void bindSelection() {

@@ -5,6 +5,7 @@
 <?import javafx.scene.control.Label?>
 <?import javafx.scene.control.MenuButton?>
 <?import javafx.scene.control.MenuItem?>
+<?import javafx.scene.control.Tooltip?>
 <?import javafx.scene.layout.BorderPane?>
 <?import javafx.scene.layout.HBox?>
 <?import javafx.scene.layout.Region?>
@@ -50,16 +51,34 @@
                 <padding>
                     <Insets top="10.0"/>
                 </padding>
-                <Button text="Productos" onAction="#onProducts" styleClass="module-button"/>
-                <Button text="Categorías" onAction="#onCategories" styleClass="module-button"/>
-                <Button text="Proveedores" onAction="#onSuppliers" styleClass="module-button"/>
-                <Button text="Clientes" onAction="#onCustomers" styleClass="module-button"/>
-                <Button text="Compras" onAction="#onPurchases" styleClass="module-button"/>
-                <Button text="Pedidos" onAction="#onSalesOrders" styleClass="module-button"/>
-                <Button text="Stock" onAction="#onStock" styleClass="module-button"/>
-                <Button text="Informes" onAction="#onReports" styleClass="module-button"/>
+                <Button text="Productos" onAction="#onProducts" styleClass="module-button">
+                    <tooltip><Tooltip text="Catálogo de productos: crear, editar y consultar"/></tooltip>
+                </Button>
+                <Button text="Categorías" onAction="#onCategories" styleClass="module-button">
+                    <tooltip><Tooltip text="Categorías para clasificar los productos"/></tooltip>
+                </Button>
+                <Button text="Proveedores" onAction="#onSuppliers" styleClass="module-button">
+                    <tooltip><Tooltip text="Datos de contacto de los proveedores"/></tooltip>
+                </Button>
+                <Button text="Clientes" onAction="#onCustomers" styleClass="module-button">
+                    <tooltip><Tooltip text="Datos de contacto de los clientes"/></tooltip>
+                </Button>
+                <Button text="Compras" onAction="#onPurchases" styleClass="module-button">
+                    <tooltip><Tooltip text="Registrar entradas de mercancía y sus lotes"/></tooltip>
+                </Button>
+                <Button text="Pedidos" onAction="#onSalesOrders" styleClass="module-button">
+                    <tooltip><Tooltip text="Gestionar pedidos de venta y su estado"/></tooltip>
+                </Button>
+                <Button text="Stock" onAction="#onStock" styleClass="module-button">
+                    <tooltip><Tooltip text="Consultar existencias por producto y sus alertas"/></tooltip>
+                </Button>
+                <Button text="Informes" onAction="#onReports" styleClass="module-button">
+                    <tooltip><Tooltip text="Generar informes de stock y ventas, y exportarlos"/></tooltip>
+                </Button>
                 <Button fx:id="manageUsersButton" text="Gestión de usuarios"
-                        onAction="#onManageUsers" styleClass="admin-module-button"/>
+                        onAction="#onManageUsers" styleClass="admin-module-button">
+                    <tooltip><Tooltip text="Crear y administrar las cuentas de usuario (solo administrador)"/></tooltip>
+                </Button>
             </TilePane>
         </VBox>
     </center>

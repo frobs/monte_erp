@@ -183,8 +183,8 @@
 }
 
 .admin-module-button {
-    -fx-background-color: #b35f1b;
-    -fx-text-fill: #1f2a44;
+    -fx-background-color: #fef3c7;
+    -fx-text-fill: #92400e;
     -fx-font-size: 14px;
     -fx-background-radius: 10;
     -fx-padding: 18 26 18 26;
@@ -194,15 +194,6 @@
 }
 
 .admin-module-button:hover {
-    -fx-background-color: #b35f1b;
-}
-
-.admin-module {
-    -fx-background-color: #fef3c7;
-    -fx-text-fill: #92400e;
-}
-
-.admin-module:hover {
     -fx-background-color: #fde68a;
 }
 

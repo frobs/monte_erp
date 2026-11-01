@@ -8,11 +8,13 @@ import com.entidaddesconocida.monte_erp.viewmodel.ReportsViewModel;
 import de.saxsys.mvvmfx.FxmlView;
 import de.saxsys.mvvmfx.InjectViewModel;
 
+import javafx.beans.binding.Bindings;
 import javafx.beans.property.ReadOnlyStringWrapper;
 import javafx.fxml.FXML;
 import javafx.scene.control.Alert;
 import javafx.scene.control.DatePicker;
 import javafx.scene.control.Label;
+import javafx.scene.control.TabPane;
 import javafx.scene.control.TableColumn;
 import javafx.scene.control.TableView;
 import javafx.stage.FileChooser;
@@ -55,6 +57,12 @@ public class ReportsView implements FxmlView<ReportsViewModel> {
 
     @FXML
     private Label errorLabel;
+
+    @FXML
+    private TabPane reportsTabPane;
+
+    @FXML
+    private Label countLabel;
 
     @FXML
     private TableView<Stock> stockLotsTable;
@@ -122,6 +130,14 @@ public class ReportsView implements FxmlView<ReportsViewModel> {
         errorLabel.textProperty().bind(viewModel.errorMessageProperty());
         errorLabel.visibleProperty().bind(viewModel.errorMessageProperty().isNotEmpty());
         errorLabel.managedProperty().bind(viewModel.errorMessageProperty().isNotEmpty());
+
+        // The footer count follows the active tab and both result lists, so it is
+        // refreshed both when the user switches tabs and when a report is generated.
+        countLabel.textProperty().bind(Bindings.createStringBinding(
+                () -> (reportsTabPane.getSelectionModel().getSelectedIndex() == 1
+                        ? viewModel.salesRows().size() : viewModel.stockLots().size()) + " filas",
+                reportsTabPane.getSelectionModel().selectedIndexProperty(),
+                viewModel.stockLots(), viewModel.salesRows()));
 
         viewModel.load();
     }

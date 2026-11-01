@@ -147,6 +147,9 @@ public class SalesOrdersView implements FxmlView<SalesOrdersViewModel> {
     @FXML
     private Label statusLabel;
 
+    @FXML
+    private Label countLabel;
+
     @InjectViewModel
     private SalesOrdersViewModel viewModel;
 
@@ -238,6 +241,8 @@ public class SalesOrdersView implements FxmlView<SalesOrdersViewModel> {
         totalLabel.textProperty().bind(Bindings.createStringBinding(
                 () -> "Total: " + formatMoney(viewModel.orderTotalProperty().get()),
                 viewModel.orderTotalProperty()));
+
+        countLabel.textProperty().bind(Bindings.size(viewModel.orders()).asString("%d pedidos"));
 
         bindStatusActions();
     }

@@ -8,6 +8,7 @@ import com.entidaddesconocida.monte_erp.viewmodel.StockViewModel;
 import de.saxsys.mvvmfx.FxmlView;
 import de.saxsys.mvvmfx.InjectViewModel;
 
+import javafx.beans.binding.Bindings;
 import javafx.beans.property.ReadOnlyStringWrapper;
 import javafx.fxml.FXML;
 import javafx.scene.control.CheckBox;
@@ -63,6 +64,9 @@ public class StockView implements FxmlView<StockViewModel> {
 
     @FXML
     private Label alertCountLabel;
+
+    @FXML
+    private Label countLabel;
 
     @FXML
     private TableView<Stock> lotsTable;
@@ -146,6 +150,7 @@ public class StockView implements FxmlView<StockViewModel> {
         onlyBelowMinimumCheck.selectedProperty()
                 .bindBidirectional(viewModel.onlyBelowMinimumProperty());
         alertCountLabel.textProperty().bind(viewModel.alertCountProperty());
+        countLabel.textProperty().bind(Bindings.size(viewModel.filteredLevels()).asString("%d productos"));
     }
 
     private void bindSelection() {
