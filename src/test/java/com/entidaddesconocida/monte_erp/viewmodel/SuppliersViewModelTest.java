@@ -127,6 +127,30 @@ class SuppliersViewModelTest {
     }
 
     @Test
+    @DisplayName("Teléfono inválido: error en vivo al teclear, sin guardar, y se limpia al corregirlo")
+    void invalidPhoneShowsLiveErrorBeforeSave() {
+        viewModel.phoneProperty().set("llámame");
+
+        assertEquals("El teléfono solo puede contener números y los signos +, -, ( ), punto o espacios.",
+                viewModel.phoneErrorProperty().get());
+        assertEquals(viewModel.phoneErrorProperty().get(), viewModel.errorMessageProperty().get());
+
+        viewModel.phoneProperty().set("600123456");
+
+        assertTrue(viewModel.phoneErrorProperty().get().isEmpty());
+        assertTrue(viewModel.errorMessageProperty().get().isEmpty());
+    }
+
+    @Test
+    @DisplayName("Teléfono de 21 caracteres: error de longitud en vivo, sin guardar")
+    void tooLongPhoneShowsLiveErrorBeforeSave() {
+        viewModel.phoneProperty().set("1".repeat(21));
+
+        assertEquals("El teléfono no puede superar los 20 caracteres.",
+                viewModel.phoneErrorProperty().get());
+    }
+
+    @Test
     @DisplayName("Correo con formato inválido: error de campo")
     void invalidEmailShowsFieldError() {
         viewModel.nameProperty().set("Globex");
@@ -348,6 +372,30 @@ class SuppliersViewModelTest {
     }
 
     @Test
+    @DisplayName("La búsqueda por teléfono acota la tabla")
+    void searchFiltersByPhone() throws Exception {
+        fakeRepository.withSupplier(new Supplier(2, "Globex", "600333444", null, null));
+        viewModel.load();
+
+        viewModel.searchTextProperty().set("600333444");
+
+        assertEquals(1, viewModel.filteredSuppliers().size());
+        assertEquals("Globex", viewModel.filteredSuppliers().get(0).getName());
+    }
+
+    @Test
+    @DisplayName("La búsqueda por correo acota la tabla")
+    void searchFiltersByEmail() throws Exception {
+        fakeRepository.withSupplier(new Supplier(2, "Globex", null, "globex@example.com", null));
+        viewModel.load();
+
+        viewModel.searchTextProperty().set("globex@");
+
+        assertEquals(1, viewModel.filteredSuppliers().size());
+        assertEquals("Globex", viewModel.filteredSuppliers().get(0).getName());
+    }
+
+    @Test
     @DisplayName("Error de base de datos al cargar: muestra mensaje de conexión")
     void databaseErrorOnLoadShowsMessage() {
         fakeRepository.throwOnAccess();
@@ -381,8 +429,8 @@ class SuppliersViewModelTest {
     }
 
     @Test
-    @DisplayName("La validación en vivo solo actúa tras el primer intento de guardado")
-    void liveValidationStartsAfterFirstSaveAttempt() {
+    @DisplayName("La validación en vivo del nombre solo actúa tras el primer intento de guardado")
+    void nameLiveValidationStartsAfterFirstSaveAttempt() {
         viewModel.nameProperty().set("");
         assertTrue(viewModel.nameErrorProperty().get().isEmpty());
 

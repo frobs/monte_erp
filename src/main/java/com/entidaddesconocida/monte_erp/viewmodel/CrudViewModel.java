@@ -19,6 +19,7 @@ import javafx.collections.ObservableList;
 import java.sql.SQLException;
 import java.sql.SQLIntegrityConstraintViolationException;
 import java.util.List;
+import java.util.function.Supplier;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -106,6 +107,36 @@ public abstract class CrudViewModel<T> implements ViewModel {
         for (ObservableValue<?> field : fields) {
             field.addListener(fieldChange);
         }
+    }
+
+    /**
+     * Registers an always-on live validation for a single field: the error
+     * property is recomputed on every change, even before the first save
+     * attempt. Only the fields with an explicit rule (today the phone of
+     * suppliers and customers) use this; the rest stay behind
+     * {@code validateOnEdit} through {@link #watchFields}.
+     *
+     * <p>After the first save attempt {@code validateOnEdit} is already
+     * {@code true} and the generic listener refreshes the whole summary, so here
+     * only the field error is written. Before that moment the summary is updated
+     * directly, but it is cleared only when it still holds this field's previous
+     * message: a business or database error shown in the meantime must survive.</p>
+     */
+    protected final void watchLiveField(ObservableValue<?> field,
+            Supplier<String> rule, ReadOnlyStringWrapper error) {
+        field.addListener((observable, oldValue, newValue) -> {
+            String previous = error.get();
+            String message = rule.get();
+            error.set(message);
+            if (validateOnEdit) {
+                return;
+            }
+            if (!message.isBlank()) {
+                fail(message);
+            } else if (errorMessage.get().equals(previous)) {
+                clearErrorMessage();
+            }
+        });
     }
 
     /**

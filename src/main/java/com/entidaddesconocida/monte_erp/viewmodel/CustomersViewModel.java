@@ -65,6 +65,8 @@ public class CustomersViewModel extends FilterableCrudViewModel<Customer> {
         this.customerRepository = customerRepository;
         bindFilter(searchText);
         watchFields(name, phone, email, address);
+        // The phone is the only field validated while typing (decision D1).
+        watchLiveField(phone, this::validatePhone, phoneError);
         updateCount();
     }
 

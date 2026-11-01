@@ -127,6 +127,30 @@ class CustomersViewModelTest {
     }
 
     @Test
+    @DisplayName("Teléfono inválido: error en vivo al teclear, sin guardar, y se limpia al corregirlo")
+    void invalidPhoneShowsLiveErrorBeforeSave() {
+        viewModel.phoneProperty().set("llámame");
+
+        assertEquals("El teléfono solo puede contener números y los signos +, -, ( ), punto o espacios.",
+                viewModel.phoneErrorProperty().get());
+        assertEquals(viewModel.phoneErrorProperty().get(), viewModel.errorMessageProperty().get());
+
+        viewModel.phoneProperty().set("600123456");
+
+        assertTrue(viewModel.phoneErrorProperty().get().isEmpty());
+        assertTrue(viewModel.errorMessageProperty().get().isEmpty());
+    }
+
+    @Test
+    @DisplayName("Teléfono de 21 caracteres: error de longitud en vivo, sin guardar")
+    void tooLongPhoneShowsLiveErrorBeforeSave() {
+        viewModel.phoneProperty().set("1".repeat(21));
+
+        assertEquals("El teléfono no puede superar los 20 caracteres.",
+                viewModel.phoneErrorProperty().get());
+    }
+
+    @Test
     @DisplayName("Correo con formato inválido: error de campo")
     void invalidEmailShowsFieldError() {
         viewModel.nameProperty().set("Globex");
@@ -405,8 +429,8 @@ class CustomersViewModelTest {
     }
 
     @Test
-    @DisplayName("La validación en vivo solo actúa tras el primer intento de guardado")
-    void liveValidationStartsAfterFirstSaveAttempt() {
+    @DisplayName("La validación en vivo del nombre solo actúa tras el primer intento de guardado")
+    void nameLiveValidationStartsAfterFirstSaveAttempt() {
         viewModel.nameProperty().set("");
         assertTrue(viewModel.nameErrorProperty().get().isEmpty());
 
