@@ -8,6 +8,7 @@ import com.entidaddesconocida.monte_erp.domain.model.SalesOrderLine;
 import com.entidaddesconocida.monte_erp.domain.model.SalesReportLine;
 import com.entidaddesconocida.monte_erp.domain.model.StockIssue;
 import com.entidaddesconocida.monte_erp.domain.model.User;
+import com.entidaddesconocida.monte_erp.domain.service.InactiveEntityException;
 import com.entidaddesconocida.monte_erp.domain.service.InsufficientStockException;
 import com.entidaddesconocida.monte_erp.infrastructure.config.DatabaseConnection;
 import com.entidaddesconocida.monte_erp.infrastructure.support.FakeJdbc;
@@ -94,7 +95,8 @@ class MySqlSalesOrderRepositoryTest {
                 "purchase_id", 5,
                 "product_id", 1,
                 "product_name", "Teclado",
-                "product_sku", "SKU-1");
+                "product_sku", "SKU-1",
+                "active", true);
     }
 
     // --- insert: header + lines + FIFO consumption -------------------------
@@ -109,15 +111,17 @@ class MySqlSalesOrderRepositoryTest {
 
         assertEquals(42, id);
         assertEquals(42, order.getId());
-        assertTrue(fake.preparedSql().get(0).contains("INSERT INTO SALES_ORDER"));
-        Map<Integer, Object> orderParameters = fake.boundParameters().get(0);
+        int orderIndex = fake.preparedSql().indexOf("INSERT INTO SALES_ORDER (status, total, customer_id, user_id) VALUES (?, ?, ?, ?)");
+        assertTrue(orderIndex >= 0);
+        Map<Integer, Object> orderParameters = fake.boundParameters().get(orderIndex);
         assertEquals("pending", orderParameters.get(1));
         assertEquals(0, new BigDecimal("20.00").compareTo((BigDecimal) orderParameters.get(2)));
         assertEquals(3, orderParameters.get(3));
         assertEquals(9, orderParameters.get(4));
 
-        assertTrue(fake.preparedSql().get(1).contains("INSERT INTO SALES_ORDER_LINE"));
-        Map<Integer, Object> lineParameters = fake.boundParameters().get(1);
+        int lineIndex = fake.preparedSql().indexOf("INSERT INTO SALES_ORDER_LINE (quantity, unit_price, sales_order_id, product_id) VALUES (?, ?, ?, ?)");
+        assertTrue(lineIndex >= 0);
+        Map<Integer, Object> lineParameters = fake.boundParameters().get(lineIndex);
         assertEquals(2, lineParameters.get(1));
         assertEquals(42, lineParameters.get(3));
         assertEquals(1, lineParameters.get(4));
@@ -154,15 +158,16 @@ class MySqlSalesOrderRepositoryTest {
         assertEquals(2, line.getIssues().get(1).getQuantity());
 
         List<Map<Integer, Object>> parameters = fake.boundParameters();
-        // Statement order: order, line, lots, issue(old), stock, issue(new), stock.
-        assertEquals(3, parameters.get(3).get(1));
-        assertEquals(11, parameters.get(3).get(3));
-        assertEquals(0, parameters.get(4).get(1));
-        assertEquals(11, parameters.get(4).get(2));
-        assertEquals(2, parameters.get(5).get(1));
-        assertEquals(12, parameters.get(5).get(3));
-        assertEquals(8, parameters.get(6).get(1));
-        assertEquals(12, parameters.get(6).get(2));
+        // Statement order: active customer, order, active product, line, lots,
+        // then the FIFO issue/update pairs.
+        assertEquals(3, parameters.get(5).get(1));
+        assertEquals(11, parameters.get(5).get(3));
+        assertEquals(0, parameters.get(6).get(1));
+        assertEquals(11, parameters.get(6).get(2));
+        assertEquals(2, parameters.get(7).get(1));
+        assertEquals(12, parameters.get(7).get(3));
+        assertEquals(8, parameters.get(8).get(1));
+        assertEquals(12, parameters.get(8).get(2));
     }
 
     @Test
@@ -188,6 +193,34 @@ class MySqlSalesOrderRepositoryTest {
         assertFalse(fake.transactionCalls().contains("commit()"));
         assertTrue(fake.transactionCalls().contains("setAutoCommit(true)"));
         assertTrue(fake.preparedSql().stream().noneMatch(sql -> sql.contains("INSERT INTO STOCK_ISSUE")));
+    }
+
+    @Test
+    @DisplayName("Un pedido no usa un cliente desactivado mientras el formulario estaba abierto")
+    void insertRejectsCustomerDeactivatedBeforeSave() {
+        fake.withNextQueryRows(FakeJdbc.row("active", false));
+
+        assertThrows(InactiveEntityException.class, () -> repository.insert(draftOrder(2)));
+
+        assertTrue(fake.preparedSql().get(0).contains("FROM CUSTOMER")
+                && fake.preparedSql().get(0).contains("FOR UPDATE"));
+        assertTrue(fake.preparedSql().stream().noneMatch(sql -> sql.contains("INSERT INTO SALES_ORDER")));
+        assertTrue(fake.transactionCalls().contains("rollback()"));
+        assertFalse(fake.transactionCalls().contains("commit()"));
+    }
+
+    @Test
+    @DisplayName("Un pedido no vende un producto desactivado mientras el formulario estaba abierto")
+    void insertRejectsProductDeactivatedBeforeSave() {
+        fake.withNextQueryRows(FakeJdbc.row("active", true))
+                .withNextQueryRows(FakeJdbc.row("active", false));
+
+        assertThrows(InactiveEntityException.class, () -> repository.insert(draftOrder(2)));
+
+        assertTrue(fake.preparedSql().stream().anyMatch(sql -> sql.contains("FROM PRODUCT")
+                && sql.contains("FOR UPDATE")));
+        assertTrue(fake.transactionCalls().contains("rollback()"));
+        assertFalse(fake.transactionCalls().contains("commit()"));
     }
 
     @Test

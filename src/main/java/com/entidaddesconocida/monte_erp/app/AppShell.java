@@ -1,6 +1,7 @@
 package com.entidaddesconocida.monte_erp.app;
 
 import com.entidaddesconocida.monte_erp.domain.model.User;
+import com.entidaddesconocida.monte_erp.domain.repository.UserRepository;
 import com.entidaddesconocida.monte_erp.view.CategoriesView;
 import com.entidaddesconocida.monte_erp.view.CustomersView;
 import com.entidaddesconocida.monte_erp.view.LoginView;
@@ -30,6 +31,10 @@ import de.saxsys.mvvmfx.ViewTuple;
 
 import javafx.stage.Stage;
 
+import java.sql.SQLException;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+
 /**
  * Owns the {@link Stage}, handles navigation between views and wires global
  * notifications.
@@ -40,12 +45,16 @@ import javafx.stage.Stage;
  */
 public class AppShell {
 
+    private static final Logger LOGGER = Logger.getLogger(AppShell.class.getName());
+
     private final SessionState session;
+    private final SessionValidator sessionValidator;
     private Stage stage;
     private boolean onboardingMode;
 
-    public AppShell(SessionState session) {
+    public AppShell(SessionState session, UserRepository userRepository) {
         this.session = session;
+        this.sessionValidator = new SessionValidator(session, userRepository);
     }
 
     /** Stores the stage; the first view is shown by the application entry point. */
@@ -75,7 +84,11 @@ public class AppShell {
 
     /** Loads the main view for the current session (e.g. when coming back from a module). */
     public void showMain() {
-        User user = session.requireCurrentUser();
+        User user = refreshSession();
+        if (user == null) {
+            showLogin();
+            return;
+        }
         ViewTuple<MainView, ?> tuple =
                 FluentViewLoader.fxmlView(MainView.class).load();
         String title = "Monte ERP · " + user.getName() + " (" + user.getRoleLabel() + ")";
@@ -91,7 +104,11 @@ public class AppShell {
      *                               hidden for employees, this is a safety net
      */
     public void showUsers() {
-        User user = session.requireCurrentUser();
+        User user = refreshSession();
+        if (user == null) {
+            showLogin();
+            return;
+        }
         if (!user.isAdmin()) {
             throw new IllegalStateException("La gestión de usuarios es exclusiva del administrador");
         }
@@ -106,7 +123,10 @@ public class AppShell {
      * manage products (CU-03 actor is the employee), so there is no role guard.
      */
     public void showProducts() {
-        session.requireCurrentUser();
+        if (refreshSession() == null) {
+            showLogin();
+            return;
+        }
         ViewTuple<ProductsView, ProductsViewModel> tuple =
                 FluentViewLoader.fxmlView(ProductsView.class).load();
         SceneNavigator.show(stage, tuple, "Monte ERP · Gestión de productos",
@@ -118,7 +138,10 @@ public class AppShell {
      * manage categories (CU-04 actor is the employee), so there is no role guard.
      */
     public void showCategories() {
-        session.requireCurrentUser();
+        if (refreshSession() == null) {
+            showLogin();
+            return;
+        }
         ViewTuple<CategoriesView, CategoriesViewModel> tuple =
                 FluentViewLoader.fxmlView(CategoriesView.class).load();
         SceneNavigator.show(stage, tuple, "Monte ERP · Gestión de categorías",
@@ -130,7 +153,10 @@ public class AppShell {
      * manage suppliers (CU-05 actor is the employee), so there is no role guard.
      */
     public void showSuppliers() {
-        session.requireCurrentUser();
+        if (refreshSession() == null) {
+            showLogin();
+            return;
+        }
         ViewTuple<SuppliersView, SuppliersViewModel> tuple =
                 FluentViewLoader.fxmlView(SuppliersView.class).load();
         SceneNavigator.show(stage, tuple, "Monte ERP · Gestión de proveedores",
@@ -142,7 +168,10 @@ public class AppShell {
      * manage customers (CU-06 actor is the employee), so there is no role guard.
      */
     public void showCustomers() {
-        session.requireCurrentUser();
+        if (refreshSession() == null) {
+            showLogin();
+            return;
+        }
         ViewTuple<CustomersView, CustomersViewModel> tuple =
                 FluentViewLoader.fxmlView(CustomersView.class).load();
         SceneNavigator.show(stage, tuple, "Monte ERP · Gestión de clientes",
@@ -154,7 +183,10 @@ public class AppShell {
      * orders (CU-07 actor is the employee), so there is no role guard.
      */
     public void showSalesOrders() {
-        session.requireCurrentUser();
+        if (refreshSession() == null) {
+            showLogin();
+            return;
+        }
         ViewTuple<SalesOrdersView, SalesOrdersViewModel> tuple =
                 FluentViewLoader.fxmlView(SalesOrdersView.class).load();
         SceneNavigator.show(stage, tuple, "Monte ERP · Gestión de pedidos",
@@ -166,7 +198,10 @@ public class AppShell {
      * purchases (CU-10 actor is the employee), so there is no role guard.
      */
     public void showPurchases() {
-        session.requireCurrentUser();
+        if (refreshSession() == null) {
+            showLogin();
+            return;
+        }
         ViewTuple<PurchasesView, PurchasesViewModel> tuple =
                 FluentViewLoader.fxmlView(PurchasesView.class).load();
         SceneNavigator.show(stage, tuple, "Monte ERP · Gestión de compras",
@@ -178,7 +213,10 @@ public class AppShell {
      * consult the stock (CU-08 actor is the employee), so there is no role guard.
      */
     public void showStock() {
-        session.requireCurrentUser();
+        if (refreshSession() == null) {
+            showLogin();
+            return;
+        }
         ViewTuple<StockView, StockViewModel> tuple =
                 FluentViewLoader.fxmlView(StockView.class).load();
         SceneNavigator.show(stage, tuple, "Monte ERP · Control de stock",
@@ -190,7 +228,10 @@ public class AppShell {
      * reports (CU-09 actor is the employee), so there is no role guard.
      */
     public void showReports() {
-        session.requireCurrentUser();
+        if (refreshSession() == null) {
+            showLogin();
+            return;
+        }
         ViewTuple<ReportsView, ReportsViewModel> tuple =
                 FluentViewLoader.fxmlView(ReportsView.class).load();
         SceneNavigator.show(stage, tuple, "Monte ERP · Informes",
@@ -222,6 +263,19 @@ public class AppShell {
         } else {
             showLogin();
         }
+    }
+
+    private User refreshSession() {
+        session.requireCurrentUser();
+        try {
+            if (sessionValidator.refresh()) {
+                return session.currentUser();
+            }
+        } catch (SQLException e) {
+            LOGGER.log(Level.WARNING, "Could not revalidate the signed-in user", e);
+        }
+        session.signOut();
+        return null;
     }
 
     /** Closes the application window. */

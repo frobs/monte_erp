@@ -2,6 +2,7 @@ package com.entidaddesconocida.monte_erp.app;
 
 import com.entidaddesconocida.monte_erp.domain.model.User;
 import com.entidaddesconocida.monte_erp.security.PasswordHasher;
+import com.entidaddesconocida.monte_erp.viewmodel.support.FakeUserRepository;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -21,7 +22,7 @@ class AppShellTest {
     @Test
     @DisplayName("showUsers sin sesión falla con IllegalStateException")
     void showUsersWithoutSessionFails() {
-        AppShell shell = new AppShell(new SessionState());
+        AppShell shell = new AppShell(new SessionState(), new FakeUserRepository());
 
         IllegalStateException ex = assertThrows(IllegalStateException.class, shell::showUsers);
 
@@ -32,8 +33,10 @@ class AppShellTest {
     @DisplayName("showUsers con un empleado falla con IllegalStateException")
     void showUsersAsEmployeeFails() {
         SessionState session = new SessionState();
-        session.signIn(new User("Bea", "bea", PasswordHasher.hash("bea123"), User.ROLE_EMPLOYEE, true));
-        AppShell shell = new AppShell(session);
+        User employee = new User("Bea", "bea", PasswordHasher.hash("bea123"), User.ROLE_EMPLOYEE, true);
+        FakeUserRepository repository = new FakeUserRepository().withUser(employee);
+        session.signIn(employee);
+        AppShell shell = new AppShell(session, repository);
 
         IllegalStateException ex = assertThrows(IllegalStateException.class, shell::showUsers);
 
@@ -41,9 +44,27 @@ class AppShellTest {
     }
 
     @Test
+    @DisplayName("showUsers revalida el rol vigente antes de cargar la pantalla protegida")
+    void showUsersRejectsDemotedAdministrator() throws Exception {
+        User administrator = new User("Ana", "ana", PasswordHasher.hash("ana123"), User.ROLE_ADMIN, true);
+        FakeUserRepository repository = new FakeUserRepository().withUser(administrator);
+        SessionState session = new SessionState();
+        session.signIn(administrator);
+        User demoted = new User("Ana", "ana", administrator.getPasswordHash(), User.ROLE_EMPLOYEE, true);
+        demoted.setId(administrator.getId());
+        repository.update(demoted);
+        AppShell shell = new AppShell(session, repository);
+
+        IllegalStateException ex = assertThrows(IllegalStateException.class, shell::showUsers);
+
+        assertEquals("La gestión de usuarios es exclusiva del administrador", ex.getMessage());
+        assertFalse(administrator.isAdmin());
+    }
+
+    @Test
     @DisplayName("showMain sin sesión falla con IllegalStateException antes de cargar la vista")
     void showMainWithoutSessionFails() {
-        AppShell shell = new AppShell(new SessionState());
+        AppShell shell = new AppShell(new SessionState(), new FakeUserRepository());
 
         IllegalStateException ex = assertThrows(IllegalStateException.class, shell::showMain);
 
@@ -53,7 +74,7 @@ class AppShellTest {
     @Test
     @DisplayName("showProducts sin sesión falla con IllegalStateException antes de cargar la vista")
     void showProductsWithoutSessionFails() {
-        AppShell shell = new AppShell(new SessionState());
+        AppShell shell = new AppShell(new SessionState(), new FakeUserRepository());
 
         IllegalStateException ex = assertThrows(IllegalStateException.class, shell::showProducts);
 
@@ -63,7 +84,7 @@ class AppShellTest {
     @Test
     @DisplayName("showCategories sin sesión falla con IllegalStateException antes de cargar la vista")
     void showCategoriesWithoutSessionFails() {
-        AppShell shell = new AppShell(new SessionState());
+        AppShell shell = new AppShell(new SessionState(), new FakeUserRepository());
 
         IllegalStateException ex = assertThrows(IllegalStateException.class, shell::showCategories);
 
@@ -73,7 +94,7 @@ class AppShellTest {
     @Test
     @DisplayName("showCustomers sin sesión falla con IllegalStateException antes de cargar la vista")
     void showCustomersWithoutSessionFails() {
-        AppShell shell = new AppShell(new SessionState());
+        AppShell shell = new AppShell(new SessionState(), new FakeUserRepository());
 
         IllegalStateException ex = assertThrows(IllegalStateException.class, shell::showCustomers);
 
@@ -83,7 +104,7 @@ class AppShellTest {
     @Test
     @DisplayName("showSalesOrders sin sesión falla con IllegalStateException antes de cargar la vista")
     void showSalesOrdersWithoutSessionFails() {
-        AppShell shell = new AppShell(new SessionState());
+        AppShell shell = new AppShell(new SessionState(), new FakeUserRepository());
 
         IllegalStateException ex = assertThrows(IllegalStateException.class, shell::showSalesOrders);
 
@@ -93,7 +114,7 @@ class AppShellTest {
     @Test
     @DisplayName("showReports sin sesión falla con IllegalStateException antes de cargar la vista")
     void showReportsWithoutSessionFails() {
-        AppShell shell = new AppShell(new SessionState());
+        AppShell shell = new AppShell(new SessionState(), new FakeUserRepository());
 
         IllegalStateException ex = assertThrows(IllegalStateException.class, shell::showReports);
 
@@ -103,12 +124,12 @@ class AppShellTest {
     @Test
     @DisplayName("isOnboarding es false por defecto")
     void onboardingIsFalseByDefault() {
-        assertFalse(new AppShell(new SessionState()).isOnboarding());
+        assertFalse(new AppShell(new SessionState(), new FakeUserRepository()).isOnboarding());
     }
 
     @Test
     @DisplayName("exit sin stage no falla")
     void exitWithoutStageDoesNothing() {
-        new AppShell(new SessionState()).exit();
+        new AppShell(new SessionState(), new FakeUserRepository()).exit();
     }
 }

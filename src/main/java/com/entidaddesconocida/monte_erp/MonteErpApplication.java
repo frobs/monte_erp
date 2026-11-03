@@ -63,7 +63,7 @@ public class MonteErpApplication extends Application {
         SetupService setupService = new DatabaseSetupService(databaseConfig, userRepository);
 
         SessionState session = new SessionState();
-        AppShell appShell = new AppShell(session);
+        AppShell appShell = new AppShell(session, userRepository);
         AppContext context = new AppContext(session, appShell, userRepository,
                 categoryRepository, supplierRepository, productRepository, customerRepository,
                 salesOrderRepository, purchaseRepository, stockRepository, databaseConfig,

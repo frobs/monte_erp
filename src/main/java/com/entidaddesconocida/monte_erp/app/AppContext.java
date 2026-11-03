@@ -69,6 +69,7 @@ public final class AppContext {
                       StockRepository stockRepository,
                       DatabaseConfig databaseConfig, SetupService setupService,
                       Supplier<DatabaseUrl> databaseUrl) {
+        SessionValidator sessionValidator = new SessionValidator(session, userRepository);
         // Stateless resources: single instance for the whole application.
         bind(UserRepository.class, () -> userRepository);
         bind(CategoryRepository.class, () -> categoryRepository);
@@ -101,25 +102,25 @@ public final class AppContext {
         bind(MainViewModel.class,
                 () -> new MainViewModel(session.requireCurrentUser(), databaseUrl.get()));
         bind(UsersViewModel.class,
-                () -> new UsersViewModel(userRepository, session.requireCurrentUser()));
+                () -> new UsersViewModel(userRepository, session.requireCurrentUser(), sessionValidator));
         bind(ProductsViewModel.class,
                 () -> new ProductsViewModel(productRepository, categoryRepository,
-                        supplierRepository, purchaseRepository));
+                        supplierRepository, purchaseRepository, sessionValidator));
         bind(CategoriesViewModel.class,
-                () -> new CategoriesViewModel(categoryRepository));
+                () -> new CategoriesViewModel(categoryRepository, sessionValidator));
         bind(SuppliersViewModel.class,
-                () -> new SuppliersViewModel(supplierRepository));
+                () -> new SuppliersViewModel(supplierRepository, sessionValidator));
         bind(CustomersViewModel.class,
-                () -> new CustomersViewModel(customerRepository));
+                () -> new CustomersViewModel(customerRepository, sessionValidator));
         bind(SalesOrdersViewModel.class,
                 () -> new SalesOrdersViewModel(salesOrderRepository, customerRepository,
-                        productRepository, stockRepository, session.requireCurrentUser()));
+                        productRepository, stockRepository, session.requireCurrentUser(), sessionValidator));
         bind(PurchasesViewModel.class,
                 () -> new PurchasesViewModel(purchaseRepository, supplierRepository,
-                        productRepository, session.requireCurrentUser()));
-        bind(StockViewModel.class, () -> new StockViewModel(stockRepository));
+                        productRepository, session.requireCurrentUser(), sessionValidator));
+        bind(StockViewModel.class, () -> new StockViewModel(stockRepository, sessionValidator));
         bind(ReportsViewModel.class,
-                () -> new ReportsViewModel(salesOrderRepository, stockRepository));
+                () -> new ReportsViewModel(salesOrderRepository, stockRepository, sessionValidator));
         bind(SetupViewModel.class,
                 () -> new SetupViewModel(setupService, appShell.isOnboarding()));
     }

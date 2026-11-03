@@ -41,6 +41,7 @@ public class FakeSalesOrderRepository implements SalesOrderRepository {
     private final Map<Integer, List<SalesOrderLine>> linesByOrder = new LinkedHashMap<>();
     private final Map<Integer, List<StockIssue>> issuesByOrder = new LinkedHashMap<>();
     private final Set<String> failingMethods = new HashSet<>();
+    private final Set<String> failingNextCalls = new HashSet<>();
     private boolean throwOnAccess;
     private InsufficientStockException insufficientStock;
     private int nextId = 1;
@@ -91,8 +92,14 @@ public class FakeSalesOrderRepository implements SalesOrderRepository {
         return this;
     }
 
+    /** Fails only the next call to {@code method}, then resumes normally. */
+    public FakeSalesOrderRepository failNext(String method) {
+        failingNextCalls.add(method);
+        return this;
+    }
+
     private void maybeThrow(String method) throws SQLException {
-        if (throwOnAccess || failingMethods.contains(method)) {
+        if (throwOnAccess || failingMethods.contains(method) || failingNextCalls.remove(method)) {
             throw new SQLException("Simulated database failure in " + method);
         }
     }

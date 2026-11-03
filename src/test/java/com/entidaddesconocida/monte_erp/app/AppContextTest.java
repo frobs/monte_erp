@@ -60,7 +60,7 @@ class AppContextTest {
     private static AppContext context(SessionState session, FakeUserRepository repo) {
         DatabaseConfig config = new DatabaseConfig(new FakeCredentialStore());
         FakeSetupService setup = new FakeSetupService();
-        return new AppContext(session, new AppShell(session), repo,
+        return new AppContext(session, new AppShell(session, repo), repo,
                 new FakeCategoryRepository(), new FakeSupplierRepository(), new FakeProductRepository(),
                 new FakeCustomerRepository(), new FakeSalesOrderRepository(),
                 new FakePurchaseRepository(), new FakeStockRepository(),

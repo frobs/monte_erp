@@ -11,6 +11,7 @@ import com.entidaddesconocida.monte_erp.domain.model.Stock;
 import com.entidaddesconocida.monte_erp.domain.model.StockIssue;
 import com.entidaddesconocida.monte_erp.domain.repository.SalesOrderRepository;
 import com.entidaddesconocida.monte_erp.domain.service.FifoAllocator;
+import com.entidaddesconocida.monte_erp.domain.service.InactiveEntityException;
 import com.entidaddesconocida.monte_erp.domain.service.InsufficientStockException;
 import com.entidaddesconocida.monte_erp.infrastructure.config.DatabaseConnection;
 
@@ -54,6 +55,10 @@ public class MySqlSalesOrderRepository implements SalesOrderRepository {
 
     private static final String INSERT_ORDER =
             "INSERT INTO SALES_ORDER (status, total, customer_id, user_id) VALUES (?, ?, ?, ?)";
+    private static final String SELECT_ACTIVE_CUSTOMER_FOR_UPDATE =
+            "SELECT active FROM CUSTOMER WHERE id = ? FOR UPDATE";
+    private static final String SELECT_ACTIVE_PRODUCT_FOR_UPDATE =
+            "SELECT active FROM PRODUCT WHERE id = ? FOR UPDATE";
     private static final String INSERT_LINE =
             "INSERT INTO SALES_ORDER_LINE (quantity, unit_price, sales_order_id, product_id)"
                     + " VALUES (?, ?, ?, ?)";
@@ -145,6 +150,8 @@ public class MySqlSalesOrderRepository implements SalesOrderRepository {
         boolean previousAutoCommit = connection.getAutoCommit();
         connection.setAutoCommit(false);
         try {
+            requireActive(connection, SELECT_ACTIVE_CUSTOMER_FOR_UPDATE,
+                    order.getCustomer().getId(), "cliente");
             int id = insertOrder(connection, order);
             order.setId(id);
             for (SalesOrderLine line : order.getLines()) {
@@ -293,6 +300,8 @@ public class MySqlSalesOrderRepository implements SalesOrderRepository {
 
     private void insertLineAndConsumeStock(Connection connection, int salesOrderId,
                                            SalesOrderLine line) throws SQLException, InsufficientStockException {
+        requireActive(connection, SELECT_ACTIVE_PRODUCT_FOR_UPDATE,
+                line.getProduct().getId(), "producto");
         int lineId = insertLine(connection, salesOrderId, line);
         line.setId(lineId);
 
@@ -306,6 +315,19 @@ public class MySqlSalesOrderRepository implements SalesOrderRepository {
             updateLotAvailable(connection, lot, lot.getAvailableQuantity());
         }
         line.setIssues(issues);
+    }
+
+    private void requireActive(Connection connection, String sql, int id, String entity)
+            throws SQLException {
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            ps.setInt(1, id);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (!rs.next() || !rs.getBoolean("active")) {
+                    throw new InactiveEntityException("El " + entity
+                            + " fue dado de baja mientras se preparaba el pedido. Actualiza el formulario.");
+                }
+            }
+        }
     }
 
     private int insertLine(Connection connection, int salesOrderId, SalesOrderLine line)

@@ -1,10 +1,12 @@
 package com.entidaddesconocida.monte_erp.infrastructure;
 
 import com.entidaddesconocida.monte_erp.domain.model.Product;
+import com.entidaddesconocida.monte_erp.domain.model.ProductSupplier;
 import com.entidaddesconocida.monte_erp.domain.model.Purchase;
 import com.entidaddesconocida.monte_erp.domain.model.Stock;
 import com.entidaddesconocida.monte_erp.domain.model.Supplier;
 import com.entidaddesconocida.monte_erp.domain.repository.PurchaseRepository;
+import com.entidaddesconocida.monte_erp.domain.service.InactiveEntityException;
 import com.entidaddesconocida.monte_erp.infrastructure.config.DatabaseConnection;
 
 import java.sql.Connection;
@@ -31,6 +33,12 @@ import java.util.List;
  * {@code PRODUCT} to build <em>light</em> entities carrying the name the table
  * shows. {@link #findLots(int)} does not filter {@code p.active}: an old purchase
  * must keep showing a product that has since been given up.</p>
+ *
+ * <p>{@link #findProductSuppliers()} projects the product ↔ supplier pairs of the
+ * whole history with a {@code DISTINCT} over {@code STOCK JOIN PURCHASE}; it does
+ * <strong>not</strong> filter {@code available_quantity} nor {@code PRODUCT.active}
+ * (decision D3: the filter asks where the product comes from, so a lot at 0 still
+ * counts and an inactive product is still listed with its suppliers).</p>
  */
 public class MySqlPurchaseRepository implements PurchaseRepository {
 
@@ -39,6 +47,10 @@ public class MySqlPurchaseRepository implements PurchaseRepository {
     private static final String INSERT_LOT =
             "INSERT INTO STOCK (initial_quantity, available_quantity, purchase_price, product_id,"
                     + " purchase_id) VALUES (?, ?, ?, ?, ?)";
+    private static final String SELECT_ACTIVE_SUPPLIER_FOR_UPDATE =
+            "SELECT active FROM SUPPLIER WHERE id = ? FOR UPDATE";
+    private static final String SELECT_ACTIVE_PRODUCT_FOR_UPDATE =
+            "SELECT active FROM PRODUCT WHERE id = ? FOR UPDATE";
     private static final String SELECT_PURCHASES = """
             SELECT p.id, p.purchase_date, p.status, p.total, p.supplier_id, s.name AS supplier_name
               FROM PURCHASE p
@@ -53,6 +65,12 @@ public class MySqlPurchaseRepository implements PurchaseRepository {
              WHERE s.purchase_id = ?
              ORDER BY s.entry_date, s.id
             """;
+    private static final String SELECT_PRODUCT_SUPPLIERS = """
+            SELECT DISTINCT s.product_id, p.supplier_id
+              FROM STOCK s
+              JOIN PURCHASE p ON p.id = s.purchase_id
+             ORDER BY s.product_id, p.supplier_id
+            """;
 
     @Override
     public int insert(Purchase purchase) throws SQLException {
@@ -60,14 +78,18 @@ public class MySqlPurchaseRepository implements PurchaseRepository {
         boolean previousAutoCommit = connection.getAutoCommit();
         connection.setAutoCommit(false);
         try {
+            requireActive(connection, SELECT_ACTIVE_SUPPLIER_FOR_UPDATE,
+                    purchase.getSupplier().getId(), "proveedor");
             int id = insertPurchase(connection, purchase);
             purchase.setId(id);
             for (Stock lot : purchase.getLots()) {
+                requireActive(connection, SELECT_ACTIVE_PRODUCT_FOR_UPDATE,
+                        lot.getProduct().getId(), "producto");
                 insertLot(connection, purchase, lot);
             }
             connection.commit();
             return id;
-        } catch (SQLException e) {
+        } catch (SQLException | RuntimeException e) {
             try {
                 connection.rollback();
             } catch (SQLException rollbackFailure) {
@@ -104,6 +126,31 @@ public class MySqlPurchaseRepository implements PurchaseRepository {
             }
         }
         return lots;
+    }
+
+    @Override
+    public List<ProductSupplier> findProductSuppliers() throws SQLException {
+        List<ProductSupplier> pairs = new ArrayList<>();
+        try (Statement statement = DatabaseConnection.getConnection().createStatement();
+             ResultSet rs = statement.executeQuery(SELECT_PRODUCT_SUPPLIERS)) {
+            while (rs.next()) {
+                pairs.add(new ProductSupplier(rs.getInt("product_id"), rs.getInt("supplier_id")));
+            }
+        }
+        return pairs;
+    }
+
+    private void requireActive(Connection connection, String sql, int id, String entity)
+            throws SQLException {
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            ps.setInt(1, id);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (!rs.next() || !rs.getBoolean("active")) {
+                    throw new InactiveEntityException("El " + entity
+                            + " fue dado de baja mientras se preparaba la compra. Actualiza el formulario.");
+                }
+            }
+        }
     }
 
     private int insertPurchase(Connection connection, Purchase purchase) throws SQLException {

@@ -1,10 +1,12 @@
 package com.entidaddesconocida.monte_erp.infrastructure;
 
 import com.entidaddesconocida.monte_erp.domain.model.Product;
+import com.entidaddesconocida.monte_erp.domain.model.ProductSupplier;
 import com.entidaddesconocida.monte_erp.domain.model.Purchase;
 import com.entidaddesconocida.monte_erp.domain.model.Stock;
 import com.entidaddesconocida.monte_erp.domain.model.Supplier;
 import com.entidaddesconocida.monte_erp.domain.model.User;
+import com.entidaddesconocida.monte_erp.domain.service.InactiveEntityException;
 import com.entidaddesconocida.monte_erp.infrastructure.config.DatabaseConnection;
 import com.entidaddesconocida.monte_erp.infrastructure.support.FakeJdbc;
 
@@ -77,7 +79,7 @@ class MySqlPurchaseRepositoryTest {
     @Test
     @DisplayName("insert escribe la compra y un lote por cada lote, y devuelve la clave")
     void insertWritesPurchaseAndLots() throws SQLException {
-        fake.withGeneratedKey(42);
+        fake.withGeneratedKey(42).withRows(FakeJdbc.row("active", true));
         Purchase purchase = draftPurchase();
 
         int id = repository.insert(purchase);
@@ -85,24 +87,24 @@ class MySqlPurchaseRepositoryTest {
         assertEquals(42, id);
         assertEquals(42, purchase.getId());
 
-        String purchaseSql = fake.preparedSql().get(0);
+        String purchaseSql = fake.preparedSql().get(1);
         assertTrue(purchaseSql.contains("INSERT INTO PURCHASE"));
-        Map<Integer, Object> purchaseParameters = fake.boundParameters().get(0);
+        Map<Integer, Object> purchaseParameters = fake.boundParameters().get(1);
         assertEquals(Purchase.STATUS_RECEIVED, purchaseParameters.get(1));
         assertEquals(0, new BigDecimal("36.50").compareTo((BigDecimal) purchaseParameters.get(2)));
         assertEquals(3, purchaseParameters.get(3));
         assertEquals(9, purchaseParameters.get(4));
 
-        assertEquals(3, fake.preparedSql().size());
-        String lotSql = fake.preparedSql().get(1);
+        assertEquals(6, fake.preparedSql().size());
+        String lotSql = fake.preparedSql().get(3);
         assertTrue(lotSql.contains("INSERT INTO STOCK"));
-        Map<Integer, Object> firstLot = fake.boundParameters().get(1);
+        Map<Integer, Object> firstLot = fake.boundParameters().get(3);
         assertEquals(2, firstLot.get(1));
         assertEquals(2, firstLot.get(2));
         assertEquals(0, new BigDecimal("10.00").compareTo((BigDecimal) firstLot.get(3)));
         assertEquals(1, firstLot.get(4));
         assertEquals(42, firstLot.get(5));
-        Map<Integer, Object> secondLot = fake.boundParameters().get(2);
+        Map<Integer, Object> secondLot = fake.boundParameters().get(5);
         assertEquals(3, secondLot.get(1));
         assertEquals(3, secondLot.get(2));
         assertEquals(2, secondLot.get(4));
@@ -111,7 +113,7 @@ class MySqlPurchaseRepositoryTest {
     @Test
     @DisplayName("insert enlaza cada lote con la compra persistida")
     void insertLinksEachLotToThePersistedPurchase() throws SQLException {
-        fake.withGeneratedKey(42);
+        fake.withGeneratedKey(42).withRows(FakeJdbc.row("active", true));
         Purchase purchase = draftPurchase();
 
         repository.insert(purchase);
@@ -124,7 +126,7 @@ class MySqlPurchaseRepositoryTest {
     @Test
     @DisplayName("insert hace commit y restaura el autoCommit previo")
     void insertCommitsAndRestoresAutoCommit() throws SQLException {
-        fake.withGeneratedKey(7);
+        fake.withGeneratedKey(7).withRows(FakeJdbc.row("active", true));
 
         repository.insert(draftPurchase());
 
@@ -135,7 +137,7 @@ class MySqlPurchaseRepositoryTest {
     @Test
     @DisplayName("Un fallo al insertar un lote hace rollback y propaga la excepción")
     void insertRollsBackAndPropagatesOnFailure() {
-        fake.withGeneratedKey(7).failUpdateNumber(2);
+        fake.withGeneratedKey(7).withRows(FakeJdbc.row("active", true)).failUpdateNumber(2);
         Purchase purchase = draftPurchase();
 
         assertThrows(SQLException.class, () -> repository.insert(purchase));
@@ -143,6 +145,49 @@ class MySqlPurchaseRepositoryTest {
         assertTrue(fake.transactionCalls().contains("rollback()"));
         assertFalse(fake.transactionCalls().contains("commit()"));
         assertTrue(fake.transactionCalls().contains("setAutoCommit(true)"));
+    }
+
+    @Test
+    @DisplayName("Una excepción de runtime al insertar un lote también revierte la compra")
+    void insertRollsBackOnRuntimeFailure() {
+        fake.withGeneratedKey(7).withRows(FakeJdbc.row("active", true));
+        Purchase purchase = draftPurchase();
+        purchase.getLots().add(null);
+
+        assertThrows(NullPointerException.class, () -> repository.insert(purchase));
+
+        assertTrue(fake.transactionCalls().contains("rollback()"));
+        assertFalse(fake.transactionCalls().contains("commit()"));
+        assertTrue(fake.transactionCalls().contains("setAutoCommit(true)"));
+    }
+
+    @Test
+    @DisplayName("Una compra no usa un proveedor desactivado mientras el borrador estaba abierto")
+    void insertRejectsSupplierDeactivatedBeforeSave() {
+        fake.withNextQueryRows(FakeJdbc.row("active", false));
+
+        assertThrows(InactiveEntityException.class, () -> repository.insert(draftPurchase()));
+
+        assertTrue(fake.preparedSql().get(0).contains("FROM SUPPLIER")
+                && fake.preparedSql().get(0).contains("FOR UPDATE"));
+        assertTrue(fake.preparedSql().stream().noneMatch(sql -> sql.contains("INSERT INTO PURCHASE")));
+        assertTrue(fake.transactionCalls().contains("rollback()"));
+        assertFalse(fake.transactionCalls().contains("commit()"));
+    }
+
+    @Test
+    @DisplayName("Una compra no incluye un producto desactivado mientras el borrador estaba abierto")
+    void insertRejectsProductDeactivatedBeforeSave() {
+        fake.withGeneratedKey(7)
+                .withNextQueryRows(FakeJdbc.row("active", true))
+                .withNextQueryRows(FakeJdbc.row("active", false));
+
+        assertThrows(InactiveEntityException.class, () -> repository.insert(draftPurchase()));
+
+        assertTrue(fake.preparedSql().stream().anyMatch(sql -> sql.contains("FROM PRODUCT")
+                && sql.contains("FOR UPDATE")));
+        assertTrue(fake.transactionCalls().contains("rollback()"));
+        assertFalse(fake.transactionCalls().contains("commit()"));
     }
 
     @Test
@@ -208,8 +253,49 @@ class MySqlPurchaseRepositoryTest {
     @Test
     @DisplayName("insert propaga el SQLException de la base de datos")
     void insertPropagatesSqlException() {
-        fake.failUpdateNumber(1);
+        fake.withRows(FakeJdbc.row("active", true)).failUpdateNumber(1);
 
         assertThrows(SQLException.class, () -> repository.insert(draftPurchase()));
+    }
+
+    @Test
+    @DisplayName("findProductSuppliers emite DISTINCT sobre STOCK JOIN PURCHASE y mapea el par")
+    void findProductSuppliersProjectsDistinctPairs() throws SQLException {
+        fake.withRows(
+                FakeJdbc.row("product_id", 1, "supplier_id", 3),
+                FakeJdbc.row("product_id", 1, "supplier_id", 4),
+                FakeJdbc.row("product_id", 2, "supplier_id", 3));
+
+        List<ProductSupplier> pairs = repository.findProductSuppliers();
+
+        assertEquals(3, pairs.size());
+        assertEquals(1, pairs.get(0).getProductId());
+        assertEquals(3, pairs.get(0).getSupplierId());
+        assertEquals(1, pairs.get(1).getProductId());
+        assertEquals(4, pairs.get(1).getSupplierId());
+        assertEquals(2, pairs.get(2).getProductId());
+        assertEquals(3, pairs.get(2).getSupplierId());
+    }
+
+    @Test
+    @DisplayName("findProductSuppliers no filtra available_quantity ni el producto activo (D3)")
+    void findProductSuppliersKeepsTheWholeHistory() throws SQLException {
+        fake.withRows(FakeJdbc.row("product_id", 1, "supplier_id", 3));
+
+        repository.findProductSuppliers();
+
+        String sql = fake.executedStatements().get(0);
+        assertTrue(sql.contains("SELECT DISTINCT s.product_id, p.supplier_id"));
+        assertTrue(sql.contains("FROM STOCK s"));
+        assertTrue(sql.contains("JOIN PURCHASE p ON p.id = s.purchase_id"));
+        assertTrue(sql.contains("ORDER BY s.product_id, p.supplier_id"));
+        assertFalse(sql.contains("available_quantity"));
+        assertFalse(sql.contains("active"));
+    }
+
+    @Test
+    @DisplayName("findProductSuppliers devuelve una lista vacía sin filas")
+    void findProductSuppliersReturnsEmptyList() throws SQLException {
+        assertEquals(List.of(), repository.findProductSuppliers());
     }
 }
