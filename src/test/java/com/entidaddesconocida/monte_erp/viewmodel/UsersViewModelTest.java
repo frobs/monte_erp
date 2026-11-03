@@ -1,5 +1,7 @@
 package com.entidaddesconocida.monte_erp.viewmodel;
 
+import com.entidaddesconocida.monte_erp.app.SessionState;
+import com.entidaddesconocida.monte_erp.app.SessionValidator;
 import com.entidaddesconocida.monte_erp.domain.model.User;
 import com.entidaddesconocida.monte_erp.security.PasswordHasher;
 import com.entidaddesconocida.monte_erp.viewmodel.support.FakeUserRepository;
@@ -526,5 +528,28 @@ class UsersViewModelTest {
         racingViewModel.save();
 
         assertEquals("El nombre de usuario 'nuevo' ya existe.", racingViewModel.errorMessageProperty().get());
+    }
+
+    @Test
+    @DisplayName("Una sesión administradora degradada no puede crear usuarios")
+    void demotedSessionCannotCreateUsers() throws SQLException {
+        User current = new User("Ana", "ana", PasswordHasher.hash(ADMIN_PASSWORD), User.ROLE_ADMIN, true);
+        FakeUserRepository repository = new FakeUserRepository().withUser(current);
+        SessionState session = new SessionState();
+        session.signIn(current);
+        UsersViewModel guarded = new UsersViewModel(repository, current,
+                new SessionValidator(session, repository));
+        guarded.nameProperty().set("Nuevo Usuario");
+        guarded.usernameProperty().set("nuevo");
+        guarded.passwordProperty().set("clave123");
+        User demoted = new User("Ana", "ana", current.getPasswordHash(), User.ROLE_EMPLOYEE, true);
+        demoted.setId(current.getId());
+        repository.update(demoted);
+
+        guarded.save();
+
+        assertEquals("La gestión de usuarios es exclusiva del administrador.",
+                guarded.errorMessageProperty().get());
+        assertNull(repository.findByUsername("nuevo"));
     }
 }

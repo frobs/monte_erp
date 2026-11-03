@@ -66,13 +66,16 @@ class LoginViewModelTest {
     }
 
     @Test
-    @DisplayName("Usuario desactivado: mensaje de desactivado")
-    void deactivatedUserShowsDeactivatedMessage() {
+    @DisplayName("Usuario desactivado: mismo mensaje genérico y contraseña limpiada")
+    void deactivatedUserShowsGenericError() {
         fakeRepository.withUser(new User("Bob", "bob", PasswordHasher.hash("bob123"), User.ROLE_EMPLOYEE, false));
         viewModel.usernameProperty().set("bob");
         viewModel.passwordProperty().set("bob123");
+
         viewModel.login();
-        assertEquals("El usuario está desactivado. Contacta con un administrador.", viewModel.errorMessageProperty().get());
+
+        assertEquals("Usuario o contraseña incorrectos.", viewModel.errorMessageProperty().get());
+        assertTrue(viewModel.passwordProperty().isEmpty().get());
     }
 
     @Test

@@ -324,4 +324,63 @@ class PurchasesViewModelTest {
         assertEquals(0, viewModel.selectedPurchaseLots().size());
         assertEquals(PurchasesViewModel.DATABASE_ERROR, viewModel.errorMessageProperty().get());
     }
+
+    @Test
+    @DisplayName("Una recarga fallida tras confirmar la compra no conserva el borrador")
+    void postCommitReloadFailureCannotResubmitPurchase() throws Exception {
+        selectSupplier();
+        addLot("Teclado", "1", "10.00");
+        purchaseRepository.failNext("findAll");
+
+        viewModel.save();
+
+        assertTrue(viewModel.errorMessageProperty().get().contains("Compra #1 guardada"));
+        assertEquals(0, viewModel.draftLots().size());
+        assertEquals(1, purchaseRepository.findAll().size());
+
+        viewModel.save();
+
+        assertEquals(PurchasesViewModel.LOTS_REQUIRED, viewModel.lotsErrorProperty().get());
+        assertEquals(1, purchaseRepository.findAll().size());
+    }
+
+    @Test
+    @DisplayName("La compra acepta la cantidad máxima de INT firmado")
+    void addLotAcceptsMaximumSignedIntQuantity() {
+        Product zeroPrice = product(1, "Teclado");
+        viewModel.selectedProductProperty().set(zeroPrice);
+        viewModel.quantityProperty().set(String.valueOf(Integer.MAX_VALUE));
+        viewModel.purchasePriceProperty().set("0");
+
+        viewModel.addLot();
+
+        assertEquals(Integer.MAX_VALUE, viewModel.draftLots().get(0).getInitialQuantity());
+    }
+
+    @Test
+    @DisplayName("La cantidad mayor que INT firmado se rechaza sin desbordar")
+    void addLotRejectsQuantityOverflow() {
+        viewModel.selectedProductProperty().set(viewModel.products().get(0));
+        viewModel.quantityProperty().set("2147483648");
+        viewModel.purchasePriceProperty().set("0");
+
+        viewModel.addLot();
+
+        assertEquals(PurchasesViewModel.QUANTITY_INVALID, viewModel.quantityErrorProperty().get());
+        assertEquals(0, viewModel.draftLots().size());
+    }
+
+    @Test
+    @DisplayName("La compra rechaza un subtotal superior al máximo DECIMAL persistible")
+    void addLotRejectsUnpersistableTotal() {
+        viewModel.selectedProductProperty().set(viewModel.products().get(0));
+        viewModel.quantityProperty().set("2");
+        viewModel.purchasePriceProperty().set("50000000.00");
+
+        viewModel.addLot();
+
+        assertEquals("El total de la compra no puede superar 99.999.999,99 €.",
+                viewModel.errorMessageProperty().get());
+        assertEquals(0, viewModel.draftLots().size());
+    }
 }

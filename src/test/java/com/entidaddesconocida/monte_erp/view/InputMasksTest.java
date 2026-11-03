@@ -19,29 +19,30 @@ class InputMasksTest {
     @Test
     @DisplayName("La cantidad acepta solo dígitos dentro del rango, nunca signos ni letras")
     void integerMaskAcceptsOnlyDigits() {
-        assertTrue(InputMasks.acceptsPartialInteger("", 9));
-        assertTrue(InputMasks.acceptsPartialInteger("0", 9));
-        assertTrue(InputMasks.acceptsPartialInteger("123456789", 9));
+        assertTrue(InputMasks.acceptsPartialInteger("", 10));
+        assertTrue(InputMasks.acceptsPartialInteger("0", 10));
+        assertTrue(InputMasks.acceptsPartialInteger("2147483647", 10));
 
-        assertFalse(InputMasks.acceptsPartialInteger("1234567890", 9));
-        assertFalse(InputMasks.acceptsPartialInteger("-1", 9));
-        assertFalse(InputMasks.acceptsPartialInteger("1.5", 9));
-        assertFalse(InputMasks.acceptsPartialInteger("1 2", 9));
-        assertFalse(InputMasks.acceptsPartialInteger("abc", 9));
+        assertFalse(InputMasks.acceptsPartialInteger("12345678901", 10));
+        assertFalse(InputMasks.acceptsPartialInteger("-1", 10));
+        assertFalse(InputMasks.acceptsPartialInteger("1.5", 10));
+        assertFalse(InputMasks.acceptsPartialInteger("1 2", 10));
+        assertFalse(InputMasks.acceptsPartialInteger("abc", 10));
     }
 
     @Test
     @DisplayName("La cantidad con tope acepta hasta las unidades disponibles y rechaza el resto")
     void integerMaskWithStockBoundOnlyAcceptsUpToTheStock() {
-        assertTrue(InputMasks.acceptsPartialIntegerWithin("", 9, 0));
-        assertTrue(InputMasks.acceptsPartialIntegerWithin("", 9, 12));
-        assertTrue(InputMasks.acceptsPartialIntegerWithin("12", 9, 12));
-        assertTrue(InputMasks.acceptsPartialIntegerWithin("7", 9, 12));
+        assertTrue(InputMasks.acceptsPartialIntegerWithin("", 10, 0));
+        assertTrue(InputMasks.acceptsPartialIntegerWithin("", 10, 12));
+        assertTrue(InputMasks.acceptsPartialIntegerWithin("12", 10, 12));
+        assertTrue(InputMasks.acceptsPartialIntegerWithin("7", 10, 12));
+        assertTrue(InputMasks.acceptsPartialIntegerWithin("2147483647", 10, Integer.MAX_VALUE));
 
-        assertFalse(InputMasks.acceptsPartialIntegerWithin("13", 9, 12));
-        assertFalse(InputMasks.acceptsPartialIntegerWithin("1", 9, 0));
-        assertFalse(InputMasks.acceptsPartialIntegerWithin("abc", 9, 12));
-        assertFalse(InputMasks.acceptsPartialIntegerWithin("1234567890", 9, 999999999));
+        assertFalse(InputMasks.acceptsPartialIntegerWithin("13", 10, 12));
+        assertFalse(InputMasks.acceptsPartialIntegerWithin("1", 10, 0));
+        assertFalse(InputMasks.acceptsPartialIntegerWithin("abc", 10, 12));
+        assertFalse(InputMasks.acceptsPartialIntegerWithin("2147483648", 10, Integer.MAX_VALUE));
     }
 
     @Test

@@ -40,7 +40,7 @@ monte_erp/
 │   │   │   └── com/entidaddesconocida/monte_erp/
 │   │   │       ├── Launcher.java                  # Punto de entrada (main)
 │   │   │       ├── MonteErpApplication.java       # JavaFX Application
-│   │   │       ├── app/                           # AppContext, AppShell, SessionState, SceneNavigator
+│   │   │       ├── app/                           # AppContext, AppShell, SessionState, SessionValidator, SceneNavigator
 │   │   │       ├── view/                          # LoginView, SetupView, MainView, CrudView (base) y pantallas: UsersView, ProductsView, CategoriesView, SuppliersView, CustomersView, SalesOrdersView, PurchasesView, StockView, ReportsView + InputMasks/SearchableCombos
 │   │   │       ├── viewmodel/                     # Un ViewModel por pantalla + CrudViewModel/FilterableCrudViewModel, SearchText y ReportCsv
 │   │   │       ├── domain/
@@ -142,6 +142,10 @@ La configuración vive en dos sitios:
   directorio de trabajo), gestionado por `DatabaseConfig`.
 - El **usuario y la contraseña** de la base de datos en el **keyring del sistema
   operativo** (java-keyring, vía `KeyringCredentialStore`), nunca en el repositorio.
+- La URL JDBC no debe incluir credenciales ni parámetros sensibles. La pantalla de
+  edición no revela la contraseña guardada: solo reutiliza la credencial del keyring
+  para el mismo endpoint y usuario; al cambiar el endpoint hay que volver a introducirla.
+  La URL que muestra la aplicación redacta valores sensibles de configuraciones antiguas.
 
 Si falta esa configuración, la app abre la pantalla de **configuración**
 (`SetupView`) en modo onboarding en lugar del login; desde el login se puede

@@ -1,13 +1,17 @@
 package com.entidaddesconocida.monte_erp.viewmodel;
 
+import com.entidaddesconocida.monte_erp.app.SessionState;
+import com.entidaddesconocida.monte_erp.app.SessionValidator;
 import com.entidaddesconocida.monte_erp.domain.model.Customer;
 import com.entidaddesconocida.monte_erp.domain.model.Product;
 import com.entidaddesconocida.monte_erp.domain.model.Purchase;
 import com.entidaddesconocida.monte_erp.domain.model.SalesOrder;
 import com.entidaddesconocida.monte_erp.domain.model.SalesOrderLine;
 import com.entidaddesconocida.monte_erp.domain.model.Stock;
+import com.entidaddesconocida.monte_erp.domain.model.User;
 import com.entidaddesconocida.monte_erp.viewmodel.support.FakeSalesOrderRepository;
 import com.entidaddesconocida.monte_erp.viewmodel.support.FakeStockRepository;
+import com.entidaddesconocida.monte_erp.viewmodel.support.FakeUserRepository;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -19,6 +23,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -127,6 +132,24 @@ class ReportsViewModelTest {
     }
 
     @Test
+    @DisplayName("Un rango inválido limpia y no permite exportar el informe anterior")
+    void invalidPeriodClearsPreviouslyLoadedReport() {
+        viewModel.load();
+        assertEquals(1, viewModel.salesRows().size());
+        assertTrue(viewModel.salesReportCsv().contains("Teclado"));
+        viewModel.fromDateProperty().set(LocalDate.of(2025, 3, 1));
+        viewModel.toDateProperty().set(LocalDate.of(2025, 1, 1));
+
+        viewModel.load();
+
+        assertEquals(ReportsViewModel.PERIOD_ERROR, viewModel.errorMessageProperty().get());
+        assertEquals(0, viewModel.stockLots().size());
+        assertEquals(0, viewModel.salesRows().size());
+        assertFalse(viewModel.salesReportCsv().contains("Teclado"));
+        assertTrue(viewModel.stockTotalsProperty().get().startsWith("Lotes: 0"));
+    }
+
+    @Test
     @DisplayName("Una caída de la base de datos muestra el error de conexión y vacía las tablas")
     void databaseFailureShowsConnectionError() {
         ReportsViewModel failing = new ReportsViewModel(
@@ -151,6 +174,26 @@ class ReportsViewModelTest {
         assertEquals(null, viewModel.fromDateProperty().get());
         assertEquals(null, viewModel.toDateProperty().get());
         assertEquals(1, viewModel.stockLots().size());
+    }
+
+    @Test
+    @DisplayName("Una sesión desactivada no puede seguir exportando el informe cargado")
+    void deactivatedSessionCannotExportPreviouslyLoadedData() throws Exception {
+        User current = new User("Ana", "ana", "hash", User.ROLE_EMPLOYEE, true);
+        FakeUserRepository users = new FakeUserRepository().withUser(current);
+        SessionState session = new SessionState();
+        session.signIn(current);
+        ReportsViewModel guarded = new ReportsViewModel(salesOrderRepository, stockRepository,
+                new SessionValidator(session, users));
+        guarded.load();
+        assertTrue(guarded.salesReportCsv().contains("Teclado"));
+        users.deactivate(current.getId());
+
+        String csv = guarded.salesReportCsv();
+
+        assertFalse(csv.contains("Teclado"));
+        assertEquals(0, guarded.salesRows().size());
+        assertEquals(null, session.currentUser());
     }
 
     @Test

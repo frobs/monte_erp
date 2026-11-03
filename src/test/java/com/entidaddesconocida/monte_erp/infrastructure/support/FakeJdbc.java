@@ -49,6 +49,7 @@ public final class FakeJdbc implements Driver {
     private final List<String> transactionCalls = new ArrayList<>();
 
     private List<Row> rows = List.of();
+    private final List<List<Row>> nextQueryRows = new ArrayList<>();
     private int generatedKey;
     private int updateCount = 1;
     private int updateCalls;
@@ -89,6 +90,12 @@ public final class FakeJdbc implements Driver {
     /** Rows returned (in order) by every query executed from now on. */
     public FakeJdbc withRows(Row... newRows) {
         this.rows = List.of(newRows);
+        return this;
+    }
+
+    /** Queues rows for the next query, useful when a transaction issues different SELECTs. */
+    public FakeJdbc withNextQueryRows(Row... newRows) {
+        nextQueryRows.add(List.of(newRows));
         return this;
     }
 
@@ -224,7 +231,7 @@ public final class FakeJdbc implements Driver {
                 return null;
             }
             return switch (name) {
-                case "executeQuery" -> resultSetProxy(rows);
+                case "executeQuery" -> resultSetProxy(rowsForNextQuery());
                 case "executeUpdate" -> {
                     updateCalls++;
                     if (failUpdateNumber > 0 && updateCalls == failUpdateNumber) {
@@ -244,7 +251,7 @@ public final class FakeJdbc implements Driver {
         return proxy(Statement.class, (proxy, method, args) -> switch (method.getName()) {
             case "executeQuery" -> {
                 executedStatements.add((String) args[0]);
-                yield resultSetProxy(rows);
+                yield resultSetProxy(rowsForNextQuery());
             }
             case "execute" -> {
                 executedStatements.add((String) args[0]);
@@ -271,6 +278,10 @@ public final class FakeJdbc implements Driver {
             case "toString" -> "FakeResultSet" + resultRows;
             default -> readColumn(method, args, resultRows, index[0], lastReadWasNull);
         });
+    }
+
+    private List<Row> rowsForNextQuery() {
+        return nextQueryRows.isEmpty() ? rows : nextQueryRows.remove(0);
     }
 
     private List<Row> generatedKeyRows() {

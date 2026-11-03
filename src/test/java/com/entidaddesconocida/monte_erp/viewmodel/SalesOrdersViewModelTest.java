@@ -537,6 +537,49 @@ class SalesOrdersViewModelTest {
     }
 
     @Test
+    @DisplayName("El pedido acepta la cantidad máxima de INT firmado")
+    void addLineAcceptsMaximumSignedIntQuantity() {
+        FakeStockRepository stock = new FakeStockRepository().withLot(
+                1, lot(product(1, "Teclado", "0.00"), Integer.MAX_VALUE));
+        SalesOrdersViewModel maxQuantityViewModel = viewModel(stock);
+        Product zeroPrice = maxQuantityViewModel.products().stream()
+                .filter(product -> product.getId() == 1)
+                .findFirst().orElseThrow();
+        zeroPrice.setPrice(BigDecimal.ZERO);
+        maxQuantityViewModel.selectedProductProperty().set(zeroPrice);
+        maxQuantityViewModel.quantityProperty().set(String.valueOf(Integer.MAX_VALUE));
+
+        maxQuantityViewModel.addLine();
+
+        assertEquals(Integer.MAX_VALUE,
+                maxQuantityViewModel.draftLines().get(0).getQuantity());
+    }
+
+    @Test
+    @DisplayName("La cantidad mayor que INT firmado se rechaza sin desbordar")
+    void addLineRejectsQuantityOverflow() {
+        addLine("Teclado", "2147483648");
+
+        assertEquals(SalesOrdersViewModel.QUANTITY_INVALID, viewModel.quantityErrorProperty().get());
+        assertEquals(0, viewModel.draftLines().size());
+    }
+
+    @Test
+    @DisplayName("El pedido rechaza un total superior al máximo DECIMAL persistible")
+    void addLineRejectsUnpersistableTotal() {
+        Product expensive = viewModel.products().get(0);
+        expensive.setPrice(new BigDecimal("50000000.00"));
+        viewModel.selectedProductProperty().set(expensive);
+        viewModel.quantityProperty().set("2");
+
+        viewModel.addLine();
+
+        assertEquals("El total del pedido no puede superar 99.999.999,99 €.",
+                viewModel.errorMessageProperty().get());
+        assertEquals(0, viewModel.draftLines().size());
+    }
+
+    @Test
     @DisplayName("RF-15: selectOrder carga los lotes consumidos y null los limpia")
     void selectOrderLoadsAndClearsIssues() {
         Product product = product(1, "Teclado", "10.00");
@@ -568,5 +611,24 @@ class SalesOrdersViewModelTest {
 
         assertEquals(SalesOrder.STATUS_CANCELLED, viewModel.orders().get(0).getStatus());
         assertEquals(0, viewModel.selectedOrderIssues().size());
+    }
+
+    @Test
+    @DisplayName("Una recarga fallida tras confirmar el pedido no conserva el borrador")
+    void postCommitReloadFailureCannotResubmitOrder() throws SQLException {
+        viewModel.selectedCustomerProperty().set(ACME);
+        addLine("Teclado", "1");
+        salesOrderRepository.failNext("findAll");
+
+        viewModel.save();
+
+        assertTrue(viewModel.errorMessageProperty().get().contains("Pedido #1 guardado"));
+        assertEquals(0, viewModel.draftLines().size());
+        assertEquals(1, salesOrderRepository.findAll().size());
+
+        viewModel.save();
+
+        assertEquals(SalesOrdersViewModel.LINES_REQUIRED, viewModel.linesErrorProperty().get());
+        assertEquals(1, salesOrderRepository.findAll().size());
     }
 }

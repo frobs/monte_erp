@@ -178,13 +178,56 @@ class SetupViewModelTest {
     }
 
     @Test
-    @DisplayName("Los valores existentes se precargan desde el servicio")
-    void prefillsFromService() {
+    @DisplayName("La configuración existente precarga URL y usuario pero oculta la contraseña")
+    void prefillsNonSecretSettingsFromService() {
         FakeSetupService service = new FakeSetupService().withLoaded(VALID);
         SetupViewModel vm = editViewModel(service);
         assertEquals(VALID.url(), vm.urlProperty().get());
         assertEquals(VALID.user(), vm.dbUserProperty().get());
-        assertEquals(VALID.password(), vm.dbPasswordProperty().get());
+        assertEquals("", vm.dbPasswordProperty().get());
+    }
+
+    @Test
+    @DisplayName("Reutiliza la contraseña guardada solo para el endpoint y usuario ya confiables")
+    void testConnectionReusesSecretOnlyForStoredEndpoint() {
+        FakeSetupService service = new FakeSetupService().withLoaded(VALID);
+        SetupViewModel vm = editViewModel(service);
+
+        vm.testConnection();
+
+        assertEquals(VALID, service.lastTested());
+        assertEquals("", vm.dbPasswordProperty().get());
+    }
+
+    @Test
+    @DisplayName("Cambiar el endpoint exige volver a introducir la contraseña")
+    void changedEndpointRequiresExplicitPassword() {
+        FakeSetupService service = new FakeSetupService().withLoaded(VALID);
+        SetupViewModel vm = editViewModel(service);
+        vm.urlProperty().set("jdbc:mysql://other-host:3306/monte_erp");
+
+        vm.testConnection();
+
+        assertEquals("Introduce la URL, el usuario y la contraseña.", vm.errorMessageProperty().get());
+        assertNull(service.lastTested());
+    }
+
+    @Test
+    @DisplayName("Rechaza credenciales embebidas en la URL al probar y guardar")
+    void credentialBearingUrlIsRejected() {
+        FakeSetupService service = new FakeSetupService();
+        SetupViewModel vm = editViewModel(service);
+        vm.urlProperty().set("jdbc:mysql://localhost/monte_erp?password=exposed");
+        vm.dbUserProperty().set(VALID.user());
+        vm.dbPasswordProperty().set(VALID.password());
+
+        vm.testConnection();
+        assertTrue(vm.errorMessageProperty().get().contains("No incluyas credenciales"));
+        assertNull(service.lastTested());
+
+        vm.save();
+        assertTrue(vm.errorMessageProperty().get().contains("No incluyas credenciales"));
+        assertNull(service.lastSaved());
     }
 
     @Test
