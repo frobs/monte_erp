@@ -153,11 +153,45 @@ class DatabaseConfigTest {
     }
 
     @Test
+    @DisplayName("save rechaza credenciales embebidas en la URL sin escribir nada")
+    void saveRejectsSecretsInUrl() {
+        FakeCredentialStore store = new FakeCredentialStore();
+        DatabaseConfig config = config(store);
+
+        assertThrows(IllegalArgumentException.class, () -> config.save(new ConnectionSettings(
+                "jdbc:mysql://localhost/monte_erp?password=secret", "erp_user", "erp_pass")));
+
+        assertNull(config.load().url());
+        assertNull(store.stored(ACCOUNT_USER));
+        assertNull(store.stored(ACCOUNT_PASSWORD));
+    }
+
+    @Test
     @DisplayName("Un fallo del keyring al guardar se propaga como CredentialStoreException")
     void savePropagatesKeyringFailure() {
         DatabaseConfig config = config(new FakeCredentialStore().throwOnSet());
 
         assertThrows(CredentialStoreException.class,
                 () -> config.save(new ConnectionSettings("jdbc:mysql://localhost/monte_erp", "erp_user", "erp_pass")));
+    }
+
+    @Test
+    @DisplayName("Un fallo parcial del keyring restaura las credenciales y la URL anteriores")
+    void saveRollsBackCredentialsWhenKeyringUpdateFails() throws IOException {
+        FakeCredentialStore store = new FakeCredentialStore()
+                .with(ACCOUNT_USER, "old_user")
+                .with(ACCOUNT_PASSWORD, "old_password");
+        DatabaseConfig config = config(store);
+        ConnectionSettings previous = new ConnectionSettings(
+                "jdbc:mysql://old-host/monte_erp", "old_user", "old_password");
+        config.save(previous);
+        store.failOnSet(ACCOUNT_PASSWORD);
+
+        assertThrows(CredentialStoreException.class, () -> config.save(new ConnectionSettings(
+                "jdbc:mysql://new-host/monte_erp", "new_user", "new_password")));
+
+        assertEquals(previous, config.load());
+        assertEquals("old_user", store.stored(ACCOUNT_USER));
+        assertEquals("old_password", store.stored(ACCOUNT_PASSWORD));
     }
 }

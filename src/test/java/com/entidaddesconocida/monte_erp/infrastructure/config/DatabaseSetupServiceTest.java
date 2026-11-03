@@ -181,6 +181,11 @@ class DatabaseSetupServiceTest {
             public void set(String account, String value) {
                 throw new CredentialStoreException("Failed at C:\\Users\\admin\\keyring and 192.168.1.10:3306");
             }
+
+            @Override
+            public void delete(String account) {
+                // No credentials exist in this failing test double.
+            }
         };
         DatabaseConfig config = new DatabaseConfig(failing, tempDir.resolve("application.properties"));
         DatabaseSetupService service = new DatabaseSetupService(config, new FakeUserRepository());

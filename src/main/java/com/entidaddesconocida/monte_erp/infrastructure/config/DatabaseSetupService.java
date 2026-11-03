@@ -72,7 +72,7 @@ public final class DatabaseSetupService implements SetupService {
     private void persist(ConnectionSettings settings) throws SetupException {
         try {
             config.save(settings);
-        } catch (IOException | CredentialStoreException e) {
+        } catch (IOException | CredentialStoreException | IllegalArgumentException e) {
             throw new SetupException(rootMessage(e), e);
         }
         DatabaseConnection.configure(settings.url(), settings.user(), settings.password());

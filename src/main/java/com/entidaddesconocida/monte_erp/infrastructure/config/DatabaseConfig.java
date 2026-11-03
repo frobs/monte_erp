@@ -5,8 +5,10 @@ import com.entidaddesconocida.monte_erp.domain.model.ConnectionSettings;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.Properties;
 
 /**
@@ -72,9 +74,22 @@ public final class DatabaseConfig {
      * @throws CredentialStoreException   when a credential cannot be written
      */
     public void save(ConnectionSettings settings) throws IOException {
-        writeUrl(settings.url());
-        credentialStore.set(ACCOUNT_USER, settings.user());
-        credentialStore.set(ACCOUNT_PASSWORD, settings.password());
+        if (settings != null && DatabaseUrl.containsCredentials(settings.url())) {
+            throw new IllegalArgumentException("No incluyas credenciales en la URL JDBC.");
+        }
+        String previousUser = credentialStore.get(ACCOUNT_USER);
+        String previousPassword = credentialStore.get(ACCOUNT_PASSWORD);
+        try {
+            credentialStore.set(ACCOUNT_USER, settings.user());
+            credentialStore.set(ACCOUNT_PASSWORD, settings.password());
+            // Persist the endpoint last: it must not point at new credentials until
+            // both keyring writes have succeeded.
+            writeUrl(settings.url());
+        } catch (IOException | CredentialStoreException failure) {
+            restoreCredential(ACCOUNT_PASSWORD, previousPassword, failure);
+            restoreCredential(ACCOUNT_USER, previousUser, failure);
+            throw failure;
+        }
     }
 
     private String readUrl() {
@@ -100,8 +115,34 @@ public final class DatabaseConfig {
             }
         }
         properties.setProperty(KEY_URL, url == null ? "" : url.trim());
-        try (OutputStream out = Files.newOutputStream(configFile)) {
-            properties.store(out, "Monte ERP · database connection URL");
+        Path absoluteFile = configFile.toAbsolutePath();
+        Path parent = absoluteFile.getParent();
+        Files.createDirectories(parent);
+        Path temporaryFile = Files.createTempFile(parent, CONFIG_FILE_NAME, ".tmp");
+        try {
+            try (OutputStream out = Files.newOutputStream(temporaryFile)) {
+                properties.store(out, "Monte ERP · database connection URL");
+            }
+            try {
+                Files.move(temporaryFile, absoluteFile, StandardCopyOption.ATOMIC_MOVE,
+                        StandardCopyOption.REPLACE_EXISTING);
+            } catch (AtomicMoveNotSupportedException e) {
+                Files.move(temporaryFile, absoluteFile, StandardCopyOption.REPLACE_EXISTING);
+            }
+        } finally {
+            Files.deleteIfExists(temporaryFile);
+        }
+    }
+
+    private void restoreCredential(String account, String previousValue, Throwable failure) {
+        try {
+            if (previousValue == null) {
+                credentialStore.delete(account);
+            } else {
+                credentialStore.set(account, previousValue);
+            }
+        } catch (CredentialStoreException rollbackFailure) {
+            failure.addSuppressed(rollbackFailure);
         }
     }
 

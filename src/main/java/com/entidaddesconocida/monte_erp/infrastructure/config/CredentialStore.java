@@ -21,4 +21,7 @@ public interface CredentialStore {
      * @throws CredentialStoreException when the value cannot be written
      */
     void set(String account, String value) throws CredentialStoreException;
+
+    /** Removes the value stored under the given account, if present. */
+    void delete(String account) throws CredentialStoreException;
 }

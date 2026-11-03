@@ -44,4 +44,14 @@ public final class KeyringCredentialStore implements CredentialStore {
                     "No se pudo guardar la credencial en el keyring del sistema: " + e.getMessage(), e);
         }
     }
+
+    @Override
+    public void delete(String account) throws CredentialStoreException {
+        try (Keyring keyring = Keyring.create()) {
+            keyring.deletePassword(service, account);
+        } catch (Exception e) {
+            throw new CredentialStoreException(
+                    "No se pudo restaurar la credencial en el keyring del sistema: " + e.getMessage(), e);
+        }
+    }
 }
