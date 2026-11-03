@@ -41,24 +41,31 @@ monte_erp/
 │   │   │       ├── Launcher.java                  # Punto de entrada (main)
 │   │   │       ├── MonteErpApplication.java       # JavaFX Application
 │   │   │       ├── app/                           # AppContext, AppShell, SessionState, SceneNavigator
-│   │   │       ├── view/                          # LoginView, SetupView, MainView, UsersView, ProductsView, CategoriesView + CrudView (base)
-│   │   │       ├── viewmodel/                     # LoginViewModel, SetupViewModel, MainViewModel, UsersViewModel, ProductsViewModel, CategoriesViewModel + CrudViewModel/FilterableCrudViewModel (base)
+│   │   │       ├── view/                          # LoginView, SetupView, MainView, CrudView (base) y pantallas: UsersView, ProductsView, CategoriesView, SuppliersView, CustomersView, SalesOrdersView, PurchasesView, StockView, ReportsView + InputMasks/SearchableCombos
+│   │   │       ├── viewmodel/                     # Un ViewModel por pantalla + CrudViewModel/FilterableCrudViewModel, SearchText y ReportCsv
 │   │   │       ├── domain/
-│   │   │       │   ├── model/                     # User, Product, Category, Supplier
-│   │   │       │   └── repository/                # UserRepository, ProductRepository, CategoryRepository, SupplierRepository (puertos)
-│   │   │       ├── infrastructure/                # MySqlUserRepository, MySqlProductRepository, MySqlCategoryRepository, MySqlSupplierRepository
+│   │   │       │   ├── model/                     # User, Category, Supplier, Product, Purchase, Stock, StockLevel, ProductSupplier, Customer, SalesOrder, SalesOrderLine, StockIssue, ReportPeriod y modelos de informe
+│   │   │       │   ├── repository/                # UserRepository, CategoryRepository, SupplierRepository, ProductRepository, PurchaseRepository, StockRepository, CustomerRepository, SalesOrderRepository (puertos)
+│   │   │       │   └── service/                   # SetupService, FifoAllocator, SalesReportCalculator, StockReportCalculator
+│   │   │       ├── infrastructure/                # MySqlUserRepository, MySqlCategoryRepository, MySqlSupplierRepository, MySqlProductRepository, MySqlCustomerRepository, MySqlPurchaseRepository, MySqlStockRepository, MySqlSalesOrderRepository
 │   │   │       │   └── config/                    # DatabaseConnection, DatabaseConfig, DatabaseSetupService, MigrationRunner, keyring
 │   │   │       └── security/                      # PasswordHasher
 │   │   └── resources/
 │   │       ├── css/app.css                        # Estilos de la interfaz
-│   │       ├── db/migration/V1..V4__*.sql         # Migraciones: esquema + bajas lógicas (PRODUCT, CATEGORY)
+│   │       ├── db/migration/V1..V7__*.sql         # Migraciones: esquema + bajas lógicas (PRODUCT, CATEGORY, SUPPLIER, CUSTOMER) + dirección de proveedor
 │   │       └── com/entidaddesconocida/monte_erp/view/
 │   │           ├── LoginView.fxml                 # vista de login (mismo paquete que LoginView)
 │   │           ├── SetupView.fxml                 # vista de configuración de BD
 │   │           ├── MainView.fxml                  # vista principal (mismo paquete que MainView)
 │   │           ├── UsersView.fxml                 # vista de gestión de usuarios (RF-02)
 │   │           ├── ProductsView.fxml              # vista de gestión de productos (RF-03/RF-11)
-│   │           └── CategoriesView.fxml            # vista de gestión de categorías (RF-04)
+│   │           ├── CategoriesView.fxml            # vista de gestión de categorías (RF-04)
+│   │           ├── SuppliersView.fxml             # vista de proveedores (RF-05)
+│   │           ├── CustomersView.fxml             # vista de clientes (RF-06)
+│   │           ├── SalesOrdersView.fxml           # vista de pedidos (RF-07/RF-08)
+│   │           ├── PurchasesView.fxml             # vista de compras y lotes (RF-14)
+│   │           ├── StockView.fxml                 # vista de stock y alertas (RF-09/RF-10)
+│   │           └── ReportsView.fxml               # vista de informes (RF-12)
 │   └── test/java/...                              # Pruebas JUnit 5 unitarias (fakes en memoria y ficheros temporales)
 └── target/                  # Artefactos generados (tras compilar)
 ```
@@ -149,9 +156,10 @@ siguen la convención `V<n>__<descripcion>.sql`. Al arrancar, `MigrationRunner`
 aplica en orden los que estén pendientes y registra cada uno en la tabla de
 control `schema_migrations`, por lo que arrancar la aplicación varias veces no
 repite trabajo. Para cambiar el esquema basta con añadir el siguiente
-`V<n>__<descripcion>.sql` (hoy `V5`): `V2`/`V4` añaden `PRODUCT.active` y
-`CATEGORY.active` (bajas lógicas) y `V3` hace `NULL`-able `PRODUCT.category_id`,
-porque la categoría es opcional.
+`V<n>__<descripcion>.sql`. Migraciones actuales (`V1`–`V7`):
+`V2`/`V4`/`V5`/`V6` añaden `PRODUCT.active`, `CATEGORY.active`, `SUPPLIER.active`
+y `CUSTOMER.active` (bajas lógicas); `V3` hace `NULL`-able `PRODUCT.category_id`
+porque la categoría es opcional; y `V7` añade `SUPPLIER.address`.
 
 Esquema creado por `V1__schema.sql` (10 tablas):
 
