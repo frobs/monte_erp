@@ -1,5 +1,6 @@
 package com.entidaddesconocida.monte_erp.viewmodel;
 
+import com.entidaddesconocida.monte_erp.app.SessionValidator;
 import com.entidaddesconocida.monte_erp.domain.model.User;
 import com.entidaddesconocida.monte_erp.domain.repository.UserRepository;
 import com.entidaddesconocida.monte_erp.security.PasswordHasher;
@@ -61,6 +62,12 @@ public class UsersViewModel extends CrudViewModel<User> {
     private final ReadOnlyStringWrapper passwordError = new ReadOnlyStringWrapper("");
 
     public UsersViewModel(UserRepository userRepository, User currentUser) {
+        this(userRepository, currentUser, null);
+    }
+
+    public UsersViewModel(UserRepository userRepository, User currentUser,
+                          SessionValidator sessionValidator) {
+        super(sessionValidator);
         this.userRepository = userRepository;
         this.currentUser = currentUser;
         watchItemsForCount();
@@ -163,6 +170,10 @@ public class UsersViewModel extends CrudViewModel<User> {
 
     @Override
     protected boolean validateBusinessRules() throws SQLException {
+        if (currentUser == null || !currentUser.isAdmin()) {
+            fail("La gestión de usuarios es exclusiva del administrador.");
+            return false;
+        }
         User selected = selectedItem.get();
         String roleValue = toRole(role.get());
         if (selected != null && isCurrentUser(selected) && !User.ROLE_ADMIN.equals(roleValue)) {
@@ -213,6 +224,10 @@ public class UsersViewModel extends CrudViewModel<User> {
     /** The current administrator cannot deactivate their own account. */
     @Override
     protected boolean canDeactivate(User item) {
+        if (currentUser == null || !currentUser.isAdmin()) {
+            fail("La gestión de usuarios es exclusiva del administrador.");
+            return false;
+        }
         if (isCurrentUser(item)) {
             fail("No puedes desactivar tu propio usuario.");
             return false;
@@ -221,6 +236,15 @@ public class UsersViewModel extends CrudViewModel<User> {
     }
 
     /** The current administrator cannot be deactivated, so the toggle is disabled for them. */
+    @Override
+    protected boolean canActivate(User item) {
+        if (currentUser == null || !currentUser.isAdmin()) {
+            fail("La gestión de usuarios es exclusiva del administrador.");
+            return false;
+        }
+        return true;
+    }
+
     @Override
     protected boolean isToggleDisabledForActive(User item) {
         return isCurrentUser(item);

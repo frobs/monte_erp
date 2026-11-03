@@ -1,5 +1,6 @@
 package com.entidaddesconocida.monte_erp.viewmodel;
 
+import com.entidaddesconocida.monte_erp.app.SessionValidator;
 import com.entidaddesconocida.monte_erp.domain.model.Category;
 import com.entidaddesconocida.monte_erp.domain.repository.CategoryRepository;
 
@@ -54,6 +55,11 @@ public class CategoriesViewModel extends FilterableCrudViewModel<Category> {
     private final ReadOnlyStringWrapper descriptionError = new ReadOnlyStringWrapper("");
 
     public CategoriesViewModel(CategoryRepository categoryRepository) {
+        this(categoryRepository, null);
+    }
+
+    public CategoriesViewModel(CategoryRepository categoryRepository, SessionValidator sessionValidator) {
+        super(sessionValidator);
         this.categoryRepository = categoryRepository;
         bindFilter(searchText);
         watchFields(name, description);

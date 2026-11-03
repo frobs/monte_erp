@@ -1,5 +1,6 @@
 package com.entidaddesconocida.monte_erp.viewmodel;
 
+import com.entidaddesconocida.monte_erp.app.SessionValidator;
 import com.entidaddesconocida.monte_erp.domain.model.Stock;
 import com.entidaddesconocida.monte_erp.domain.model.StockLevel;
 import com.entidaddesconocida.monte_erp.domain.repository.StockRepository;
@@ -42,8 +43,10 @@ public class StockViewModel implements ViewModel {
     /** Message shown when the database cannot be reached. */
     protected static final String DATABASE_ERROR =
             "No se pudo conectar con la base de datos. Comprueba que MySQL esté arrancado.";
+    private static final String SESSION_EXPIRED = "La sesión ya no está activa. Inicia sesión de nuevo.";
 
     private final StockRepository stockRepository;
+    private final SessionValidator sessionValidator;
 
     private final ObservableList<StockLevel> levels = FXCollections.observableArrayList();
     private final FilteredList<StockLevel> filteredLevels = new FilteredList<>(levels);
@@ -55,7 +58,12 @@ public class StockViewModel implements ViewModel {
     private final StringProperty errorMessage = new SimpleStringProperty("");
 
     public StockViewModel(StockRepository stockRepository) {
+        this(stockRepository, null);
+    }
+
+    public StockViewModel(StockRepository stockRepository, SessionValidator sessionValidator) {
         this.stockRepository = stockRepository;
+        this.sessionValidator = sessionValidator;
         searchText.addListener((observable, oldValue, newValue) -> applyFilter());
         onlyBelowMinimum.addListener((observable, oldValue, newValue) -> applyFilter());
     }
@@ -100,6 +108,9 @@ public class StockViewModel implements ViewModel {
     /** Loads the levels and resets the selection and its lot detail. */
     public void load() {
         errorMessage.set("");
+        if (!ensureActiveSession()) {
+            return;
+        }
         try {
             levels.setAll(stockRepository.findLevels());
         } catch (SQLException e) {
@@ -118,6 +129,9 @@ public class StockViewModel implements ViewModel {
      * database failure empties the detail and shows the connection error.
      */
     public void selectLevel(StockLevel level) {
+        if (!ensureActiveSession()) {
+            return;
+        }
         if (level == null) {
             selectedLots.clear();
             return;
@@ -132,6 +146,31 @@ public class StockViewModel implements ViewModel {
     }
 
     /** Whether the level passes the text search and the "only below minimum" toggle. */
+    private boolean ensureActiveSession() {
+        if (sessionValidator == null) {
+            return true;
+        }
+        try {
+            if (sessionValidator.refresh()) {
+                return true;
+            }
+        } catch (SQLException e) {
+            LOGGER.log(Level.WARNING, "Could not revalidate the signed-in user", e);
+            levels.clear();
+            selectedLots.clear();
+            errorMessage.set(DATABASE_ERROR);
+            updateAlertCount();
+            return false;
+        }
+        levels.clear();
+        selectedLevel.set(null);
+        selectedLots.clear();
+        applyFilter();
+        updateAlertCount();
+        errorMessage.set(SESSION_EXPIRED);
+        return false;
+    }
+
     private boolean matches(StockLevel level) {
         if (level == null || level.getProduct() == null) {
             return false;

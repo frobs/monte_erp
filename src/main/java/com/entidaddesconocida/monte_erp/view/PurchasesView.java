@@ -39,7 +39,7 @@ public class PurchasesView implements FxmlView<PurchasesViewModel> {
             DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm");
 
     /** Keeps the typed quantity within the {@code int} range (RF-14). */
-    private static final int QUANTITY_MAX_DIGITS = 9;
+    private static final int QUANTITY_MAX_DIGITS = 10;
 
     /** 99999999.99, the same range the product form allows (RF-14). */
     private static final int PRICE_MAX_DIGITS = 8;

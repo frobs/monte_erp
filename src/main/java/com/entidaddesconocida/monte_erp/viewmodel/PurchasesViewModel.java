@@ -1,5 +1,6 @@
 package com.entidaddesconocida.monte_erp.viewmodel;
 
+import com.entidaddesconocida.monte_erp.app.SessionValidator;
 import com.entidaddesconocida.monte_erp.domain.model.Product;
 import com.entidaddesconocida.monte_erp.domain.model.Purchase;
 import com.entidaddesconocida.monte_erp.domain.model.Stock;
@@ -8,6 +9,7 @@ import com.entidaddesconocida.monte_erp.domain.model.User;
 import com.entidaddesconocida.monte_erp.domain.repository.ProductRepository;
 import com.entidaddesconocida.monte_erp.domain.repository.PurchaseRepository;
 import com.entidaddesconocida.monte_erp.domain.repository.SupplierRepository;
+import com.entidaddesconocida.monte_erp.domain.service.InactiveEntityException;
 
 import de.saxsys.mvvmfx.ViewModel;
 
@@ -54,6 +56,12 @@ public class PurchasesViewModel implements ViewModel {
     /** Message shown when the database cannot be reached. */
     protected static final String DATABASE_ERROR =
             "No se pudo conectar con la base de datos. Comprueba que MySQL esté arrancado.";
+    private static final String SESSION_EXPIRED = "La sesión ya no está activa. Inicia sesión de nuevo.";
+    private static final String SAVE_RELOAD_ERROR =
+            "Compra #%d guardada, pero no se pudo actualizar el historial. Pulsa 'Actualizar'.";
+    private static final BigDecimal MAX_STORED_TOTAL = new BigDecimal("99999999.99");
+    private static final String TOTAL_LIMIT_ERROR =
+            "El total de la compra no puede superar 99.999.999,99 €.";
 
     /** No supplier chosen when saving a purchase. */
     protected static final String SUPPLIER_REQUIRED = "Selecciona un proveedor.";
@@ -79,6 +87,7 @@ public class PurchasesViewModel implements ViewModel {
     private final SupplierRepository supplierRepository;
     private final ProductRepository productRepository;
     private final User currentUser;
+    private final SessionValidator sessionValidator;
 
     private final ObservableList<Supplier> suppliers = FXCollections.observableArrayList();
     private final ObservableList<Product> products = FXCollections.observableArrayList();
@@ -107,10 +116,19 @@ public class PurchasesViewModel implements ViewModel {
                               SupplierRepository supplierRepository,
                               ProductRepository productRepository,
                               User currentUser) {
+        this(purchaseRepository, supplierRepository, productRepository, currentUser, null);
+    }
+
+    public PurchasesViewModel(PurchaseRepository purchaseRepository,
+                              SupplierRepository supplierRepository,
+                              ProductRepository productRepository,
+                              User currentUser,
+                              SessionValidator sessionValidator) {
         this.purchaseRepository = purchaseRepository;
         this.supplierRepository = supplierRepository;
         this.productRepository = productRepository;
         this.currentUser = currentUser;
+        this.sessionValidator = sessionValidator;
     }
 
     /** Active suppliers offered in the combo (an inactive one cannot be assigned). */
@@ -197,6 +215,9 @@ public class PurchasesViewModel implements ViewModel {
     public void load() {
         errorMessage.set("");
         statusMessage.set("");
+        if (!ensureActiveSession()) {
+            return;
+        }
         try {
             suppliers.setAll(supplierRepository.findActive());
             products.setAll(productRepository.findAll());
@@ -248,8 +269,14 @@ public class PurchasesViewModel implements ViewModel {
             return;
         }
 
-        draftLots.add(new Stock(product, parsedQuantity, parsedPrice));
-        recomputeTotal();
+        Stock lot = new Stock(product, parsedQuantity, parsedPrice);
+        BigDecimal nextTotal = calculateTotal().add(lot.subtotal());
+        if (nextTotal.compareTo(MAX_STORED_TOTAL) > 0) {
+            fail(TOTAL_LIMIT_ERROR);
+            return;
+        }
+        draftLots.add(lot);
+        purchaseTotal.set(nextTotal);
         clearFieldErrors();
         selectedProduct.set(null);
         quantity.set("");
@@ -279,6 +306,9 @@ public class PurchasesViewModel implements ViewModel {
      * transaction.
      */
     public void save() {
+        if (!ensureActiveSession()) {
+            return;
+        }
         clearFieldErrors();
         if (selectedSupplier.get() == null) {
             supplierError.set(SUPPLIER_REQUIRED);
@@ -290,22 +320,42 @@ public class PurchasesViewModel implements ViewModel {
             fail(joinedErrors(supplierError.get(), lotsError.get()));
             return;
         }
+        if (calculateTotal().compareTo(MAX_STORED_TOTAL) > 0) {
+            fail(TOTAL_LIMIT_ERROR);
+            return;
+        }
 
         Purchase purchase = new Purchase(selectedSupplier.get(), currentUser, draftLots);
+        int id;
         try {
-            int id = purchaseRepository.insert(purchase);
-            purchases.setAll(purchaseRepository.findAll());
-            resetDraft();
-            clearFieldErrors();
-            succeed("Compra #" + id + " guardada correctamente.");
+            id = purchaseRepository.insert(purchase);
+        } catch (InactiveEntityException e) {
+            fail(e.getMessage());
+            return;
         } catch (SQLException e) {
             LOGGER.log(Level.SEVERE, "Could not save the purchase", e);
             fail(DATABASE_ERROR);
+            return;
+        }
+
+        // The insert is committed at this point: discard the draft before the
+        // independent history read so a reload failure cannot cause a duplicate.
+        resetDraft();
+        clearFieldErrors();
+        try {
+            purchases.setAll(purchaseRepository.findAll());
+            succeed("Compra #" + id + " guardada correctamente.");
+        } catch (SQLException e) {
+            LOGGER.log(Level.WARNING, "Purchase was saved but its history could not be reloaded", e);
+            fail(String.format(SAVE_RELOAD_ERROR, id));
         }
     }
 
     /** Loads the lots of the selected purchase; a {@code null} purchase clears them. */
     public void selectPurchase(Purchase purchase) {
+        if (!ensureActiveSession()) {
+            return;
+        }
         if (purchase == null) {
             selectedPurchaseLots.clear();
             return;
@@ -351,12 +401,37 @@ public class PurchasesViewModel implements ViewModel {
                         && lot.getProduct().getId() == product.getId());
     }
 
-    private void recomputeTotal() {
+    private BigDecimal calculateTotal() {
         BigDecimal total = BigDecimal.ZERO;
         for (Stock lot : draftLots) {
             total = total.add(lot.subtotal());
         }
-        purchaseTotal.set(total);
+        return total;
+    }
+
+    private void recomputeTotal() {
+        purchaseTotal.set(calculateTotal());
+    }
+
+    private boolean ensureActiveSession() {
+        if (sessionValidator == null) {
+            return true;
+        }
+        try {
+            if (sessionValidator.refresh()) {
+                return true;
+            }
+        } catch (SQLException e) {
+            LOGGER.log(Level.WARNING, "Could not revalidate the signed-in user", e);
+            fail(DATABASE_ERROR);
+            return false;
+        }
+        purchases.clear();
+        selectedPurchase.set(null);
+        selectedPurchaseLots.clear();
+        resetDraft();
+        fail(SESSION_EXPIRED);
+        return false;
     }
 
     private void resetDraft() {

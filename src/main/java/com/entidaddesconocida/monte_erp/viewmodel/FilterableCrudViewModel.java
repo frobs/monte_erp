@@ -1,5 +1,7 @@
 package com.entidaddesconocida.monte_erp.viewmodel;
 
+import com.entidaddesconocida.monte_erp.app.SessionValidator;
+
 import javafx.beans.Observable;
 import javafx.beans.binding.Bindings;
 import javafx.beans.property.BooleanProperty;
@@ -47,11 +49,20 @@ public abstract class FilterableCrudViewModel<T> extends CrudViewModel<T> {
     private boolean revertingShowInactive;
 
     protected FilterableCrudViewModel() {
+        this(null);
+    }
+
+    protected FilterableCrudViewModel(SessionValidator sessionValidator) {
+        super(sessionValidator);
         // Active and inactive rows come from different queries, so toggling the
         // checkbox reloads the master list. If the reload fails the checkbox is
         // rolled back, so it never disagrees with the rows still on screen.
         showInactive.addListener((observable, oldValue, newValue) -> {
             if (revertingShowInactive) {
+                return;
+            }
+            if (!ensureActiveSession()) {
+                revertShowInactive(oldValue);
                 return;
             }
             try {

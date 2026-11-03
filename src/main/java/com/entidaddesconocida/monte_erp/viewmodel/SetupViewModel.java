@@ -3,6 +3,7 @@ package com.entidaddesconocida.monte_erp.viewmodel;
 import com.entidaddesconocida.monte_erp.domain.model.ConnectionSettings;
 import com.entidaddesconocida.monte_erp.domain.service.SetupException;
 import com.entidaddesconocida.monte_erp.domain.service.SetupService;
+import com.entidaddesconocida.monte_erp.infrastructure.config.DatabaseUrl;
 
 import de.saxsys.mvvmfx.ViewModel;
 
@@ -31,6 +32,8 @@ public class SetupViewModel implements ViewModel {
 
     private static final String URL_INVALID =
             "La URL no es válida. Debe tener el formato jdbc:mysql://host:puerto/base_de_datos.";
+    private static final String URL_CONTAINS_CREDENTIALS =
+            "No incluyas credenciales en la URL JDBC; usa los campos de usuario y contraseña.";
 
     /** Local shape check (host and database present); connectivity still needs the server. */
     private static final Pattern JDBC_URL_PATTERN =
@@ -38,6 +41,7 @@ public class SetupViewModel implements ViewModel {
 
     private final SetupService setupService;
     private final boolean onboarding;
+    private ConnectionSettings storedSettings;
 
     private final StringProperty url = new SimpleStringProperty("");
     private final StringProperty dbUser = new SimpleStringProperty("");
@@ -55,9 +59,11 @@ public class SetupViewModel implements ViewModel {
         adminSectionVisible.set(onboarding);
 
         ConnectionSettings current = setupService.load();
-        url.set(orEmpty(current.url()));
-        dbUser.set(orEmpty(current.user()));
-        dbPassword.set(orEmpty(current.password()));
+        storedSettings = current == null ? new ConnectionSettings(null, null, null) : current;
+        url.set(orEmpty(storedSettings.url()));
+        dbUser.set(orEmpty(storedSettings.user()));
+        // Never expose the saved secret in a login-accessible configuration form.
+        dbPassword.set("");
     }
 
     public StringProperty urlProperty() {
@@ -104,8 +110,7 @@ public class SetupViewModel implements ViewModel {
             statusMessage.set("");
             return;
         }
-        if (!isValidUrl(settings.url())) {
-            errorMessage.set(URL_INVALID);
+        if (!validateUrl(settings.url())) {
             statusMessage.set("");
             return;
         }
@@ -131,8 +136,7 @@ public class SetupViewModel implements ViewModel {
             statusMessage.set("");
             return;
         }
-        if (!isValidUrl(settings.url())) {
-            errorMessage.set(URL_INVALID);
+        if (!validateUrl(settings.url())) {
             statusMessage.set("");
             return;
         }
@@ -151,6 +155,8 @@ public class SetupViewModel implements ViewModel {
             } else {
                 setupService.save(settings);
             }
+            storedSettings = settings;
+            dbPassword.set("");
             errorMessage.set("");
             statusMessage.set("");
             publish(SETUP_SUCCEEDED);
@@ -167,7 +173,16 @@ public class SetupViewModel implements ViewModel {
     }
 
     private ConnectionSettings readForm() {
-        return new ConnectionSettings(trimToNull(url.get()), trimToNull(dbUser.get()), dbPassword.get());
+        String formUrl = trimToNull(url.get());
+        String formUser = trimToNull(dbUser.get());
+        String formPassword = dbPassword.get();
+        if ((formPassword == null || formPassword.isBlank())
+                && same(formUrl, storedSettings.url())
+                && same(formUser, storedSettings.user())) {
+            // Reuse the stored secret only for the exact endpoint/account already trusted.
+            formPassword = storedSettings.password();
+        }
+        return new ConnectionSettings(formUrl, formUser, formPassword);
     }
 
     /**
@@ -175,8 +190,20 @@ public class SetupViewModel implements ViewModel {
      * format mistake does not need a (failing) connection attempt against the
      * database to be reported.
      */
-    private static boolean isValidUrl(String value) {
-        return value != null && JDBC_URL_PATTERN.matcher(value.trim()).matches();
+    private boolean validateUrl(String value) {
+        if (value == null || !JDBC_URL_PATTERN.matcher(value.trim()).matches()) {
+            errorMessage.set(URL_INVALID);
+            return false;
+        }
+        if (DatabaseUrl.containsCredentials(value)) {
+            errorMessage.set(URL_CONTAINS_CREDENTIALS);
+            return false;
+        }
+        return true;
+    }
+
+    private static boolean same(String left, String right) {
+        return left != null && right != null && left.equals(right);
     }
 
     private static String trimToNull(String value) {

@@ -15,10 +15,10 @@ import net.synedra.validatorfx.DefaultDecoration;
 import net.synedra.validatorfx.Validator;
 
 /**
- * Common code-behind of the three CRUD screens (RF-02 users, RF-03 products and
- * RF-04 categories).
+ * Common code-behind shared by the five CRUD screens (RF-02 users, RF-03
+ * products, RF-04 categories, RF-05 suppliers and RF-06 customers).
  *
- * <p>Centralizes what the three {@code *View} classes repeated: the two-way
+ * <p>Centralizes what the five {@code *View} classes repeated: the two-way
  * synchronization between the {@code TableView} selection and the ViewModel, the
  * {@code errorLabel}/{@code statusLabel} bindings, the {@code formTitle} label,
  * the activate/deactivate button bindings and its destructive styling, the

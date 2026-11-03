@@ -1,5 +1,6 @@
 package com.entidaddesconocida.monte_erp.viewmodel;
 
+import com.entidaddesconocida.monte_erp.app.SessionValidator;
 import com.entidaddesconocida.monte_erp.domain.model.Customer;
 import com.entidaddesconocida.monte_erp.domain.model.Product;
 import com.entidaddesconocida.monte_erp.domain.model.SalesOrder;
@@ -12,6 +13,7 @@ import com.entidaddesconocida.monte_erp.domain.repository.ProductRepository;
 import com.entidaddesconocida.monte_erp.domain.repository.SalesOrderRepository;
 import com.entidaddesconocida.monte_erp.domain.repository.StockRepository;
 import com.entidaddesconocida.monte_erp.domain.service.FifoAllocator;
+import com.entidaddesconocida.monte_erp.domain.service.InactiveEntityException;
 import com.entidaddesconocida.monte_erp.domain.service.InsufficientStockException;
 
 import de.saxsys.mvvmfx.ViewModel;
@@ -65,6 +67,12 @@ public class SalesOrdersViewModel implements ViewModel {
     /** Message shown when the database cannot be reached. */
     protected static final String DATABASE_ERROR =
             "No se pudo conectar con la base de datos. Comprueba que MySQL esté arrancado.";
+    private static final String SESSION_EXPIRED = "La sesión ya no está activa. Inicia sesión de nuevo.";
+    private static final String SAVE_RELOAD_ERROR =
+            "Pedido #%d guardado, pero no se pudo actualizar el histórico. Pulsa 'Actualizar'.";
+    private static final BigDecimal MAX_STORED_TOTAL = new BigDecimal("99999999.99");
+    private static final String TOTAL_LIMIT_ERROR =
+            "El total del pedido no puede superar 99.999.999,99 €.";
 
     /** No customer chosen when saving an order. */
     protected static final String CUSTOMER_REQUIRED = "Selecciona un cliente.";
@@ -101,6 +109,7 @@ public class SalesOrdersViewModel implements ViewModel {
     private final ProductRepository productRepository;
     private final StockRepository stockRepository;
     private final User currentUser;
+    private final SessionValidator sessionValidator;
 
     private final ObservableList<Customer> customers = FXCollections.observableArrayList();
     private final ObservableList<Product> products = FXCollections.observableArrayList();
@@ -137,11 +146,21 @@ public class SalesOrdersViewModel implements ViewModel {
                                 ProductRepository productRepository,
                                 StockRepository stockRepository,
                                 User currentUser) {
+        this(salesOrderRepository, customerRepository, productRepository, stockRepository, currentUser, null);
+    }
+
+    public SalesOrdersViewModel(SalesOrderRepository salesOrderRepository,
+                                CustomerRepository customerRepository,
+                                ProductRepository productRepository,
+                                StockRepository stockRepository,
+                                User currentUser,
+                                SessionValidator sessionValidator) {
         this.salesOrderRepository = salesOrderRepository;
         this.customerRepository = customerRepository;
         this.productRepository = productRepository;
         this.stockRepository = stockRepository;
         this.currentUser = currentUser;
+        this.sessionValidator = sessionValidator;
         // The view shows the available units of the chosen product and caps the
         // quantity field with them, so the stock is refreshed on every change.
         selectedProduct.addListener((observable, previous, product) -> refreshAvailableStock(product));
@@ -250,6 +269,9 @@ public class SalesOrdersViewModel implements ViewModel {
     public void load() {
         errorMessage.set("");
         statusMessage.set("");
+        if (!ensureActiveSession()) {
+            return;
+        }
         try {
             customers.setAll(customerRepository.findActive());
             products.setAll(productRepository.findAll());
@@ -275,6 +297,9 @@ public class SalesOrdersViewModel implements ViewModel {
      * line per product" rule (D3).
      */
     public void addLine() {
+        if (!ensureActiveSession()) {
+            return;
+        }
         errorMessage.set("");
         statusMessage.set("");
         clearFieldErrors();
@@ -302,8 +327,14 @@ public class SalesOrdersViewModel implements ViewModel {
             return;
         }
 
-        draftLines.add(new SalesOrderLine(parsedQuantity, product.getPrice(), product));
-        recomputeTotal();
+        SalesOrderLine line = new SalesOrderLine(parsedQuantity, product.getPrice(), product);
+        BigDecimal nextTotal = calculateDraftTotal().add(line.subtotal());
+        if (nextTotal.compareTo(MAX_STORED_TOTAL) > 0) {
+            fail(TOTAL_LIMIT_ERROR);
+            return;
+        }
+        draftLines.add(line);
+        orderTotal.set(nextTotal);
         clearFieldErrors();
         selectedProduct.set(null);
         quantity.set("");
@@ -332,6 +363,9 @@ public class SalesOrdersViewModel implements ViewModel {
      * computed from the lines.
      */
     public void save() {
+        if (!ensureActiveSession()) {
+            return;
+        }
         clearFieldErrors();
         if (selectedCustomer.get() == null) {
             customerError.set(CUSTOMER_REQUIRED);
@@ -343,26 +377,47 @@ public class SalesOrdersViewModel implements ViewModel {
             fail(joinedErrors(customerError.get(), linesError.get()));
             return;
         }
+        if (calculateDraftTotal().compareTo(MAX_STORED_TOTAL) > 0) {
+            fail(TOTAL_LIMIT_ERROR);
+            return;
+        }
 
         SalesOrder order = new SalesOrder(selectedCustomer.get(), currentUser, draftLines);
+        int id;
         try {
-            int id = salesOrderRepository.insert(order);
-            orders.setAll(salesOrderRepository.findAll());
-            resetDraft();
-            clearFieldErrors();
-            succeed("Pedido #" + id + " guardado correctamente.");
+            id = salesOrderRepository.insert(order);
+        } catch (InactiveEntityException e) {
+            fail(e.getMessage());
+            return;
         } catch (InsufficientStockException e) {
             // The repository re-read the lots under lock and the order no longer
             // fits: keep the draft so the employee can adjust the quantity.
             fail(e.getMessage());
+            return;
         } catch (SQLException e) {
             LOGGER.log(Level.SEVERE, "Could not save the sales order", e);
             fail(DATABASE_ERROR);
+            return;
+        }
+
+        // The insert is committed at this point: discard the draft before the
+        // independent history read so a reload failure cannot cause a duplicate.
+        resetDraft();
+        clearFieldErrors();
+        try {
+            orders.setAll(salesOrderRepository.findAll());
+            succeed("Pedido #" + id + " guardado correctamente.");
+        } catch (SQLException e) {
+            LOGGER.log(Level.WARNING, "Sales order was saved but its history could not be reloaded", e);
+            fail(String.format(SAVE_RELOAD_ERROR, id));
         }
     }
 
     /** Loads the lines of the selected order; a {@code null} order clears them. */
     public void selectOrder(SalesOrder order) {
+        if (!ensureActiveSession()) {
+            return;
+        }
         updateAvailableTransitions(order);
         if (order == null) {
             selectedOrderLines.clear();
@@ -387,6 +442,9 @@ public class SalesOrdersViewModel implements ViewModel {
      * history is reloaded and the user is warned instead of overwriting it.
      */
     public void changeStatus(String newStatus) {
+        if (!ensureActiveSession()) {
+            return;
+        }
         clearFieldErrors();
         SalesOrder order = selectedOrder.get();
         if (order == null) {
@@ -416,6 +474,29 @@ public class SalesOrdersViewModel implements ViewModel {
             LOGGER.log(Level.SEVERE, "Could not change the sales order status", e);
             fail(DATABASE_ERROR);
         }
+    }
+
+    private boolean ensureActiveSession() {
+        if (sessionValidator == null) {
+            return true;
+        }
+        try {
+            if (sessionValidator.refresh()) {
+                return true;
+            }
+        } catch (SQLException e) {
+            LOGGER.log(Level.WARNING, "Could not revalidate the signed-in user", e);
+            fail(DATABASE_ERROR);
+            return false;
+        }
+        orders.clear();
+        selectedOrder.set(null);
+        selectedOrderLines.clear();
+        selectedOrderIssues.clear();
+        availableTransitions.clear();
+        resetDraft();
+        fail(SESSION_EXPIRED);
+        return false;
     }
 
     private void updateAvailableTransitions(SalesOrder order) {
@@ -452,6 +533,10 @@ public class SalesOrdersViewModel implements ViewModel {
      */
     private void refreshAvailableStock(Product product) {
         if (product == null) {
+            availableStock.set(0);
+            return;
+        }
+        if (!ensureActiveSession()) {
             availableStock.set(0);
             return;
         }
@@ -509,12 +594,16 @@ public class SalesOrdersViewModel implements ViewModel {
                         && line.getProduct().getId() == product.getId());
     }
 
-    private void recomputeTotal() {
+    private BigDecimal calculateDraftTotal() {
         BigDecimal total = BigDecimal.ZERO;
         for (SalesOrderLine line : draftLines) {
             total = total.add(line.subtotal());
         }
-        orderTotal.set(total);
+        return total;
+    }
+
+    private void recomputeTotal() {
+        orderTotal.set(calculateDraftTotal());
     }
 
     private void resetDraft() {

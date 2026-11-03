@@ -23,6 +23,7 @@ import java.util.logging.Logger;
 public class LoginViewModel implements ViewModel {
 
     private static final Logger LOGGER = Logger.getLogger(LoginViewModel.class.getName());
+    private static final String UNKNOWN_USER_HASH = PasswordHasher.hash("monte-erp-unknown-user");
 
     public static final String LOGIN_SUCCEEDED = "loginSucceeded";
 
@@ -64,15 +65,13 @@ public class LoginViewModel implements ViewModel {
         try {
             User user = userRepository.findByUsername(u);
 
-            // Same message for an unknown user and a wrong password: whether the
-            // login name exists is never revealed.
-            if (user == null || !PasswordHasher.verify(p, user.getPasswordHash())) {
+            // Always perform one PBKDF2 verification, including for missing and
+            // disabled accounts, so neither response nor work reveals account state.
+            String hash = user == null ? UNKNOWN_USER_HASH : user.getPasswordHash();
+            boolean passwordMatches = PasswordHasher.verify(p, hash);
+            if (user == null || !passwordMatches || !user.isActive()) {
                 errorMessage.set("Usuario o contraseña incorrectos.");
                 password.set("");
-                return;
-            }
-            if (!user.isActive()) {
-                errorMessage.set("El usuario está desactivado. Contacta con un administrador.");
                 return;
             }
 

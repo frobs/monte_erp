@@ -1,5 +1,6 @@
 package com.entidaddesconocida.monte_erp.viewmodel;
 
+import com.entidaddesconocida.monte_erp.app.SessionValidator;
 import com.entidaddesconocida.monte_erp.domain.model.ReportPeriod;
 import com.entidaddesconocida.monte_erp.domain.model.SalesReportLine;
 import com.entidaddesconocida.monte_erp.domain.model.SalesReportRow;
@@ -57,9 +58,11 @@ public class ReportsViewModel implements ViewModel {
     /** Message shown when the "desde" date is after the "hasta" date. */
     protected static final String PERIOD_ERROR =
             "La fecha «desde» no puede ser posterior a la fecha «hasta».";
+    private static final String SESSION_EXPIRED = "La sesión ya no está activa. Inicia sesión de nuevo.";
 
     private final SalesOrderRepository salesOrderRepository;
     private final StockRepository stockRepository;
+    private final SessionValidator sessionValidator;
 
     private final ObjectProperty<LocalDate> fromDate = new SimpleObjectProperty<>();
     private final ObjectProperty<LocalDate> toDate = new SimpleObjectProperty<>();
@@ -75,8 +78,15 @@ public class ReportsViewModel implements ViewModel {
 
     public ReportsViewModel(SalesOrderRepository salesOrderRepository,
                             StockRepository stockRepository) {
+        this(salesOrderRepository, stockRepository, null);
+    }
+
+    public ReportsViewModel(SalesOrderRepository salesOrderRepository,
+                            StockRepository stockRepository,
+                            SessionValidator sessionValidator) {
         this.salesOrderRepository = salesOrderRepository;
         this.stockRepository = stockRepository;
+        this.sessionValidator = sessionValidator;
         publish(StockReportSummary.empty(), SalesReportSummary.empty());
     }
 
@@ -136,10 +146,14 @@ public class ReportsViewModel implements ViewModel {
      */
     public void load() {
         errorMessage.set("");
+        if (!ensureActiveSession()) {
+            return;
+        }
         ReportPeriod period;
         try {
             period = period();
         } catch (IllegalArgumentException e) {
+            clearReports();
             errorMessage.set(PERIOD_ERROR);
             return;
         }
@@ -153,11 +167,34 @@ public class ReportsViewModel implements ViewModel {
             publish(stock, sales);
         } catch (SQLException e) {
             LOGGER.log(Level.SEVERE, "Could not load the reports", e);
-            stockLots.clear();
-            salesRows.clear();
-            publish(StockReportSummary.empty(), SalesReportSummary.empty());
+            clearReports();
             errorMessage.set(DATABASE_ERROR);
         }
+    }
+
+    private void clearReports() {
+        stockLots.clear();
+        salesRows.clear();
+        publish(StockReportSummary.empty(), SalesReportSummary.empty());
+    }
+
+    private boolean ensureActiveSession() {
+        if (sessionValidator == null) {
+            return true;
+        }
+        try {
+            if (sessionValidator.refresh()) {
+                return true;
+            }
+        } catch (SQLException e) {
+            LOGGER.log(Level.WARNING, "Could not revalidate the signed-in user", e);
+            clearReports();
+            errorMessage.set(DATABASE_ERROR);
+            return false;
+        }
+        clearReports();
+        errorMessage.set(SESSION_EXPIRED);
+        return false;
     }
 
     /** Clears both dates (whole history) and reloads. */
@@ -169,11 +206,17 @@ public class ReportsViewModel implements ViewModel {
 
     /** CSV text of the stock report currently loaded. */
     public String stockReportCsv() {
+        if (!ensureActiveSession()) {
+            return ReportCsv.stockReport(stockLots, stockSummary.get());
+        }
         return ReportCsv.stockReport(stockLots, stockSummary.get());
     }
 
     /** CSV text of the sales report currently loaded. */
     public String salesReportCsv() {
+        if (!ensureActiveSession()) {
+            return ReportCsv.salesReport(salesRows, salesSummary.get());
+        }
         return ReportCsv.salesReport(salesRows, salesSummary.get());
     }
 

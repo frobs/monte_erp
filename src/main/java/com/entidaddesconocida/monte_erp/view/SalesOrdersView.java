@@ -44,7 +44,7 @@ public class SalesOrdersView implements FxmlView<SalesOrdersViewModel> {
             DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm");
 
     /** Keeps the typed quantity within the {@code int} range (RF-07). */
-    private static final int QUANTITY_MAX_DIGITS = 9;
+    private static final int QUANTITY_MAX_DIGITS = 10;
 
     private final AppShell appShell;
 

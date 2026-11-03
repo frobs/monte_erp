@@ -30,7 +30,7 @@ public class MainViewModel implements ViewModel {
         usernameProperty.set(user.getUsername());
         roleLabelProperty.set(user.getRoleLabel());
         adminProperty.set(user.isAdmin());
-        databaseProperty.set("Base de datos: " + databaseUrl.value());
+        databaseProperty.set("Base de datos: " + databaseUrl.redacted());
     }
 
     public ReadOnlyStringProperty welcomeProperty() {

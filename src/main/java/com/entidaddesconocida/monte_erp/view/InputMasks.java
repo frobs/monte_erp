@@ -43,7 +43,14 @@ public final class InputMasks {
         if (!acceptsPartialInteger(text, maxDigits)) {
             return false;
         }
-        return text.isEmpty() || Integer.parseInt(text) <= max;
+        if (text.isEmpty()) {
+            return true;
+        }
+        try {
+            return Integer.parseInt(text) <= max;
+        } catch (NumberFormatException e) {
+            return false;
+        }
     }
 
     /**

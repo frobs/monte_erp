@@ -1,5 +1,6 @@
 package com.entidaddesconocida.monte_erp.viewmodel;
 
+import com.entidaddesconocida.monte_erp.app.SessionValidator;
 import com.entidaddesconocida.monte_erp.domain.model.Supplier;
 import com.entidaddesconocida.monte_erp.domain.repository.SupplierRepository;
 
@@ -62,6 +63,11 @@ public class SuppliersViewModel extends FilterableCrudViewModel<Supplier> {
     private final ReadOnlyStringWrapper addressError = new ReadOnlyStringWrapper("");
 
     public SuppliersViewModel(SupplierRepository supplierRepository) {
+        this(supplierRepository, null);
+    }
+
+    public SuppliersViewModel(SupplierRepository supplierRepository, SessionValidator sessionValidator) {
+        super(sessionValidator);
         this.supplierRepository = supplierRepository;
         bindFilter(searchText);
         watchFields(name, phone, email, address);

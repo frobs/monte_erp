@@ -1,5 +1,7 @@
 package com.entidaddesconocida.monte_erp.viewmodel;
 
+import com.entidaddesconocida.monte_erp.app.SessionValidator;
+
 import de.saxsys.mvvmfx.ViewModel;
 
 import javafx.beans.property.ObjectProperty;
@@ -24,26 +26,26 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
- * Common skeleton of the three CRUD screens (RF-02 users, RF-03 products and
- * RF-04 categories).
+ * Common skeleton shared by the five CRUD screens (RF-02 users, RF-03 products,
+ * RF-04 categories, RF-05 suppliers and RF-06 customers).
  *
  * <p>Owns the state every screen repeats — the master list, the selected row,
  * the form title, the error/status messages, the activate/deactivate toggle and
  * the item counter — and implements the templates that were copy-pasted in the
- * three ViewModels: {@link #save()} (validate → business rules → write →
+ * five ViewModels: {@link #save()} (validate → business rules → write →
  * reload), {@link #deactivate()} / {@link #activate()} (selection and state
  * guards → write → reload) and {@link #reloadAfterWrite(String)}.</p>
  *
  * <p>Everything entity specific is a hook: how to load the list, how to write,
  * how to map an item to its id/active flag, which labels and messages to show
  * and how to fill/clear the form. A hook is added here only when at least two
- * of the three real screens need it; otherwise it stays in the subclass.</p>
+ * of the five real screens need it; otherwise it stays in the subclass.</p>
  *
  * <p>Like the concrete ViewModels, this class is deliberately free of
  * ValidatorFX: the per-field rules are exposed as one error property per field,
  * so it stays testable with plain JUnit and no JavaFX toolkit.</p>
  *
- * @param <T> entity managed by the screen (User, Product or Category)
+ * @param <T> entity managed by the screen (User, Product, Category, Supplier or Customer)
  */
 public abstract class CrudViewModel<T> implements ViewModel {
 
@@ -56,6 +58,10 @@ public abstract class CrudViewModel<T> implements ViewModel {
     /** Message shown when the write succeeded but the list could not be reloaded. */
     protected static final String RELOAD_ERROR =
             "Los cambios se guardaron, pero no se pudo recargar la lista. Pulsa 'Actualizar'.";
+    protected static final String SESSION_EXPIRED =
+            "La sesión ya no está activa. Inicia sesión de nuevo.";
+
+    private final SessionValidator sessionValidator;
 
     /** Master list currently loaded (active or inactive rows, depending on the subclass). */
     protected final ObservableList<T> items = FXCollections.observableArrayList();
@@ -86,6 +92,11 @@ public abstract class CrudViewModel<T> implements ViewModel {
     };
 
     protected CrudViewModel() {
+        this(null);
+    }
+
+    protected CrudViewModel(SessionValidator sessionValidator) {
+        this.sessionValidator = sessionValidator;
         // Selecting a row loads it into the form; clearing the selection resets
         // the form so a stale row can never be edited/saved by accident.
         selectedItem.addListener((observable, oldValue, newValue) -> {
@@ -155,6 +166,9 @@ public abstract class CrudViewModel<T> implements ViewModel {
     public final void load() {
         errorMessage.set("");
         statusMessage.set("");
+        if (!ensureActiveSession()) {
+            return;
+        }
         try {
             loadAuxiliaryData();
             refreshItems();
@@ -183,6 +197,9 @@ public abstract class CrudViewModel<T> implements ViewModel {
      * → {@link #write()} → reload.
      */
     public final void save() {
+        if (!ensureActiveSession()) {
+            return;
+        }
         validateOnEdit = true;
         refreshFieldErrors();
         if (hasFieldErrors()) {
@@ -211,6 +228,9 @@ public abstract class CrudViewModel<T> implements ViewModel {
 
     /** Logical deletion of the selected item (never a physical delete). */
     public final void deactivate() {
+        if (!ensureActiveSession()) {
+            return;
+        }
         T selected = selectedItem.get();
         if (selected == null) {
             fail(notSelectedMessage());
@@ -235,6 +255,9 @@ public abstract class CrudViewModel<T> implements ViewModel {
 
     /** Brings a previously deleted item back to active. */
     public final void activate() {
+        if (!ensureActiveSession()) {
+            return;
+        }
         T selected = selectedItem.get();
         if (selected == null) {
             fail(notSelectedMessage());
@@ -242,6 +265,9 @@ public abstract class CrudViewModel<T> implements ViewModel {
         }
         if (itemIsActive(selected)) {
             fail(alreadyActiveMessage());
+            return;
+        }
+        if (!canActivate(selected)) {
             return;
         }
         try {
@@ -326,6 +352,25 @@ public abstract class CrudViewModel<T> implements ViewModel {
      * on purpose: it runs from the {@code selectedItem} listener registered in
      * the constructor, so an override would read subclass fields too early.
      */
+    protected final boolean ensureActiveSession() {
+        if (sessionValidator == null) {
+            return true;
+        }
+        try {
+            if (sessionValidator.refresh()) {
+                return true;
+            }
+        } catch (SQLException e) {
+            LOGGER.log(Level.WARNING, "Could not revalidate the signed-in user", e);
+            fail(DATABASE_ERROR);
+            return false;
+        }
+        items.clear();
+        resetForm();
+        fail(SESSION_EXPIRED);
+        return false;
+    }
+
     private void refreshToggleState() {
         T selected = selectedItem.get();
         if (selected == null) {
@@ -406,6 +451,11 @@ public abstract class CrudViewModel<T> implements ViewModel {
 
     /** Extra guard before deactivating (e.g. the current user cannot be disabled). */
     protected boolean canDeactivate(T item) {
+        return true;
+    }
+
+    /** Extra guard before activating an item. */
+    protected boolean canActivate(T item) {
         return true;
     }
 
