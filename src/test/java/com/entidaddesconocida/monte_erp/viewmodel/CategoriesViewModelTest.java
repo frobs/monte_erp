@@ -309,6 +309,23 @@ class CategoriesViewModelTest {
     }
 
     @Test
+    @DisplayName("La búsqueda por descripción acota la tabla")
+    void searchFiltersByDescription() {
+        fakeRepository.withCategory(new Category(2, "Snacks", "Aperitivos salados"));
+        viewModel.load();
+
+        viewModel.searchTextProperty().set("aperitivos");
+
+        assertEquals(1, viewModel.filteredCategories().size());
+        assertEquals("Snacks", viewModel.filteredCategories().get(0).getName());
+
+        // La búsqueda ignora mayúsculas y acentos, igual que MySQL (utf8mb4_unicode_ci).
+        viewModel.searchTextProperty().set("REFRÉSCOS");
+        assertEquals(1, viewModel.filteredCategories().size());
+        assertEquals("Bebidas", viewModel.filteredCategories().get(0).getName());
+    }
+
+    @Test
     @DisplayName("Error de base de datos al cargar: muestra mensaje de conexión")
     void databaseErrorOnLoadShowsMessage() {
         fakeRepository.throwOnAccess();

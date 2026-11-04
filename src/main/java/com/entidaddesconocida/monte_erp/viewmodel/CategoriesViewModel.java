@@ -14,7 +14,6 @@ import javafx.collections.transformation.FilteredList;
 
 import java.sql.SQLException;
 import java.util.List;
-import java.util.Locale;
 
 /**
  * ViewModel of the category management screen (RF-04 / CU-04).
@@ -122,12 +121,8 @@ public class CategoriesViewModel extends FilterableCrudViewModel<Category> {
 
     @Override
     protected boolean matches(Category category) {
-        String text = trimmed(searchText.get()).toLowerCase(Locale.ROOT);
-        if (text.isEmpty()) {
-            return true;
-        }
-        return category.getName() != null
-                && category.getName().toLowerCase(Locale.ROOT).contains(text);
+        // Case- and accent-insensitive over name/description (decision D5).
+        return SearchText.matches(searchText.get(), category.getName(), category.getDescription());
     }
 
     @Override
