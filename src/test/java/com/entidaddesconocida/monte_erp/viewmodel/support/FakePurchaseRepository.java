@@ -7,6 +7,7 @@ import com.entidaddesconocida.monte_erp.domain.model.Stock;
 import com.entidaddesconocida.monte_erp.domain.model.Supplier;
 import com.entidaddesconocida.monte_erp.domain.model.User;
 import com.entidaddesconocida.monte_erp.domain.repository.PurchaseRepository;
+import com.entidaddesconocida.monte_erp.domain.service.PurchaseStockConsumedException;
 
 import java.sql.SQLException;
 import java.time.LocalDateTime;
@@ -119,6 +120,42 @@ public class FakePurchaseRepository implements PurchaseRepository {
     public List<Stock> findLots(int purchaseId) throws SQLException {
         maybeThrow("findLots");
         return copyLots(lotsByPurchase.getOrDefault(purchaseId, List.of()));
+    }
+
+    /**
+     * Applies the status change with the same rules as the real adapter: the
+     * optimistic guard returns 0 on mismatch, receiving makes every lot
+     * available and returning empties them only when no unit was sold.
+     */
+    @Override
+    public int changeStatus(int id, String currentStatus, String newStatus)
+            throws SQLException, PurchaseStockConsumedException {
+        maybeThrow("changeStatus");
+        Purchase stored = purchases.get(id);
+        if (stored == null || !currentStatus.equals(stored.getStatus())) {
+            return 0;
+        }
+        List<Stock> lots = lotsByPurchase.getOrDefault(id, List.of());
+        if (Purchase.STATUS_RETURNED.equals(newStatus)) {
+            int consumed = lots.stream()
+                    .mapToInt(lot -> lot.getInitialQuantity() - lot.getAvailableQuantity())
+                    .sum();
+            if (consumed > 0) {
+                throw new PurchaseStockConsumedException(id, consumed);
+            }
+        }
+        for (Stock lot : lots) {
+            if (Purchase.STATUS_RECEIVED.equals(newStatus)) {
+                lot.setAvailableQuantity(lot.getInitialQuantity());
+            } else if (Purchase.STATUS_RETURNED.equals(newStatus)) {
+                lot.setAvailableQuantity(0);
+            }
+        }
+        // A fresh copy with the full constructor (there is no public setStatus).
+        purchases.put(id, new Purchase(stored.getId(), stored.getPurchaseDate(), newStatus,
+                stored.getTotal(), copy(stored.getSupplier()), copy(stored.getUser()),
+                copyLots(lots)));
+        return 1;
     }
 
     /**

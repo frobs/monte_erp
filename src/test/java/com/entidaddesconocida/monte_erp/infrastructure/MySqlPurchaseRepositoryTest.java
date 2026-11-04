@@ -7,6 +7,7 @@ import com.entidaddesconocida.monte_erp.domain.model.Stock;
 import com.entidaddesconocida.monte_erp.domain.model.Supplier;
 import com.entidaddesconocida.monte_erp.domain.model.User;
 import com.entidaddesconocida.monte_erp.domain.service.InactiveEntityException;
+import com.entidaddesconocida.monte_erp.domain.service.PurchaseStockConsumedException;
 import com.entidaddesconocida.monte_erp.infrastructure.config.DatabaseConnection;
 import com.entidaddesconocida.monte_erp.infrastructure.support.FakeJdbc;
 
@@ -90,7 +91,7 @@ class MySqlPurchaseRepositoryTest {
         String purchaseSql = fake.preparedSql().get(1);
         assertTrue(purchaseSql.contains("INSERT INTO PURCHASE"));
         Map<Integer, Object> purchaseParameters = fake.boundParameters().get(1);
-        assertEquals(Purchase.STATUS_RECEIVED, purchaseParameters.get(1));
+        assertEquals(Purchase.STATUS_PENDING, purchaseParameters.get(1));
         assertEquals(0, new BigDecimal("36.50").compareTo((BigDecimal) purchaseParameters.get(2)));
         assertEquals(3, purchaseParameters.get(3));
         assertEquals(9, purchaseParameters.get(4));
@@ -100,13 +101,14 @@ class MySqlPurchaseRepositoryTest {
         assertTrue(lotSql.contains("INSERT INTO STOCK"));
         Map<Integer, Object> firstLot = fake.boundParameters().get(3);
         assertEquals(2, firstLot.get(1));
-        assertEquals(2, firstLot.get(2));
+        // A pending purchase does not feed the stock yet.
+        assertEquals(0, firstLot.get(2));
         assertEquals(0, new BigDecimal("10.00").compareTo((BigDecimal) firstLot.get(3)));
         assertEquals(1, firstLot.get(4));
         assertEquals(42, firstLot.get(5));
         Map<Integer, Object> secondLot = fake.boundParameters().get(5);
         assertEquals(3, secondLot.get(1));
-        assertEquals(3, secondLot.get(2));
+        assertEquals(0, secondLot.get(2));
         assertEquals(2, secondLot.get(4));
     }
 
@@ -297,5 +299,75 @@ class MySqlPurchaseRepositoryTest {
     @DisplayName("findProductSuppliers devuelve una lista vacía sin filas")
     void findProductSuppliersReturnsEmptyList() throws SQLException {
         assertEquals(List.of(), repository.findProductSuppliers());
+    }
+
+    // --- Status machine -------------------------------------------------
+
+    @Test
+    @DisplayName("changeStatus a received actualiza con guarda optimista y libera los lotes")
+    void changeStatusToReceivedMakesLotsAvailable()
+            throws SQLException, PurchaseStockConsumedException {
+        int updated = repository.changeStatus(7, Purchase.STATUS_PENDING, Purchase.STATUS_RECEIVED);
+
+        assertEquals(1, updated);
+        assertTrue(fake.preparedSql().get(0).contains("UPDATE PURCHASE SET status = ?"));
+        Map<Integer, Object> statusParameters = fake.boundParameters().get(0);
+        assertEquals(Purchase.STATUS_RECEIVED, statusParameters.get(1));
+        assertEquals(7, statusParameters.get(2));
+        assertEquals(Purchase.STATUS_PENDING, statusParameters.get(3));
+        assertTrue(fake.preparedSql().get(1).contains(
+                "UPDATE STOCK SET available_quantity = initial_quantity"));
+        assertEquals(7, fake.boundParameters().get(1).get(1));
+        assertEquals(List.of("setAutoCommit(false)", "commit()", "setAutoCommit(true)"),
+                fake.transactionCalls());
+    }
+
+    @Test
+    @DisplayName("changeStatus a returned bloquea los lotes y los vacía si no se vendió nada")
+    void changeStatusToReturnedEmptiesLots()
+            throws SQLException, PurchaseStockConsumedException {
+        fake.withRows(FakeJdbc.row("initial_quantity", 2, "available_quantity", 2));
+
+        int updated = repository.changeStatus(7, Purchase.STATUS_RECEIVED, Purchase.STATUS_RETURNED);
+
+        assertEquals(1, updated);
+        String lockSql = fake.preparedSql().get(1);
+        assertTrue(lockSql.contains("SELECT initial_quantity, available_quantity FROM STOCK"));
+        assertTrue(lockSql.contains("FOR UPDATE"));
+        assertEquals(7, fake.boundParameters().get(1).get(1));
+        assertTrue(fake.preparedSql().get(2).contains("UPDATE STOCK SET available_quantity = 0"));
+        assertEquals(7, fake.boundParameters().get(2).get(1));
+        assertTrue(fake.transactionCalls().contains("commit()"));
+    }
+
+    @Test
+    @DisplayName("Devolver una compra con unidades vendidas revierte y no toca el stock")
+    void changeStatusToReturnedRejectedWhenStockWasConsumed() {
+        fake.withRows(FakeJdbc.row("initial_quantity", 5, "available_quantity", 3));
+
+        PurchaseStockConsumedException error = assertThrows(PurchaseStockConsumedException.class,
+                () -> repository.changeStatus(7, Purchase.STATUS_RECEIVED, Purchase.STATUS_RETURNED));
+
+        assertEquals(7, error.getPurchaseId());
+        assertEquals(2, error.getConsumedUnits());
+        assertTrue(fake.transactionCalls().contains("rollback()"));
+        assertFalse(fake.transactionCalls().contains("commit()"));
+        assertTrue(fake.preparedSql().stream()
+                .noneMatch(sql -> sql.contains("UPDATE STOCK SET available_quantity = 0")));
+    }
+
+    @Test
+    @DisplayName("changeStatus con la guarda rota devuelve 0, revierte y no toca el stock")
+    void changeStatusReturnsZeroOnConflict()
+            throws SQLException, PurchaseStockConsumedException {
+        fake.withUpdateCount(0);
+
+        int updated = repository.changeStatus(7, Purchase.STATUS_PENDING, Purchase.STATUS_RECEIVED);
+
+        assertEquals(0, updated);
+        assertEquals(List.of("setAutoCommit(false)", "rollback()", "setAutoCommit(true)"),
+                fake.transactionCalls());
+        assertTrue(fake.preparedSql().stream()
+                .noneMatch(sql -> sql.contains("UPDATE STOCK")));
     }
 }

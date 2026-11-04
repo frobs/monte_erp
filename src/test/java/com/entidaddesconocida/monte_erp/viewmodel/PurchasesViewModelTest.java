@@ -259,7 +259,7 @@ class PurchasesViewModelTest {
     }
 
     @Test
-    @DisplayName("save válido inserta la compra received, con usuario y total, y limpia el formulario")
+    @DisplayName("save válido inserta la compra pending, con usuario y total, y limpia el formulario")
     void saveValidPurchase() {
         selectSupplier();
         addLot("Teclado", "2", "10.00");
@@ -272,7 +272,7 @@ class PurchasesViewModelTest {
         assertNull(viewModel.selectedSupplierProperty().get());
 
         Purchase inserted = purchaseRepository.lastInserted();
-        assertEquals(Purchase.STATUS_RECEIVED, inserted.getStatus());
+        assertEquals(Purchase.STATUS_PENDING, inserted.getStatus());
         assertEquals("Acme", inserted.getSupplier().getName());
         assertEquals(9, inserted.getUser().getId());
         assertEquals(2, inserted.getLots().size());
@@ -281,7 +281,7 @@ class PurchasesViewModelTest {
         assertEquals(1, viewModel.purchases().size());
         Purchase saved = viewModel.purchases().get(0);
         assertTrue(viewModel.statusMessageProperty().get().contains("Compra #" + saved.getId()));
-        assertEquals(Purchase.STATUS_RECEIVED, saved.getStatus());
+        assertEquals(Purchase.STATUS_PENDING, saved.getStatus());
     }
 
     @Test
@@ -382,5 +382,142 @@ class PurchasesViewModelTest {
         assertEquals("El total de la compra no puede superar 99.999.999,99 €.",
                 viewModel.errorMessageProperty().get());
         assertEquals(0, viewModel.draftLots().size());
+    }
+
+    // --- Status machine -------------------------------------------------
+
+    private Purchase selectStoredPurchase(String status) {
+        Purchase purchase = new Purchase(0, LocalDateTime.now(), status,
+                new BigDecimal("20.00"), ACME, user(), List.of());
+        purchaseRepository.withPurchase(purchase)
+                .withLot(purchase.getId(),
+                        new Stock(product(1, "Teclado"), 2, new BigDecimal("10.00")));
+        viewModel.load();
+        Purchase selected = viewModel.purchases().get(0);
+        viewModel.selectedPurchaseProperty().set(selected);
+        viewModel.selectPurchase(selected);
+        return selected;
+    }
+
+    @Test
+    @DisplayName("availableTransitions vacío sin selección y completo para una compra pending")
+    void availableTransitionsReflectTheSelectedPurchase() {
+        assertEquals(List.of(), viewModel.availableTransitions());
+
+        selectStoredPurchase(Purchase.STATUS_PENDING);
+
+        assertEquals(List.of(Purchase.STATUS_RECEIVED, Purchase.STATUS_CANCELLED),
+                viewModel.availableTransitions());
+    }
+
+    @Test
+    @DisplayName("availableTransitions de una compra recibida solo ofrece devolver")
+    void receivedPurchaseOnlyOffersReturn() {
+        selectStoredPurchase(Purchase.STATUS_RECEIVED);
+
+        assertEquals(List.of(Purchase.STATUS_RETURNED), viewModel.availableTransitions());
+    }
+
+    @Test
+    @DisplayName("availableTransitions vacío para una compra terminal")
+    void availableTransitionsAreEmptyForTerminalPurchases() {
+        selectStoredPurchase(Purchase.STATUS_RETURNED);
+
+        assertEquals(List.of(), viewModel.availableTransitions());
+    }
+
+    @Test
+    @DisplayName("load limpia availableTransitions junto con la selección")
+    void loadClearsAvailableTransitions() {
+        selectStoredPurchase(Purchase.STATUS_PENDING);
+        assertEquals(2, viewModel.availableTransitions().size());
+
+        viewModel.load();
+
+        assertEquals(0, viewModel.availableTransitions().size());
+    }
+
+    @Test
+    @DisplayName("changeStatus sin compra seleccionada avisa y no toca el repositorio")
+    void changeStatusWithoutSelectionFails() {
+        purchaseRepository.failOn("changeStatus");
+
+        viewModel.changeStatus(Purchase.STATUS_RECEIVED);
+
+        assertEquals(PurchasesViewModel.PURCHASE_REQUIRED, viewModel.errorMessageProperty().get());
+    }
+
+    @Test
+    @DisplayName("changeStatus con transición no permitida avisa y no toca el repositorio")
+    void changeStatusWithInvalidTransitionFailsBeforeTheRepository() {
+        selectStoredPurchase(Purchase.STATUS_RECEIVED);
+        purchaseRepository.failOn("changeStatus");
+
+        viewModel.changeStatus(Purchase.STATUS_CANCELLED);
+
+        assertEquals(String.format(PurchasesViewModel.INVALID_TRANSITION, "Recibida", "Cancelada"),
+                viewModel.errorMessageProperty().get());
+    }
+
+    @Test
+    @DisplayName("changeStatus válido persiste, recarga el histórico y reselecciona")
+    void changeStatusPersistsAndReloads() {
+        Purchase selected = selectStoredPurchase(Purchase.STATUS_PENDING);
+        int id = selected.getId();
+
+        viewModel.changeStatus(Purchase.STATUS_RECEIVED);
+
+        assertEquals("", viewModel.errorMessageProperty().get());
+        assertTrue(viewModel.statusMessageProperty().get().contains("Compra #" + id));
+        assertTrue(viewModel.statusMessageProperty().get().contains("Recibida"));
+        Purchase reloaded = viewModel.selectedPurchaseProperty().get();
+        assertEquals(Purchase.STATUS_RECEIVED, reloaded.getStatus());
+        assertEquals(List.of(Purchase.STATUS_RETURNED), viewModel.availableTransitions());
+        assertEquals(2, viewModel.selectedPurchaseLots().get(0).getAvailableQuantity());
+    }
+
+    @Test
+    @DisplayName("changeStatus con guarda optimista rota recarga y avisa del conflicto")
+    void changeStatusReportsConflict() {
+        Purchase selected = selectStoredPurchase(Purchase.STATUS_PENDING);
+        // Someone else moved the purchase: the stored status no longer matches.
+        purchaseRepository.withPurchase(new Purchase(selected.getId(), LocalDateTime.now(),
+                Purchase.STATUS_CANCELLED, selected.getTotal(), ACME, user(), List.of()));
+
+        viewModel.changeStatus(Purchase.STATUS_RECEIVED);
+
+        assertEquals(PurchasesViewModel.CONFLICT, viewModel.errorMessageProperty().get());
+    }
+
+    @Test
+    @DisplayName("Devolver una compra con unidades vendidas muestra el motivo del rechazo")
+    void returnRejectedWhenStockWasConsumed() {
+        Purchase purchase = new Purchase(0, LocalDateTime.now(), Purchase.STATUS_RECEIVED,
+                new BigDecimal("20.00"), ACME, user(), List.of());
+        purchaseRepository.withPurchase(purchase)
+                .withLot(purchase.getId(), new Stock(11, 2, 1, new BigDecimal("10.00"),
+                        LocalDateTime.now(), product(1, "Teclado"), null));
+        viewModel.load();
+        Purchase selected = viewModel.purchases().get(0);
+        viewModel.selectedPurchaseProperty().set(selected);
+        viewModel.selectPurchase(selected);
+
+        viewModel.changeStatus(Purchase.STATUS_RETURNED);
+
+        assertEquals("No se puede devolver la compra #" + purchase.getId()
+                + ": 1 unidad ya se ha vendido.", viewModel.errorMessageProperty().get());
+        assertEquals(Purchase.STATUS_RECEIVED,
+                viewModel.selectedPurchaseProperty().get().getStatus());
+    }
+
+    @Test
+    @DisplayName("changeStatus con la base de datos caída muestra el error de conexión")
+    void changeStatusReportsDatabaseError() {
+        selectStoredPurchase(Purchase.STATUS_PENDING);
+        purchaseRepository.failOn("changeStatus");
+
+        viewModel.changeStatus(Purchase.STATUS_RECEIVED);
+
+        assertEquals(PurchasesViewModel.DATABASE_ERROR, viewModel.errorMessageProperty().get());
     }
 }

@@ -83,12 +83,15 @@ class MigrationRunnerTest {
     }
 
     @Test
-    @DisplayName("The V1 and V4 scripts are discovered on the classpath (exploded or inside a JAR)")
+    @DisplayName("The V1, V4 and V8 scripts are discovered on the classpath (exploded or inside a JAR)")
     void discoversScripts() throws Exception {
         List<String> scripts = MigrationRunner.discoverScripts();
         assertTrue(scripts.contains("V1__schema.sql"), "scripts found: " + scripts);
         // CATEGORY.active comes from V4: if that resource disappears from the JAR,
         // every existing installation breaks at start-up and no test would notice.
         assertTrue(scripts.contains("V4__category_active.sql"), "scripts found: " + scripts);
+        // The purchase status pipeline needs the V8 ENUM: without it, saving a
+        // returned purchase fails at runtime on an up-to-date database.
+        assertTrue(scripts.contains("V8__purchase_status.sql"), "scripts found: " + scripts);
     }
 }
