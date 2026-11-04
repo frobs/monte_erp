@@ -52,7 +52,7 @@ monte_erp/
 │   │   │       └── security/                      # PasswordHasher
 │   │   └── resources/
 │   │       ├── css/app.css                        # Estilos de la interfaz
-│   │       ├── db/migration/V1..V7__*.sql         # Migraciones: esquema + bajas lógicas (PRODUCT, CATEGORY, SUPPLIER, CUSTOMER) + dirección de proveedor
+│   │       ├── db/migration/V1..V8__*.sql         # Migraciones: esquema + bajas lógicas (PRODUCT, CATEGORY, SUPPLIER, CUSTOMER) + dirección de proveedor + estados de compra
 │   │       └── com/entidaddesconocida/monte_erp/view/
 │   │           ├── LoginView.fxml                 # vista de login (mismo paquete que LoginView)
 │   │           ├── SetupView.fxml                 # vista de configuración de BD
@@ -160,10 +160,11 @@ siguen la convención `V<n>__<descripcion>.sql`. Al arrancar, `MigrationRunner`
 aplica en orden los que estén pendientes y registra cada uno en la tabla de
 control `schema_migrations`, por lo que arrancar la aplicación varias veces no
 repite trabajo. Para cambiar el esquema basta con añadir el siguiente
-`V<n>__<descripcion>.sql`. Migraciones actuales (`V1`–`V7`):
+`V<n>__<descripcion>.sql`. Migraciones actuales (`V1`–`V8`):
 `V2`/`V4`/`V5`/`V6` añaden `PRODUCT.active`, `CATEGORY.active`, `SUPPLIER.active`
 y `CUSTOMER.active` (bajas lógicas); `V3` hace `NULL`-able `PRODUCT.category_id`
-porque la categoría es opcional; y `V7` añade `SUPPLIER.address`.
+porque la categoría es opcional; `V7` añade `SUPPLIER.address`; y `V8` amplía el
+`ENUM` de `PURCHASE.status` con `returned` para la devolución de compras.
 
 Esquema creado por `V1__schema.sql` (10 tablas):
 
@@ -172,7 +173,7 @@ Esquema creado por `V1__schema.sql` (10 tablas):
 | `CATEGORY`            | Categorías de producto                                          |
 | `SUPPLIER`            | Proveedores                                                     |
 | `PRODUCT`             | Productos (el stock no es un campo: se calcula desde sus lotes) |
-| `PURCHASE`            | Compras a proveedores                                           |
+| `PURCHASE`            | Compras a proveedores (`pending → received → returned/cancelled`) |
 | `STOCK`               | Lotes de stock, uno por producto y compra                       |
 | `CUSTOMER`            | Clientes                                                        |
 | `SALES_ORDER`         | Pedidos de cliente (`ORDER` es palabra reservada en MySQL)      |

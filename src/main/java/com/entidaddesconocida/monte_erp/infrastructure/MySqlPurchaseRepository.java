@@ -7,6 +7,7 @@ import com.entidaddesconocida.monte_erp.domain.model.Stock;
 import com.entidaddesconocida.monte_erp.domain.model.Supplier;
 import com.entidaddesconocida.monte_erp.domain.repository.PurchaseRepository;
 import com.entidaddesconocida.monte_erp.domain.service.InactiveEntityException;
+import com.entidaddesconocida.monte_erp.domain.service.PurchaseStockConsumedException;
 import com.entidaddesconocida.monte_erp.infrastructure.config.DatabaseConnection;
 
 import java.sql.Connection;
@@ -28,10 +29,15 @@ import java.util.List;
  * The previous {@code autoCommit} value is restored in a {@code finally} so the
  * singleton connection is left as it was found.</p>
  *
- * <p>Each lot is inserted with {@code available_quantity = initial_quantity}: a
- * lot is born available (decision D1/D6). The reads join {@code SUPPLIER} /
- * {@code PRODUCT} to build <em>light</em> entities carrying the name the table
- * shows. {@link #findLots(int)} does not filter {@code p.active}: an old purchase
+ * <p>A purchase is created {@code pending}, so each lot is inserted with
+ * {@code available_quantity = 0}: the stock only counts when the purchase is
+ * received. {@link #changeStatus(int, String, String)} mirrors that rule inside a
+ * single transaction with an optimistic guard: {@code pending → received} makes
+ * the lots available, {@code received → returned} empties them only after locking
+ * them and proving that no unit was sold, and {@code pending → cancelled} touches
+ * no stock. The reads join {@code SUPPLIER} / {@code PRODUCT} to build
+ * <em>light</em> entities carrying the name the table shows.
+ * {@link #findLots(int)} does not filter {@code p.active}: an old purchase
  * must keep showing a product that has since been given up.</p>
  *
  * <p>{@link #findProductSuppliers()} projects the product ↔ supplier pairs of the
@@ -71,6 +77,24 @@ public class MySqlPurchaseRepository implements PurchaseRepository {
               JOIN PURCHASE p ON p.id = s.purchase_id
              ORDER BY s.product_id, p.supplier_id
             """;
+    /**
+     * Optimistic guard: the row is only updated while it still has the status the
+     * caller read, so a concurrent change cannot be overwritten.
+     */
+    private static final String UPDATE_STATUS =
+            "UPDATE PURCHASE SET status = ? WHERE id = ? AND status = ?";
+    /** pending → received: the lots of the purchase become available. */
+    private static final String MAKE_LOTS_AVAILABLE =
+            "UPDATE STOCK SET available_quantity = initial_quantity WHERE purchase_id = ?";
+    /** received → returned: the remaining units leave the stock. */
+    private static final String EMPTY_LOTS =
+            "UPDATE STOCK SET available_quantity = 0 WHERE purchase_id = ?";
+    /**
+     * Locks the lots of the purchase before a return, so a concurrent sale cannot
+     * consume units between the check and the update.
+     */
+    private static final String SELECT_LOTS_FOR_UPDATE =
+            "SELECT initial_quantity, available_quantity FROM STOCK WHERE purchase_id = ? FOR UPDATE";
 
     @Override
     public int insert(Purchase purchase) throws SQLException {
@@ -140,6 +164,81 @@ public class MySqlPurchaseRepository implements PurchaseRepository {
         return pairs;
     }
 
+    @Override
+    public int changeStatus(int id, String currentStatus, String newStatus)
+            throws SQLException, PurchaseStockConsumedException {
+        Connection connection = DatabaseConnection.getConnection();
+        boolean previousAutoCommit = connection.getAutoCommit();
+        connection.setAutoCommit(false);
+        try {
+            int updated = updateStatus(connection, id, currentStatus, newStatus);
+            if (updated == 0) {
+                connection.rollback();
+                return 0;
+            }
+            if (Purchase.STATUS_RECEIVED.equals(newStatus)) {
+                makeLotsAvailable(connection, id);
+            } else if (Purchase.STATUS_RETURNED.equals(newStatus)) {
+                emptyLots(connection, id);
+            }
+            connection.commit();
+            return updated;
+        } catch (SQLException | PurchaseStockConsumedException | RuntimeException e) {
+            try {
+                connection.rollback();
+            } catch (SQLException rollbackFailure) {
+                e.addSuppressed(rollbackFailure);
+            }
+            throw e;
+        } finally {
+            // The connection is shared (singleton): leave it as it was found.
+            connection.setAutoCommit(previousAutoCommit);
+        }
+    }
+
+    private int updateStatus(Connection connection, int id, String currentStatus, String newStatus)
+            throws SQLException {
+        try (PreparedStatement ps = connection.prepareStatement(UPDATE_STATUS)) {
+            ps.setString(1, newStatus);
+            ps.setInt(2, id);
+            ps.setString(3, currentStatus);
+            return ps.executeUpdate();
+        }
+    }
+
+    private void makeLotsAvailable(Connection connection, int purchaseId) throws SQLException {
+        try (PreparedStatement ps = connection.prepareStatement(MAKE_LOTS_AVAILABLE)) {
+            ps.setInt(1, purchaseId);
+            ps.executeUpdate();
+        }
+    }
+
+    /**
+     * Empties the lots of a returned purchase, but only when every one of them
+     * still has its full initial quantity. The lots are locked first so a
+     * concurrent sale cannot sneak a consumption in between the check and the
+     * update.
+     */
+    private void emptyLots(Connection connection, int purchaseId)
+            throws SQLException, PurchaseStockConsumedException {
+        int consumedUnits = 0;
+        try (PreparedStatement ps = connection.prepareStatement(SELECT_LOTS_FOR_UPDATE)) {
+            ps.setInt(1, purchaseId);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    consumedUnits += rs.getInt("initial_quantity") - rs.getInt("available_quantity");
+                }
+            }
+        }
+        if (consumedUnits > 0) {
+            throw new PurchaseStockConsumedException(purchaseId, consumedUnits);
+        }
+        try (PreparedStatement ps = connection.prepareStatement(EMPTY_LOTS)) {
+            ps.setInt(1, purchaseId);
+            ps.executeUpdate();
+        }
+    }
+
     private void requireActive(Connection connection, String sql, int id, String entity)
             throws SQLException {
         try (PreparedStatement ps = connection.prepareStatement(sql)) {
@@ -168,10 +267,13 @@ public class MySqlPurchaseRepository implements PurchaseRepository {
     }
 
     private void insertLot(Connection connection, Purchase purchase, Stock lot) throws SQLException {
+        // A pending purchase writes its lots without stock: they only count from
+        // the moment the purchase is received (available == initial then).
+        int availableQuantity = Purchase.STATUS_RECEIVED.equals(purchase.getStatus())
+                ? lot.getInitialQuantity() : 0;
         try (PreparedStatement ps = connection.prepareStatement(INSERT_LOT)) {
             ps.setInt(1, lot.getInitialQuantity());
-            // A lot is born available (D1/D6): available == initial on insert.
-            ps.setInt(2, lot.getInitialQuantity());
+            ps.setInt(2, availableQuantity);
             ps.setBigDecimal(3, lot.getPurchasePrice());
             ps.setInt(4, lot.getProduct().getId());
             ps.setInt(5, purchase.getId());
@@ -180,7 +282,7 @@ public class MySqlPurchaseRepository implements PurchaseRepository {
             // order lines): only the purchase link is known, and it is assigned
             // so the in-memory entity mirrors the stored row.
             lot.setPurchase(purchase);
-            lot.setAvailableQuantity(lot.getInitialQuantity());
+            lot.setAvailableQuantity(availableQuantity);
         }
     }
 

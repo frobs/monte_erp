@@ -10,13 +10,23 @@ import java.util.Map;
  * Supplier purchase (the {@code PURCHASE} table of the E-R diagram), introduced
  * by RF-14 / CU-10.
  *
- * <p>The purchase is created <strong>{@code received}</strong> (decision D1): the
- * CU-10 says that each line leaves a lot available in the stock, so US-13 does not
- * implement a purchase state machine. The {@code user_id} is the signed-in
- * employee and the total is derived from the lots
+ * <p>The purchase is created <strong>{@code pending}</strong>: its lots exist from
+ * the start but are not available in the stock until the purchase is received, so
+ * a purchase that never arrives never sells anything. The {@code user_id} is the
+ * signed-in employee and the total is derived from the lots
  * ({@link #calculateTotal()}, decision D5) and must never be typed by the user.
  * The {@code purchase_date} is filled by the database default, so the history
  * reloads from the database instead of trusting the in-memory date.</p>
+ *
+ * <p>The status is not a free string: the pipeline is a domain invariant through
+ * {@link #allowedTransitions()}, {@link #canTransitionTo(String)} and
+ * {@link #changeStatus(String)}. The only way to move a purchase is
+ * {@code changeStatus(...)}, which rejects retrogressions, leaving a terminal
+ * state ({@code returned}/{@code cancelled}), repeating the current state and any
+ * unknown/null target. A received purchase can never be cancelled: it can only be
+ * returned to the supplier. {@code setStatus(String)} is deliberately not public:
+ * the database rehydration goes through the full constructor with the trusted ENUM
+ * value.</p>
  *
  * <p>Each line of the purchase is a {@link Stock} lot with its quantity and its
  * purchase price: one lot per product and purchase (decision D2). Writing the
@@ -25,20 +35,24 @@ import java.util.Map;
  */
 public class Purchase {
 
-    /** State of a purchase that has not been received yet (present in the ENUM). */
+    /** State of a freshly created purchase: its lots are not available yet. */
     public static final String STATUS_PENDING = "pending";
 
-    /** State of a freshly created purchase: its lots are already available (D1). */
+    /** State of a received purchase: its lots are available in the stock (D1). */
     public static final String STATUS_RECEIVED = "received";
 
-    /** State of a cancelled purchase (present in the ENUM). */
+    /** State of a cancelled purchase: only reachable while it is still pending. */
     public static final String STATUS_CANCELLED = "cancelled";
 
-    /** Spanish labels of the three ENUM values, shared with the user interface. */
+    /** State of a purchase given back to the supplier: terminal, stock removed. */
+    public static final String STATUS_RETURNED = "returned";
+
+    /** Spanish labels of the four ENUM values, shared with the user interface. */
     private static final Map<String, String> STATUS_LABELS = Map.of(
             STATUS_PENDING, "Pendiente",
             STATUS_RECEIVED, "Recibida",
-            STATUS_CANCELLED, "Cancelada");
+            STATUS_CANCELLED, "Cancelada",
+            STATUS_RETURNED, "Devuelta");
 
     private int id;
     private LocalDateTime purchaseDate;
@@ -54,14 +68,14 @@ public class Purchase {
     }
 
     /**
-     * Builds a brand new purchase: {@code received}, created now, with the total
+     * Builds a brand new purchase: {@code pending}, created now, with the total
      * computed from the lots. Every lot is linked back to this purchase.
      */
     public Purchase(Supplier supplier, User user, List<Stock> lots) {
         this.supplier = supplier;
         this.user = user;
         this.lots = lots == null ? new ArrayList<>() : new ArrayList<>(lots);
-        this.status = STATUS_RECEIVED;
+        this.status = STATUS_PENDING;
         this.purchaseDate = LocalDateTime.now();
         this.total = calculateTotal();
         for (Stock lot : this.lots) {
@@ -99,6 +113,51 @@ public class Purchase {
 
     public String getStatus() {
         return status;
+    }
+
+    /**
+     * Transitions allowed from the current status, in button order:
+     * {@code pending → received/cancelled} and {@code received → returned}. A
+     * received purchase can never be cancelled, only returned. Empty for a
+     * terminal status ({@code returned}/{@code cancelled}) or an unknown/absent
+     * one. The returned list is immutable, so the rule cannot be mutated from
+     * outside.
+     */
+    public List<String> allowedTransitions() {
+        if (STATUS_PENDING.equals(status)) {
+            return List.of(STATUS_RECEIVED, STATUS_CANCELLED);
+        }
+        if (STATUS_RECEIVED.equals(status)) {
+            return List.of(STATUS_RETURNED);
+        }
+        return List.of();
+    }
+
+    /**
+     * Whether the purchase can move to {@code target} from its current status.
+     * Repeatedly asking for the current status, a regression, leaving a terminal
+     * status, an unknown target or {@code null} are all rejected.
+     */
+    public boolean canTransitionTo(String target) {
+        return target != null && allowedTransitions().contains(target);
+    }
+
+    /** Whether the status is final: no transition leaves {@code returned}/{@code cancelled}. */
+    public boolean isTerminal() {
+        return STATUS_RETURNED.equals(status) || STATUS_CANCELLED.equals(status);
+    }
+
+    /**
+     * Single gate for status changes: validates the transition against
+     * {@link #allowedTransitions()} and moves the purchase, or throws
+     * {@link IllegalStateException} naming the origin and the rejected target.
+     */
+    public void changeStatus(String target) {
+        if (!canTransitionTo(target)) {
+            throw new IllegalStateException("Transición de estado no permitida: \""
+                    + status + "\" → \"" + target + "\".");
+        }
+        this.status = target;
     }
 
     public BigDecimal getTotal() {
