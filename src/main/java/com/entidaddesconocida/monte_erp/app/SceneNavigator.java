@@ -2,7 +2,10 @@ package com.entidaddesconocida.monte_erp.app;
 
 import de.saxsys.mvvmfx.ViewTuple;
 
+import javafx.beans.property.ObjectProperty;
+import javafx.beans.property.SimpleObjectProperty;
 import javafx.scene.Node;
+import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.scene.control.ComboBoxBase;
 import javafx.scene.control.TextInputControl;
@@ -11,12 +14,13 @@ import javafx.scene.input.KeyEvent;
 import javafx.stage.Stage;
 
 /**
- * Utility to switch the {@link Stage} scene from a loaded mvvmFX {@link ViewTuple}.
+ * Utility to switch the {@link Stage} contents to the root of a loaded mvvmFX
+ * {@link ViewTuple}.
  *
  * <p>Constants keep the window sizes in a single place. The application always
  * opens full screen (the stage is maximized on the first screen) and stays
- * resizable, so the sizes below are only the window size used while the stage is
- * not maximized.</p>
+ * resizable, so the sizes below are only used for the very first scene, while
+ * the stage is not maximized.</p>
  */
 public final class SceneNavigator {
 
@@ -45,18 +49,18 @@ public final class SceneNavigator {
     public static final double REPORTS_WIDTH = 1180;
     public static final double REPORTS_HEIGHT = 720;
 
+    /** Key of the scene owned by this navigator inside {@link Stage#getProperties()}. */
+    private static final String SCENE_PROPERTY = "monte-erp.scene";
+    /** Key of the action currently bound to ESC inside {@link Scene#getProperties()}. */
+    private static final String ESCAPE_PROPERTY = "monte-erp.on-escape";
+
     private SceneNavigator() {
         // Utility class: never instantiated.
     }
 
     /**
-     * Replaces the stage scene with the view of the given tuple, adjusts the
-     * title and guarantees the window is shown full screen.
-     *
-     * <p>The maximize is applied only the first time a scene is shown: later
-     * navigations keep whatever size the user chose. The window is therefore
-     * always resizable and the user decides whether to restore, move or resize
-     * it; the application never forces the size back.</p>
+     * Replaces the stage contents with the view of the given tuple and adjusts
+     * the title.
      */
     public static void show(Stage stage, ViewTuple<?, ?> tuple, String title,
                             double width, double height) {
@@ -64,7 +68,7 @@ public final class SceneNavigator {
     }
 
     /**
-     * Replaces the stage scene and, when {@code onEscape} is not {@code null},
+     * Replaces the stage contents and, when {@code onEscape} is not {@code null},
      * makes the ESC key run it (US-12: ESC goes back to the main menu).
      *
      * <p>The handler is registered at scene level and is ignored while the focus
@@ -72,37 +76,66 @@ public final class SceneNavigator {
      * popups of the searchable combos and the {@code DatePicker} live in their own
      * scene, so closing them with ESC does not trigger the navigation.</p>
      *
-     * <p>The maximize is applied only the first time a scene is shown: later
-     * navigations keep whatever size the user chose. The window is therefore
-     * always resizable and the user decides whether to restore, move or resize
-     * it; the application never forces the size back.</p>
+     * <p>The stage keeps a single {@link Scene} for the whole session: navigating
+     * only swaps its root, so the window is never resized (no shrink-and-grow
+     * flicker) and whatever size the user chose is preserved. The {@code width}
+     * and {@code height} arguments are only used for the very first scene.</p>
      */
     public static void show(Stage stage, ViewTuple<?, ?> tuple, String title,
                             double width, double height, Runnable onEscape) {
-        Scene scene = new Scene(tuple.getView(), width, height);
-        installEscapeHandler(scene, onEscape);
+        Parent view = tuple.getView();
+        Scene scene = sceneOf(stage);
         stage.setTitle(title);
-        stage.setScene(scene);
-        if (!stage.isShowing()) {
-            // Full screen by default, but never a non-resizable window: if the user
-            // restores or resizes it, the choice is respected from then on.
-            stage.setResizable(true);
-            stage.setMaximized(true);
+        if (scene == null) {
+            // First screen: build the scene, then maximize before the window is
+            // visible so it opens already full size.
+            scene = new Scene(view, width, height);
+            installEscapeHandler(scene);
+            stage.getProperties().put(SCENE_PROPERTY, scene);
+            stage.setScene(scene);
+            if (!stage.isShowing()) {
+                // Full screen by default, but never a non-resizable window: if the
+                // user restores or resizes it, the choice is respected from then on.
+                stage.setResizable(true);
+                stage.setMaximized(true);
+            }
+        } else {
+            // Same scene, new root: the stage size never changes, so there is no
+            // shrink-and-grow flicker when opening a module.
+            scene.setRoot(view);
         }
+        escapeAction(scene).set(onEscape);
     }
 
-    /** Runs {@code onEscape} on ESC unless the user is editing a field. */
-    private static void installEscapeHandler(Scene scene, Runnable onEscape) {
-        if (onEscape == null) {
-            return;
-        }
+    /** The scene this navigator installed on {@code stage}, or {@code null}. */
+    private static Scene sceneOf(Stage stage) {
+        Object scene = stage.getProperties().get(SCENE_PROPERTY);
+        return scene instanceof Scene current ? current : null;
+    }
+
+    /** Runs the ESC action of {@code scene} unless the user is editing a field. */
+    private static void installEscapeHandler(Scene scene) {
         scene.addEventHandler(KeyEvent.KEY_PRESSED, event -> {
-            if (event.getCode() != KeyCode.ESCAPE || isEditing(scene.getFocusOwner())) {
+            Runnable onEscape = escapeAction(scene).get();
+            if (event.getCode() != KeyCode.ESCAPE || onEscape == null
+                    || isEditing(scene.getFocusOwner())) {
                 return;
             }
             onEscape.run();
             event.consume();
         });
+    }
+
+    /** Mutable holder of the current ESC action, kept on the scene properties. */
+    @SuppressWarnings("unchecked")
+    private static ObjectProperty<Runnable> escapeAction(Scene scene) {
+        Object property = scene.getProperties().get(ESCAPE_PROPERTY);
+        if (property instanceof ObjectProperty<?> existing) {
+            return (ObjectProperty<Runnable>) existing;
+        }
+        ObjectProperty<Runnable> created = new SimpleObjectProperty<>();
+        scene.getProperties().put(ESCAPE_PROPERTY, created);
+        return created;
     }
 
     /** A text field or a combo keeps the ESC key for itself while it has the focus. */
