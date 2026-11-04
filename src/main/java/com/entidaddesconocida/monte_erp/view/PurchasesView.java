@@ -13,11 +13,17 @@ import de.saxsys.mvvmfx.InjectViewModel;
 import javafx.beans.binding.Bindings;
 import javafx.beans.property.ReadOnlyStringWrapper;
 import javafx.fxml.FXML;
+import javafx.geometry.Pos;
+import javafx.scene.control.Alert;
+import javafx.scene.control.Button;
+import javafx.scene.control.ButtonType;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
+import javafx.scene.control.TableCell;
 import javafx.scene.control.TableColumn;
 import javafx.scene.control.TableView;
 import javafx.scene.control.TextField;
+import javafx.scene.layout.HBox;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -31,7 +37,10 @@ import java.util.Locale;
  * read-only history with the detail of the selected purchase on the left and the
  * new purchase form on the right. Each line becomes a lot, so the detail table
  * shows quantity, purchase price and subtotal; the rules live in
- * {@link PurchasesViewModel}.</p>
+ * {@link PurchasesViewModel}. The <em>Acciones</em> column renders, on every row,
+ * only the buttons for the transitions the domain allows for that purchase
+ * (receive, return, cancel), and the destructive confirmations stay here, in the
+ * view.</p>
  */
 public class PurchasesView implements FxmlView<PurchasesViewModel> {
 
@@ -63,6 +72,9 @@ public class PurchasesView implements FxmlView<PurchasesViewModel> {
 
     @FXML
     private TableColumn<Purchase, String> totalColumn;
+
+    @FXML
+    private TableColumn<Purchase, Void> actionsColumn;
 
     @FXML
     private TableView<Stock> purchaseLotsTable;
@@ -152,6 +164,10 @@ public class PurchasesView implements FxmlView<PurchasesViewModel> {
         totalColumn.setCellValueFactory(cell ->
                 new ReadOnlyStringWrapper(formatMoney(cell.getValue().getTotal())));
 
+        // The action column has no value: every row renders the buttons its own
+        // status allows, so nothing can be clicked that the domain would reject.
+        actionsColumn.setCellFactory(column -> new ActionsCell());
+
         lotProductColumn.setCellValueFactory(cell -> new ReadOnlyStringWrapper(
                 productLabel(cell.getValue().getProduct())));
         lotQuantityColumn.setCellValueFactory(cell -> new ReadOnlyStringWrapper(
@@ -194,6 +210,66 @@ public class PurchasesView implements FxmlView<PurchasesViewModel> {
                 viewModel.purchaseTotalProperty()));
 
         countLabel.textProperty().bind(Bindings.size(viewModel.purchases()).asString("%d compras"));
+    }
+
+    /**
+     * Cell of the <em>Acciones</em> column: builds the buttons of the purchase
+     * shown on that row. A terminal purchase has no transition, so its cell stays
+     * empty.
+     */
+    private final class ActionsCell extends TableCell<Purchase, Void> {
+
+        @Override
+        protected void updateItem(Void item, boolean empty) {
+            super.updateItem(item, empty);
+            Purchase purchase = purchaseOfThisRow(empty);
+            if (purchase == null) {
+                setGraphic(null);
+                return;
+            }
+            HBox actions = new HBox(6.0);
+            actions.setAlignment(Pos.CENTER_LEFT);
+            if (purchase.canTransitionTo(Purchase.STATUS_RECEIVED)) {
+                actions.getChildren().add(actionButton("Recibir", false,
+                        () -> onMarkReceived(purchase)));
+            }
+            if (purchase.canTransitionTo(Purchase.STATUS_RETURNED)) {
+                actions.getChildren().add(actionButton("Devolver", true,
+                        () -> onReturnPurchase(purchase)));
+            }
+            if (purchase.canTransitionTo(Purchase.STATUS_CANCELLED)) {
+                actions.getChildren().add(actionButton("Cancelar", true,
+                        () -> onCancelPurchase(purchase)));
+            }
+            setGraphic(actions.getChildren().isEmpty() ? null : actions);
+        }
+
+        private Purchase purchaseOfThisRow(boolean empty) {
+            if (empty || getTableView() == null || getTableView().getItems() == null) {
+                return null;
+            }
+            int index = getIndex();
+            if (index < 0 || index >= getTableView().getItems().size()) {
+                return null;
+            }
+            return getTableView().getItems().get(index);
+        }
+    }
+
+    private static Button actionButton(String text, boolean danger, Runnable action) {
+        Button button = new Button(text);
+        button.getStyleClass().add("table-action-button");
+        if (danger) {
+            button.getStyleClass().add("table-action-button-danger");
+        }
+        button.setOnAction(event -> action.run());
+        return button;
+    }
+
+    /** Selects the row the button belongs to, then delegates the transition. */
+    private void changeStatus(Purchase purchase, String newStatus) {
+        viewModel.selectedPurchaseProperty().set(purchase);
+        viewModel.changeStatus(newStatus);
     }
 
     private void bindSelection() {
@@ -247,6 +323,36 @@ public class PurchasesView implements FxmlView<PurchasesViewModel> {
     @FXML
     private void onNewPurchase() {
         viewModel.newPurchase();
+    }
+
+    /** Marks the given purchase as received (only offered while pending). */
+    private void onMarkReceived(Purchase purchase) {
+        changeStatus(purchase, Purchase.STATUS_RECEIVED);
+    }
+
+    /** Returns the given purchase to the supplier after a destructive confirmation. */
+    private void onReturnPurchase(Purchase purchase) {
+        Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
+        alert.setTitle("Monte ERP");
+        alert.setHeaderText("Devolver la compra #" + purchase.getId());
+        alert.setContentText("La compra quedará devuelta al proveedor, su stock dejará de estar"
+                + " disponible y no podrá volver a cambiar de estado."
+                + " ¿Quieres continuar?");
+        alert.showAndWait()
+                .filter(button -> button == ButtonType.OK)
+                .ifPresent(button -> changeStatus(purchase, Purchase.STATUS_RETURNED));
+    }
+
+    /** Cancels the given purchase after a destructive confirmation (RNF-05). */
+    private void onCancelPurchase(Purchase purchase) {
+        Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
+        alert.setTitle("Monte ERP");
+        alert.setHeaderText("Cancelar la compra #" + purchase.getId());
+        alert.setContentText("La compra quedará cancelada y no podrá volver a cambiar de estado."
+                + " ¿Quieres continuar?");
+        alert.showAndWait()
+                .filter(button -> button == ButtonType.OK)
+                .ifPresent(button -> changeStatus(purchase, Purchase.STATUS_CANCELLED));
     }
 
     @FXML

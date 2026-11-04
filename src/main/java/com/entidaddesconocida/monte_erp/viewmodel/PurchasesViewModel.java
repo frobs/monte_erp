@@ -10,6 +10,7 @@ import com.entidaddesconocida.monte_erp.domain.repository.ProductRepository;
 import com.entidaddesconocida.monte_erp.domain.repository.PurchaseRepository;
 import com.entidaddesconocida.monte_erp.domain.repository.SupplierRepository;
 import com.entidaddesconocida.monte_erp.domain.service.InactiveEntityException;
+import com.entidaddesconocida.monte_erp.domain.service.PurchaseStockConsumedException;
 
 import de.saxsys.mvvmfx.ViewModel;
 
@@ -38,12 +39,15 @@ import java.util.logging.Logger;
  * purchase from several lots (product, quantity, purchase price) and shows the
  * read-only history with the detail of the selected purchase.</p>
  *
- * <p>Every line generates a {@link Stock} lot that is born available (decision
- * D1/D6), the total is computed from the lots (decision D5) and only one lot per
- * product is allowed (decision D2), rejected with a message. The purchase is saved
- * as {@code received} with the signed-in user. The screen only <strong>writes</strong>
- * lots: reading the stock of a product, the alerts and the FIFO allocation belong
- * to RF-09/RF-10/RF-15 (decision D4).</p>
+ * <p>Every line generates a {@link Stock} lot that stays unavailable until the
+ * purchase is received (decision D1/D6): the total is computed from the lots
+ * (decision D5) and only one lot per product is allowed (decision D2), rejected
+ * with a message. The purchase is saved as {@code pending} with the signed-in
+ * user and can then move through the status pipeline {@code pending → received →
+ * returned} (or {@code pending → cancelled}) with {@link #changeStatus(String)},
+ * the only mutation of the screen. The screen only <strong>writes</strong> lots:
+ * reading the stock of a product, the alerts and the FIFO allocation belong to
+ * RF-09/RF-10/RF-15 (decision D4).</p>
  *
  * <p>Like the CRUD ViewModels it is free of ValidatorFX: the per-field rules are
  * exposed as one error property per field, so it stays testable with plain JUnit
@@ -83,6 +87,17 @@ public class PurchasesViewModel implements ViewModel {
     /** A purchase needs at least one lot to be saved. */
     protected static final String LOTS_REQUIRED = "Añade al menos un lote a la compra.";
 
+    /** No purchase selected to change its status. */
+    protected static final String PURCHASE_REQUIRED = "Selecciona una compra.";
+
+    /** The transition is not allowed by the domain (origin, target). */
+    protected static final String INVALID_TRANSITION =
+            "La compra no puede pasar de \"%s\" a \"%s\".";
+
+    /** The optimistic guard did not match; someone else moved the purchase. */
+    protected static final String CONFLICT =
+            "La compra ha cambiado desde que se cargó; se ha actualizado el historial.";
+
     private final PurchaseRepository purchaseRepository;
     private final SupplierRepository supplierRepository;
     private final ProductRepository productRepository;
@@ -103,6 +118,9 @@ public class PurchasesViewModel implements ViewModel {
     private final ObservableList<Purchase> purchases = FXCollections.observableArrayList();
     private final ObjectProperty<Purchase> selectedPurchase = new SimpleObjectProperty<>();
     private final ObservableList<Stock> selectedPurchaseLots = FXCollections.observableArrayList();
+
+    /** Statuses reachable from the selected purchase, in button order. */
+    private final ObservableList<String> availableTransitions = FXCollections.observableArrayList();
 
     private final StringProperty errorMessage = new SimpleStringProperty("");
     private final StringProperty statusMessage = new SimpleStringProperty("");
@@ -183,6 +201,15 @@ public class PurchasesViewModel implements ViewModel {
         return selectedPurchaseLots;
     }
 
+    /**
+     * Statuses the selected purchase can move to, in button order. Empty when
+     * there is no selection or the purchase is in a terminal state, so the view
+     * can bind the visibility of each action button to it.
+     */
+    public ObservableList<String> availableTransitions() {
+        return availableTransitions;
+    }
+
     public StringProperty errorMessageProperty() {
         return errorMessage;
     }
@@ -232,6 +259,7 @@ public class PurchasesViewModel implements ViewModel {
         // guaranteed to be in the table: drop the selection and its detail.
         selectedPurchase.set(null);
         selectedPurchaseLots.clear();
+        availableTransitions.clear();
         clearFieldErrors();
     }
 
@@ -296,14 +324,15 @@ public class PurchasesViewModel implements ViewModel {
         errorMessage.set("");
         statusMessage.set("");
         resetDraft();
+        availableTransitions.clear();
         clearFieldErrors();
     }
 
     /**
-     * Saves the draft purchase: validates the supplier and at least one lot, then
-     * inserts the purchase as {@code received} for the signed-in user with the
-     * total computed from the lots. The header and its lots are written in one
-     * transaction.
+     * Saves the draft purchase: validates the supplier and at least one lot,
+     * then inserts the purchase as {@code pending} (its lots are not available
+     * yet) for the signed-in user with the total computed from the lots. The
+     * header and its lots are written in one transaction.
      */
     public void save() {
         if (!ensureActiveSession()) {
@@ -356,6 +385,7 @@ public class PurchasesViewModel implements ViewModel {
         if (!ensureActiveSession()) {
             return;
         }
+        updateAvailableTransitions(purchase);
         if (purchase == null) {
             selectedPurchaseLots.clear();
             return;
@@ -367,6 +397,67 @@ public class PurchasesViewModel implements ViewModel {
             selectedPurchaseLots.clear();
             fail(DATABASE_ERROR);
         }
+    }
+
+    /**
+     * Moves the selected purchase to {@code newStatus}. The transition is
+     * validated in the domain first, then persisted with the optimistic guard;
+     * a 0-row update means someone else moved the purchase in the meantime, so
+     * the history is reloaded and the user is warned instead of overwriting it.
+     * A return rejected because part of the stock was already sold is reported
+     * with the message of {@link PurchaseStockConsumedException}.
+     */
+    public void changeStatus(String newStatus) {
+        if (!ensureActiveSession()) {
+            return;
+        }
+        clearFieldErrors();
+        Purchase purchase = selectedPurchase.get();
+        if (purchase == null) {
+            fail(PURCHASE_REQUIRED);
+            return;
+        }
+        if (!purchase.canTransitionTo(newStatus)) {
+            fail(String.format(INVALID_TRANSITION, Purchase.labelFor(purchase.getStatus()),
+                    Purchase.labelFor(newStatus)));
+            return;
+        }
+        try {
+            int updated = purchaseRepository.changeStatus(purchase.getId(),
+                    purchase.getStatus(), newStatus);
+            if (updated == 0) {
+                purchases.setAll(purchaseRepository.findAll());
+                fail(CONFLICT);
+                return;
+            }
+            purchase.changeStatus(newStatus);
+            purchases.setAll(purchaseRepository.findAll());
+            Purchase reloaded = findById(purchase.getId());
+            selectedPurchase.set(reloaded);
+            selectPurchase(reloaded);
+            succeed("Compra #" + purchase.getId() + " marcada como "
+                    + Purchase.labelFor(newStatus) + ".");
+        } catch (PurchaseStockConsumedException e) {
+            fail(e.getMessage());
+        } catch (SQLException e) {
+            LOGGER.log(Level.SEVERE, "Could not change the purchase status", e);
+            fail(DATABASE_ERROR);
+        }
+    }
+
+    private void updateAvailableTransitions(Purchase purchase) {
+        if (purchase == null) {
+            availableTransitions.clear();
+        } else {
+            availableTransitions.setAll(purchase.allowedTransitions());
+        }
+    }
+
+    private Purchase findById(int id) {
+        return purchases.stream()
+                .filter(purchase -> purchase.getId() == id)
+                .findFirst()
+                .orElse(null);
     }
 
     private Integer parseQuantity() {
@@ -429,6 +520,7 @@ public class PurchasesViewModel implements ViewModel {
         purchases.clear();
         selectedPurchase.set(null);
         selectedPurchaseLots.clear();
+        availableTransitions.clear();
         resetDraft();
         fail(SESSION_EXPIRED);
         return false;

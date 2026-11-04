@@ -54,9 +54,11 @@
                     <columns>
                         <TableColumn fx:id="purchaseIdColumn" text="Compra" prefWidth="80.0"/>
                         <TableColumn fx:id="purchaseDateColumn" text="Fecha" prefWidth="150.0"/>
-                        <TableColumn fx:id="supplierColumn" text="Proveedor" prefWidth="210.0"/>
-                        <TableColumn fx:id="statusColumn" text="Estado" prefWidth="110.0"/>
-                        <TableColumn fx:id="totalColumn" text="Total" prefWidth="110.0"/>
+                        <TableColumn fx:id="supplierColumn" text="Proveedor" prefWidth="200.0"/>
+                        <TableColumn fx:id="statusColumn" text="Estado" prefWidth="100.0"/>
+                        <TableColumn fx:id="totalColumn" text="Total" prefWidth="100.0"/>
+                        <TableColumn fx:id="actionsColumn" text="Acciones" prefWidth="230.0"
+                                     sortable="false" reorderable="false"/>
                     </columns>
                     <columnResizePolicy>
                         <TableView fx:constant="CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN"/>
