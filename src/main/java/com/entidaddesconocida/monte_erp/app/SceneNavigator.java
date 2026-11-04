@@ -2,8 +2,10 @@ package com.entidaddesconocida.monte_erp.app;
 
 import de.saxsys.mvvmfx.ViewTuple;
 
+import javafx.application.Platform;
 import javafx.beans.property.ObjectProperty;
 import javafx.beans.property.SimpleObjectProperty;
+import javafx.geometry.Dimension2D;
 import javafx.scene.Node;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
@@ -11,6 +13,7 @@ import javafx.scene.control.ComboBoxBase;
 import javafx.scene.control.TextInputControl;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyEvent;
+import javafx.stage.Screen;
 import javafx.stage.Stage;
 
 /**
@@ -21,6 +24,11 @@ import javafx.stage.Stage;
  * opens full screen (the stage is maximized on the first screen) and stays
  * resizable, so the sizes below are only used for the very first scene, while
  * the stage is not maximized.</p>
+ *
+ * <p>Since a maximized window is restored (system button) to the bounds it had
+ * before being maximized, the stage is given a size that makes sense on its
+ * screen before maximizing: restoring the window never brings back the small
+ * login/setup size.</p>
  */
 public final class SceneNavigator {
 
@@ -49,10 +57,18 @@ public final class SceneNavigator {
     public static final double REPORTS_WIDTH = 1180;
     public static final double REPORTS_HEIGHT = 720;
 
+    /**
+     * Share of the screen used when the window is restored with the system
+     * button, so it is large enough to read the tables and forms.
+     */
+    private static final double RESTORE_SCREEN_RATIO = 0.85;
+
     /** Key of the scene owned by this navigator inside {@link Stage#getProperties()}. */
     private static final String SCENE_PROPERTY = "monte-erp.scene";
     /** Key of the action currently bound to ESC inside {@link Scene#getProperties()}. */
     private static final String ESCAPE_PROPERTY = "monte-erp.on-escape";
+    /** Key of the flag marking the restored size as already fixed once. */
+    private static final String RESTORE_FIXED_PROPERTY = "monte-erp.restore-fixed";
 
     private SceneNavigator() {
         // Utility class: never instantiated.
@@ -97,6 +113,11 @@ public final class SceneNavigator {
                 // Full screen by default, but never a non-resizable window: if the
                 // user restores or resizes it, the choice is respected from then on.
                 stage.setResizable(true);
+                // The platform restores a maximized window to the bounds it had
+                // before being maximized, so give it a sensible size first: this
+                // is what the user sees after pressing the restore button.
+                applySensibleSize(stage);
+                keepSensibleSizeOnRestore(stage);
                 stage.setMaximized(true);
             }
         } else {
@@ -111,6 +132,76 @@ public final class SceneNavigator {
     private static Scene sceneOf(Stage stage) {
         Object scene = stage.getProperties().get(SCENE_PROPERTY);
         return scene instanceof Scene current ? current : null;
+    }
+
+    /**
+     * Sizes the stage as if it had just been restored from a maximized state:
+     * a large part of its screen, but never smaller than the main menu.
+     */
+    private static void applySensibleSize(Stage stage) {
+        Dimension2D size = sensibleSize(screenOf(stage));
+        stage.setWidth(size.getWidth());
+        stage.setHeight(size.getHeight());
+    }
+
+    /**
+     * Safety net for platforms that ignore the size set before maximizing: the
+     * first time the window is restored, if it came back too small to be usable,
+     * it is enlarged and centred. Later restores keep the size the user chose.
+     */
+    private static void keepSensibleSizeOnRestore(Stage stage) {
+        stage.maximizedProperty().addListener((observable, wasMaximized, isMaximized) -> {
+            if (!wasMaximized || isMaximized
+                    || stage.getProperties().containsKey(RESTORE_FIXED_PROPERTY)) {
+                return;
+            }
+            stage.getProperties().put(RESTORE_FIXED_PROPERTY, Boolean.TRUE);
+            // Let the platform finish restoring before measuring the window.
+            Platform.runLater(() -> enlargeAndCenter(stage));
+        });
+    }
+
+    /** Grows a restored window that ended up smaller than a sensible size. */
+    private static void enlargeAndCenter(Stage stage) {
+        Screen screen = screenOf(stage);
+        Dimension2D size = sensibleSize(screen);
+        if (stage.getWidth() >= size.getWidth() && stage.getHeight() >= size.getHeight()) {
+            return;
+        }
+        stage.setWidth(Math.max(stage.getWidth(), size.getWidth()));
+        stage.setHeight(Math.max(stage.getHeight(), size.getHeight()));
+        stage.setX(screen.getVisualBounds().getMinX() + (screen.getVisualBounds().getWidth()
+                - stage.getWidth()) / 2);
+        stage.setY(screen.getVisualBounds().getMinY() + (screen.getVisualBounds().getHeight()
+                - stage.getHeight()) / 2);
+    }
+
+    /**
+     * Size that makes sense for a restored window: most of the screen, but never
+     * smaller than the main menu and never larger than the available area.
+     */
+    private static Dimension2D sensibleSize(Screen screen) {
+        double availableWidth = screen.getVisualBounds().getWidth();
+        double availableHeight = screen.getVisualBounds().getHeight();
+        double width = Math.min(availableWidth,
+                Math.max(MAIN_WIDTH, Math.round(availableWidth * RESTORE_SCREEN_RATIO)));
+        double height = Math.min(availableHeight,
+                Math.max(MAIN_HEIGHT, Math.round(availableHeight * RESTORE_SCREEN_RATIO)));
+        return new Dimension2D(width, height);
+    }
+
+    /** The screen the stage is on, or the primary one before it is shown. */
+    private static Screen screenOf(Stage stage) {
+        double x = stage.getX();
+        double y = stage.getY();
+        if (Double.isFinite(x) && Double.isFinite(y) && stage.getWidth() > 0
+                && stage.getHeight() > 0) {
+            for (Screen screen : Screen.getScreensForRectangle(x, y,
+                    stage.getWidth(), stage.getHeight())) {
+                return screen;
+            }
+        }
+        return Screen.getPrimary();
     }
 
     /** Runs the ESC action of {@code scene} unless the user is editing a field. */
