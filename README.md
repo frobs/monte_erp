@@ -160,11 +160,13 @@ siguen la convención `V<n>__<descripcion>.sql`. Al arrancar, `MigrationRunner`
 aplica en orden los que estén pendientes y registra cada uno en la tabla de
 control `schema_migrations`, por lo que arrancar la aplicación varias veces no
 repite trabajo. Para cambiar el esquema basta con añadir el siguiente
-`V<n>__<descripcion>.sql`. Migraciones actuales (`V1`–`V8`):
+`V<n>__<descripcion>.sql`. Migraciones actuales (`V1`–`V9`):
 `V2`/`V4`/`V5`/`V6` añaden `PRODUCT.active`, `CATEGORY.active`, `SUPPLIER.active`
 y `CUSTOMER.active` (bajas lógicas); `V3` hace `NULL`-able `PRODUCT.category_id`
-porque la categoría es opcional; `V7` añade `SUPPLIER.address`; y `V8` amplía el
-`ENUM` de `PURCHASE.status` con `returned` para la devolución de compras.
+porque la categoría es opcional; `V7` añade `SUPPLIER.address`; `V8` amplía el
+`ENUM` de `PURCHASE.status` con `returned` para la devolución de compras; y `V9`
+añade el índice `(purchase_date, status)` que sirve al filtro del histórico de
+compras (rango de fechas, proveedor y estado).
 
 Esquema creado por `V1__schema.sql` (10 tablas):
 

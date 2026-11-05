@@ -83,7 +83,7 @@ class MigrationRunnerTest {
     }
 
     @Test
-    @DisplayName("The V1, V4 and V8 scripts are discovered on the classpath (exploded or inside a JAR)")
+    @DisplayName("The V1, V4, V8 and V9 scripts are discovered on the classpath (exploded or inside a JAR)")
     void discoversScripts() throws Exception {
         List<String> scripts = MigrationRunner.discoverScripts();
         assertTrue(scripts.contains("V1__schema.sql"), "scripts found: " + scripts);
@@ -93,5 +93,8 @@ class MigrationRunnerTest {
         // The purchase status pipeline needs the V8 ENUM: without it, saving a
         // returned purchase fails at runtime on an up-to-date database.
         assertTrue(scripts.contains("V8__purchase_status.sql"), "scripts found: " + scripts);
+        // The purchase history filter relies on the V9 index to keep the filtered
+        // queries cheap on a long history.
+        assertTrue(scripts.contains("V9__purchase_filter_index.sql"), "scripts found: " + scripts);
     }
 }
