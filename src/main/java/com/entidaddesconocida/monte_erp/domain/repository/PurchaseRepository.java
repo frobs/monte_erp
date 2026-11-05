@@ -2,6 +2,7 @@ package com.entidaddesconocida.monte_erp.domain.repository;
 
 import com.entidaddesconocida.monte_erp.domain.model.ProductSupplier;
 import com.entidaddesconocida.monte_erp.domain.model.Purchase;
+import com.entidaddesconocida.monte_erp.domain.model.PurchaseFilter;
 import com.entidaddesconocida.monte_erp.domain.model.Stock;
 import com.entidaddesconocida.monte_erp.domain.service.PurchaseStockConsumedException;
 
@@ -35,8 +36,19 @@ public interface PurchaseRepository {
      */
     int insert(Purchase purchase) throws SQLException;
 
-    /** Every purchase, most recent first (the read-only history). */
-    List<Purchase> findAll() throws SQLException;
+    /**
+     * Purchases matching {@code filter}, most recent first (the read-only
+     * history). The filtering happens <strong>in the query</strong>: an absent
+     * criterion means "no bound" and the date range is compared by day with
+     * both bounds inclusive (the adapter translates the upper bound to
+     * {@code < to + 1 day}).
+     */
+    List<Purchase> findAll(PurchaseFilter filter) throws SQLException;
+
+    /** Every purchase, most recent first; equivalent to {@code findAll(PurchaseFilter.all())}. */
+    default List<Purchase> findAll() throws SQLException {
+        return findAll(PurchaseFilter.all());
+    }
 
     /** Lots of the given purchase, with their product, ordered by entry date and id. */
     List<Stock> findLots(int purchaseId) throws SQLException;

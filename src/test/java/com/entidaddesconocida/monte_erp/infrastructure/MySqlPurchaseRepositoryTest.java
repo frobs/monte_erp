@@ -3,6 +3,7 @@ package com.entidaddesconocida.monte_erp.infrastructure;
 import com.entidaddesconocida.monte_erp.domain.model.Product;
 import com.entidaddesconocida.monte_erp.domain.model.ProductSupplier;
 import com.entidaddesconocida.monte_erp.domain.model.Purchase;
+import com.entidaddesconocida.monte_erp.domain.model.PurchaseFilter;
 import com.entidaddesconocida.monte_erp.domain.model.Stock;
 import com.entidaddesconocida.monte_erp.domain.model.Supplier;
 import com.entidaddesconocida.monte_erp.domain.model.User;
@@ -19,12 +20,14 @@ import org.junit.jupiter.api.Test;
 import java.math.BigDecimal;
 import java.sql.SQLException;
 import java.sql.Timestamp;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -214,10 +217,76 @@ class MySqlPurchaseRepositoryTest {
         assertEquals(3, purchase.getSupplier().getId());
         assertEquals("Acme", purchase.getSupplier().getName());
 
-        String sql = fake.executedStatements().get(0);
+        String sql = fake.preparedSql().get(0);
         assertTrue(sql.contains("FROM PURCHASE"));
         assertTrue(sql.contains("JOIN SUPPLIER"));
         assertTrue(sql.contains("ORDER BY p.purchase_date DESC"));
+
+        // No filter: every guard binds NULL, so the same statement serves the
+        // whole history without concatenating SQL.
+        Map<Integer, Object> parameters = fake.boundParameters().get(0);
+        for (int index = 1; index <= 8; index++) {
+            assertNull(parameters.get(index), "parámetro " + index + " debe ser NULL");
+        }
+    }
+
+    @Test
+    @DisplayName("findAll enlaza el rango de fechas, el proveedor y el estado en la consulta")
+    void findAllBindsEveryFilter() throws SQLException {
+        PurchaseFilter filter = PurchaseFilter.of(LocalDate.of(2024, 1, 1),
+                LocalDate.of(2024, 1, 31), 3, Purchase.STATUS_PENDING);
+
+        List<Purchase> purchases = repository.findAll(filter);
+
+        assertTrue(purchases.isEmpty());
+        String sql = fake.preparedSql().get(0);
+        assertTrue(sql.contains("WHERE (? IS NULL OR p.purchase_date >= ?)"));
+        assertTrue(sql.contains("(? IS NULL OR p.purchase_date < DATE_ADD(?, INTERVAL 1 DAY))"));
+        assertTrue(sql.contains("(? IS NULL OR p.supplier_id = ?)"));
+        assertTrue(sql.contains("(? IS NULL OR p.status = ?)"));
+
+        Map<Integer, Object> parameters = fake.boundParameters().get(0);
+        assertEquals(java.sql.Date.valueOf(LocalDate.of(2024, 1, 1)), parameters.get(1));
+        assertEquals(java.sql.Date.valueOf(LocalDate.of(2024, 1, 1)), parameters.get(2));
+        assertEquals(java.sql.Date.valueOf(LocalDate.of(2024, 1, 31)), parameters.get(3));
+        assertEquals(java.sql.Date.valueOf(LocalDate.of(2024, 1, 31)), parameters.get(4));
+        assertEquals(3, parameters.get(5));
+        assertEquals(3, parameters.get(6));
+        assertEquals(Purchase.STATUS_PENDING, parameters.get(7));
+        assertEquals(Purchase.STATUS_PENDING, parameters.get(8));
+    }
+
+    @Test
+    @DisplayName("findAll con un solo criterio deja NULL los demás")
+    void findAllBindsOnlyTheGivenCriterion() throws SQLException {
+        repository.findAll(PurchaseFilter.of(null, null, 7, null));
+
+        Map<Integer, Object> parameters = fake.boundParameters().get(0);
+        for (int index : List.of(1, 2, 3, 4, 7, 8)) {
+            assertNull(parameters.get(index), "parámetro " + index + " debe ser NULL");
+        }
+        assertEquals(7, parameters.get(5));
+        assertEquals(7, parameters.get(6));
+    }
+
+    @Test
+    @DisplayName("findAll() sin filtro consulta el histórico completo")
+    void findAllWithoutArgumentsUsesTheWholeHistory() throws SQLException {
+        fake.withRows(FakeJdbc.row(
+                "id", 5,
+                "purchase_date", Timestamp.valueOf(LocalDateTime.of(2024, 5, 1, 10, 30)),
+                "status", Purchase.STATUS_RECEIVED,
+                "total", new BigDecimal("36.50"),
+                "supplier_id", 3,
+                "supplier_name", "Acme"));
+
+        List<Purchase> purchases = repository.findAll();
+
+        assertEquals(1, purchases.size());
+        Map<Integer, Object> parameters = fake.boundParameters().get(0);
+        for (int index = 1; index <= 8; index++) {
+            assertNull(parameters.get(index), "parámetro " + index + " debe ser NULL");
+        }
     }
 
     @Test

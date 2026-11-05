@@ -3,6 +3,7 @@ package com.entidaddesconocida.monte_erp.infrastructure;
 import com.entidaddesconocida.monte_erp.domain.model.Product;
 import com.entidaddesconocida.monte_erp.domain.model.ProductSupplier;
 import com.entidaddesconocida.monte_erp.domain.model.Purchase;
+import com.entidaddesconocida.monte_erp.domain.model.PurchaseFilter;
 import com.entidaddesconocida.monte_erp.domain.model.Stock;
 import com.entidaddesconocida.monte_erp.domain.model.Supplier;
 import com.entidaddesconocida.monte_erp.domain.repository.PurchaseRepository;
@@ -15,6 +16,8 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.sql.Types;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -40,6 +43,13 @@ import java.util.List;
  * {@link #findLots(int)} does not filter {@code p.active}: an old purchase
  * must keep showing a product that has since been given up.</p>
  *
+ * <p>{@link #findAll(PurchaseFilter)} filters <strong>in the query</strong> with
+ * one {@code ? IS NULL} guard per criterion (date range, supplier and status), so
+ * the same statement serves the whole history and any combination of filters
+ * without concatenating SQL. The upper bound is exclusive at {@code + 1 day} so a
+ * whole "hasta" day is included without a time component, mirroring
+ * {@code ReportPeriod.contains(LocalDateTime)}.</p>
+ *
  * <p>{@link #findProductSuppliers()} projects the product ↔ supplier pairs of the
  * whole history with a {@code DISTINCT} over {@code STOCK JOIN PURCHASE}; it does
  * <strong>not</strong> filter {@code available_quantity} nor {@code PRODUCT.active}
@@ -61,6 +71,10 @@ public class MySqlPurchaseRepository implements PurchaseRepository {
             SELECT p.id, p.purchase_date, p.status, p.total, p.supplier_id, s.name AS supplier_name
               FROM PURCHASE p
               JOIN SUPPLIER s ON s.id = p.supplier_id
+             WHERE (? IS NULL OR p.purchase_date >= ?)
+               AND (? IS NULL OR p.purchase_date < DATE_ADD(?, INTERVAL 1 DAY))
+               AND (? IS NULL OR p.supplier_id = ?)
+               AND (? IS NULL OR p.status = ?)
              ORDER BY p.purchase_date DESC, p.id DESC
             """;
     private static final String SELECT_LOTS = """
@@ -127,12 +141,24 @@ public class MySqlPurchaseRepository implements PurchaseRepository {
     }
 
     @Override
-    public List<Purchase> findAll() throws SQLException {
+    public List<Purchase> findAll(PurchaseFilter filter) throws SQLException {
         List<Purchase> purchases = new ArrayList<>();
-        try (Statement statement = DatabaseConnection.getConnection().createStatement();
-             ResultSet rs = statement.executeQuery(SELECT_PURCHASES)) {
-            while (rs.next()) {
-                purchases.add(mapPurchase(rs));
+        try (PreparedStatement ps = DatabaseConnection.getConnection()
+                .prepareStatement(SELECT_PURCHASES)) {
+            // Both placeholders of each guard receive the same value, so a null
+            // criterion disables its comparison instead of filtering by NULL.
+            bindDate(ps, 1, filter.period().from());
+            bindDate(ps, 2, filter.period().from());
+            bindDate(ps, 3, filter.period().to());
+            bindDate(ps, 4, filter.period().to());
+            bindInt(ps, 5, filter.supplierId());
+            bindInt(ps, 6, filter.supplierId());
+            bindString(ps, 7, filter.status());
+            bindString(ps, 8, filter.status());
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    purchases.add(mapPurchase(rs));
+                }
             }
         }
         return purchases;
@@ -283,6 +309,35 @@ public class MySqlPurchaseRepository implements PurchaseRepository {
             // so the in-memory entity mirrors the stored row.
             lot.setPurchase(purchase);
             lot.setAvailableQuantity(availableQuantity);
+        }
+    }
+
+    /** Binds an optional date, using SQL NULL (with an explicit type) when absent. */
+    private static void bindDate(PreparedStatement ps, int index, LocalDate date)
+            throws SQLException {
+        if (date == null) {
+            ps.setNull(index, Types.DATE);
+        } else {
+            ps.setDate(index, java.sql.Date.valueOf(date));
+        }
+    }
+
+    /** Binds an optional integer (the supplier id), using SQL NULL when absent. */
+    private static void bindInt(PreparedStatement ps, int index, Integer value) throws SQLException {
+        if (value == null) {
+            ps.setNull(index, Types.INTEGER);
+        } else {
+            ps.setInt(index, value);
+        }
+    }
+
+    /** Binds an optional string (the status), using SQL NULL when absent. */
+    private static void bindString(PreparedStatement ps, int index, String value)
+            throws SQLException {
+        if (value == null) {
+            ps.setNull(index, Types.VARCHAR);
+        } else {
+            ps.setString(index, value);
         }
     }
 

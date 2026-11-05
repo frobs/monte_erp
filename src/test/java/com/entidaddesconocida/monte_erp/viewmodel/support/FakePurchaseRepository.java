@@ -3,6 +3,7 @@ package com.entidaddesconocida.monte_erp.viewmodel.support;
 import com.entidaddesconocida.monte_erp.domain.model.Product;
 import com.entidaddesconocida.monte_erp.domain.model.ProductSupplier;
 import com.entidaddesconocida.monte_erp.domain.model.Purchase;
+import com.entidaddesconocida.monte_erp.domain.model.PurchaseFilter;
 import com.entidaddesconocida.monte_erp.domain.model.Stock;
 import com.entidaddesconocida.monte_erp.domain.model.Supplier;
 import com.entidaddesconocida.monte_erp.domain.model.User;
@@ -28,7 +29,10 @@ import java.util.TreeSet;
  * throw {@link SQLException} and {@link #failOn(String)} fails only one. The
  * double stores <em>copies</em> so a bug in the ViewModel cannot mutate the
  * fixtures, and it mimics the database: {@link #insert(Purchase)} assigns the
- * generated id and {@link #findAll()} returns the purchases most recent first.</p>
+ * generated id and {@link #findAll(PurchaseFilter)} returns the purchases most
+ * recent first, filtering in memory exactly like the SQL guards of the real
+ * adapter. It also records the last filter and the number of queries, so the
+ * tests can prove the ViewModel filters <strong>in the query</strong>.</p>
  */
 public class FakePurchaseRepository implements PurchaseRepository {
 
@@ -39,6 +43,8 @@ public class FakePurchaseRepository implements PurchaseRepository {
     private boolean throwOnAccess;
     private int nextId = 1;
     private Purchase lastInserted;
+    private PurchaseFilter lastFilter = PurchaseFilter.all();
+    private int findAllCalls;
 
     /** Stores a pre-existing purchase (and its lots) as if it came from the database. */
     public FakePurchaseRepository withPurchase(Purchase purchase) {
@@ -81,6 +87,16 @@ public class FakePurchaseRepository implements PurchaseRepository {
         return lastInserted;
     }
 
+    /** Filter of the last {@code findAll} query, for the assertions. */
+    public PurchaseFilter lastFilter() {
+        return lastFilter;
+    }
+
+    /** Number of {@code findAll} queries issued so far. */
+    public int findAllCalls() {
+        return findAllCalls;
+    }
+
     private void maybeThrow(String method) throws SQLException {
         if (throwOnAccess || failingMethods.contains(method) || failingNextCalls.remove(method)) {
             throw new SQLException("Simulated database failure in " + method);
@@ -102,10 +118,13 @@ public class FakePurchaseRepository implements PurchaseRepository {
     }
 
     @Override
-    public List<Purchase> findAll() throws SQLException {
+    public List<Purchase> findAll(PurchaseFilter filter) throws SQLException {
         maybeThrow("findAll");
+        lastFilter = filter;
+        findAllCalls++;
         List<Purchase> result = new ArrayList<>();
         purchases.values().stream()
+                .filter(purchase -> matches(purchase, filter))
                 .sorted(Comparator.comparing(Purchase::getPurchaseDate).reversed()
                         .thenComparing(Comparator.comparingInt(Purchase::getId).reversed()))
                 .forEach(purchase -> {
@@ -114,6 +133,23 @@ public class FakePurchaseRepository implements PurchaseRepository {
                     result.add(copy);
                 });
         return result;
+    }
+
+    /**
+     * Mirrors the SQL guards: an absent criterion does not filter, the date range
+     * compares by day with both bounds inclusive, and a supplier without an id
+     * can never match a supplier filter.
+     */
+    private static boolean matches(Purchase purchase, PurchaseFilter filter) {
+        if (!filter.period().isEmpty()
+                && !filter.period().contains(purchase.getPurchaseDate())) {
+            return false;
+        }
+        if (filter.supplierId() != null && (purchase.getSupplier() == null
+                || purchase.getSupplier().getId() != filter.supplierId())) {
+            return false;
+        }
+        return filter.status() == null || filter.status().equals(purchase.getStatus());
     }
 
     @Override
