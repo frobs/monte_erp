@@ -2,6 +2,7 @@ package com.entidaddesconocida.monte_erp.viewmodel;
 
 import com.entidaddesconocida.monte_erp.domain.model.Product;
 import com.entidaddesconocida.monte_erp.domain.model.Purchase;
+import com.entidaddesconocida.monte_erp.domain.model.PurchaseFilter;
 import com.entidaddesconocida.monte_erp.domain.model.Stock;
 import com.entidaddesconocida.monte_erp.domain.model.Supplier;
 import com.entidaddesconocida.monte_erp.domain.model.User;
@@ -14,6 +15,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -519,5 +521,189 @@ class PurchasesViewModelTest {
         viewModel.changeStatus(Purchase.STATUS_RECEIVED);
 
         assertEquals(PurchasesViewModel.DATABASE_ERROR, viewModel.errorMessageProperty().get());
+    }
+
+    // --- History filters (queried in the database) ----------------------
+
+    private Purchase storePurchase(LocalDate date, Supplier supplier, String status) {
+        Purchase purchase = new Purchase(0, date.atTime(10, 0), status,
+                new BigDecimal("20.00"), supplier, user(), List.of());
+        purchaseRepository.withPurchase(purchase);
+        return purchase;
+    }
+
+    /** Three purchases in two months, from three suppliers, in three statuses. */
+    private void loadThreePurchases() {
+        storePurchase(LocalDate.of(2024, 1, 15), ACME, Purchase.STATUS_PENDING);
+        storePurchase(LocalDate.of(2024, 2, 15), GLOBEX, Purchase.STATUS_RECEIVED);
+        storePurchase(LocalDate.of(2024, 2, 29), INACTIVE, Purchase.STATUS_RETURNED);
+        viewModel.load();
+    }
+
+    @Test
+    @DisplayName("El filtro de fechas viaja a la consulta y respeta los dos extremos por día")
+    void dateRangeFilterIsQueriedInclusive() {
+        loadThreePurchases();
+
+        viewModel.fromDateProperty().set(LocalDate.of(2024, 2, 15));
+        viewModel.toDateProperty().set(LocalDate.of(2024, 2, 29));
+
+        assertEquals(2, viewModel.purchases().size());
+        assertEquals(PurchaseFilter.of(LocalDate.of(2024, 2, 15), LocalDate.of(2024, 2, 29),
+                null, null), purchaseRepository.lastFilter());
+    }
+
+    @Test
+    @DisplayName("Un rango invertido avisa, vacía la tabla y no consulta la base de datos")
+    void invertedRangeIsRejectedWithoutQuerying() {
+        loadThreePurchases();
+        viewModel.fromDateProperty().set(LocalDate.of(2024, 3, 1));
+        int calls = purchaseRepository.findAllCalls();
+
+        viewModel.toDateProperty().set(LocalDate.of(2024, 2, 1));
+
+        assertEquals(PurchasesViewModel.PERIOD_ERROR, viewModel.errorMessageProperty().get());
+        assertEquals(0, viewModel.purchases().size());
+        assertEquals(calls, purchaseRepository.findAllCalls());
+    }
+
+    @Test
+    @DisplayName("Corregir el rango limpia el error y vuelve a consultar")
+    void correctedRangeClearsTheError() {
+        loadThreePurchases();
+        viewModel.fromDateProperty().set(LocalDate.of(2024, 1, 1));
+        viewModel.toDateProperty().set(LocalDate.of(2023, 12, 31));
+        assertEquals(PurchasesViewModel.PERIOD_ERROR, viewModel.errorMessageProperty().get());
+
+        viewModel.toDateProperty().set(LocalDate.of(2024, 12, 31));
+
+        assertEquals("", viewModel.errorMessageProperty().get());
+        assertEquals(3, viewModel.purchases().size());
+    }
+
+    @Test
+    @DisplayName("El filtro de proveedor consulta por id, incluso uno dado de baja")
+    void supplierFilterIsQueriedById() {
+        loadThreePurchases();
+
+        viewModel.supplierFilterProperty().set(INACTIVE);
+
+        assertEquals(1, viewModel.purchases().size());
+        assertEquals(INACTIVE.getId(), purchaseRepository.lastFilter().supplierId());
+    }
+
+    @Test
+    @DisplayName("El filtro de estado consulta por el valor del dominio")
+    void statusFilterIsQueried() {
+        loadThreePurchases();
+
+        viewModel.statusFilterProperty().set(Purchase.STATUS_RECEIVED);
+
+        assertEquals(1, viewModel.purchases().size());
+        assertEquals(Purchase.STATUS_RECEIVED, purchaseRepository.lastFilter().status());
+    }
+
+    @Test
+    @DisplayName("Los tres criterios se combinan en una única consulta")
+    void filtersCombineInOneQuery() {
+        loadThreePurchases();
+        int calls = purchaseRepository.findAllCalls();
+
+        viewModel.fromDateProperty().set(LocalDate.of(2024, 2, 1));
+        viewModel.supplierFilterProperty().set(GLOBEX);
+        viewModel.statusFilterProperty().set(Purchase.STATUS_RECEIVED);
+
+        assertEquals(1, viewModel.purchases().size());
+        assertEquals(calls + 3, purchaseRepository.findAllCalls());
+        assertEquals(PurchaseFilter.of(LocalDate.of(2024, 2, 1), null, GLOBEX.getId(),
+                Purchase.STATUS_RECEIVED), purchaseRepository.lastFilter());
+    }
+
+    @Test
+    @DisplayName("clearFilters borra los criterios y hace una sola consulta")
+    void clearFiltersDropsEveryCriterionWithOneQuery() {
+        loadThreePurchases();
+        viewModel.supplierFilterProperty().set(GLOBEX);
+        int calls = purchaseRepository.findAllCalls();
+
+        viewModel.clearFilters();
+
+        assertNull(viewModel.fromDateProperty().get());
+        assertNull(viewModel.toDateProperty().get());
+        assertNull(viewModel.supplierFilterProperty().get());
+        assertNull(viewModel.statusFilterProperty().get());
+        assertEquals(3, viewModel.purchases().size());
+        assertEquals(PurchaseFilter.all(), purchaseRepository.lastFilter());
+        assertEquals(calls + 1, purchaseRepository.findAllCalls());
+    }
+
+    @Test
+    @DisplayName("Filtrar deja sin selección una compra que ya no se muestra")
+    void filteringDropsTheSelectionOfAHiddenPurchase() {
+        loadThreePurchases();
+        Purchase pending = viewModel.purchases().stream()
+                .filter(purchase -> Purchase.STATUS_PENDING.equals(purchase.getStatus()))
+                .findFirst().orElseThrow();
+        viewModel.selectedPurchaseProperty().set(pending);
+        viewModel.selectPurchase(pending);
+        assertEquals(2, viewModel.availableTransitions().size());
+
+        viewModel.statusFilterProperty().set(Purchase.STATUS_RECEIVED);
+
+        assertNull(viewModel.selectedPurchaseProperty().get());
+        assertEquals(0, viewModel.availableTransitions().size());
+        assertEquals(0, viewModel.selectedPurchaseLots().size());
+    }
+
+    @Test
+    @DisplayName("La consulta de filtros fallida vacía la tabla y muestra el error de conexión")
+    void filterQueryFailureReportsDatabaseError() {
+        loadThreePurchases();
+        purchaseRepository.failOn("findAll");
+
+        viewModel.statusFilterProperty().set(Purchase.STATUS_RECEIVED);
+
+        assertEquals(PurchasesViewModel.DATABASE_ERROR, viewModel.errorMessageProperty().get());
+        assertEquals(0, viewModel.purchases().size());
+    }
+
+    @Test
+    @DisplayName("Guardar mantiene el filtro activo en la recarga del histórico")
+    void saveReloadsWithTheActiveFilter() {
+        viewModel.statusFilterProperty().set(Purchase.STATUS_PENDING);
+        selectSupplier();
+        addLot("Teclado", "1", "10.00");
+
+        viewModel.save();
+
+        assertEquals(1, viewModel.purchases().size());
+        assertEquals(Purchase.STATUS_PENDING, purchaseRepository.lastFilter().status());
+        assertEquals("", viewModel.errorMessageProperty().get());
+    }
+
+    @Test
+    @DisplayName("Cambiar el estado mantiene el filtro: la compra puede desaparecer del histórico")
+    void changeStatusReloadsWithTheActiveFilter() {
+        storePurchase(LocalDate.of(2024, 1, 15), ACME, Purchase.STATUS_PENDING);
+        viewModel.statusFilterProperty().set(Purchase.STATUS_PENDING);
+        Purchase selected = viewModel.purchases().get(0);
+        viewModel.selectedPurchaseProperty().set(selected);
+
+        viewModel.changeStatus(Purchase.STATUS_RECEIVED);
+
+        assertEquals("", viewModel.errorMessageProperty().get());
+        assertEquals(0, viewModel.purchases().size());
+        assertTrue(viewModel.statusMessageProperty().get().contains("Recibida"));
+        assertEquals(Purchase.STATUS_PENDING, purchaseRepository.lastFilter().status());
+    }
+
+    @Test
+    @DisplayName("Las opciones del filtro son todos los proveedores y los cuatro estados")
+    void filterOptionsCoverEverySupplierAndStatus() {
+        assertEquals(List.of("Acme", "Globex", "Old"),
+                viewModel.supplierFilterOptions().stream().map(Supplier::getName).toList());
+        assertEquals(List.of(Purchase.STATUS_PENDING, Purchase.STATUS_RECEIVED,
+                        Purchase.STATUS_CANCELLED, Purchase.STATUS_RETURNED),
+                viewModel.statusFilterOptions());
     }
 }

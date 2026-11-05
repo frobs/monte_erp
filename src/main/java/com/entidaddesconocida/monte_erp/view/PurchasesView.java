@@ -12,12 +12,15 @@ import de.saxsys.mvvmfx.InjectViewModel;
 
 import javafx.beans.binding.Bindings;
 import javafx.beans.property.ReadOnlyStringWrapper;
+import javafx.collections.FXCollections;
+import javafx.collections.ObservableList;
 import javafx.fxml.FXML;
 import javafx.geometry.Pos;
 import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
 import javafx.scene.control.ButtonType;
 import javafx.scene.control.ComboBox;
+import javafx.scene.control.DatePicker;
 import javafx.scene.control.Label;
 import javafx.scene.control.TableCell;
 import javafx.scene.control.TableColumn;
@@ -28,6 +31,7 @@ import javafx.scene.layout.HBox;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.format.DateTimeFormatter;
+import java.util.List;
 import java.util.Locale;
 
 /**
@@ -41,8 +45,15 @@ import java.util.Locale;
  * only the buttons for the transitions the domain allows for that purchase
  * (receive, return, cancel), and the destructive confirmations stay here, in the
  * view.</p>
+ *
+ * <p>The history is filtered by date range, supplier and status; the filter bar
+ * only binds the controls to the ViewModel, because the criteria travel to the
+ * database and the ViewModel re-queries on every change.</p>
  */
 public class PurchasesView implements FxmlView<PurchasesViewModel> {
+
+    private static final String ALL_SUPPLIERS = "Todos los proveedores";
+    private static final String ALL_STATUSES = "Todos los estados";
 
     private static final DateTimeFormatter DATE_FORMAT =
             DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm");
@@ -57,6 +68,18 @@ public class PurchasesView implements FxmlView<PurchasesViewModel> {
 
     @FXML
     private TableView<Purchase> purchasesTable;
+
+    @FXML
+    private DatePicker fromDatePicker;
+
+    @FXML
+    private DatePicker toDatePicker;
+
+    @FXML
+    private ComboBox<Supplier> supplierFilterCombo;
+
+    @FXML
+    private ComboBox<String> statusFilterCombo;
 
     @FXML
     private TableColumn<Purchase, String> purchaseIdColumn;
@@ -149,6 +172,7 @@ public class PurchasesView implements FxmlView<PurchasesViewModel> {
         bindSelection();
         bindMessages();
         viewModel.load();
+        refreshFilterCombos();
     }
 
     private void setupFields() {
@@ -210,6 +234,24 @@ public class PurchasesView implements FxmlView<PurchasesViewModel> {
                 viewModel.purchaseTotalProperty()));
 
         countLabel.textProperty().bind(Bindings.size(viewModel.purchases()).asString("%d compras"));
+
+        fromDatePicker.valueProperty().bindBidirectional(viewModel.fromDateProperty());
+        toDatePicker.valueProperty().bindBidirectional(viewModel.toDateProperty());
+
+        // Both filter combos carry a leading null option that means "todos": a
+        // null value would leave the button cell of a searchable combo empty, so
+        // that first item is selected explicitly (same as ProductsView).
+        supplierFilterCombo.setItems(withAllOption(viewModel.supplierFilterOptions()));
+        SearchableCombos.install(supplierFilterCombo,
+                supplier -> supplier == null ? ALL_SUPPLIERS : supplier.getName());
+        supplierFilterCombo.valueProperty().bindBidirectional(viewModel.supplierFilterProperty());
+        selectAllOption(supplierFilterCombo);
+
+        statusFilterCombo.setItems(withAllOption(viewModel.statusFilterOptions()));
+        SearchableCombos.install(statusFilterCombo,
+                status -> status == null ? ALL_STATUSES : Purchase.labelFor(status));
+        statusFilterCombo.valueProperty().bindBidirectional(viewModel.statusFilterProperty());
+        selectAllOption(statusFilterCombo);
     }
 
     /**
@@ -358,6 +400,43 @@ public class PurchasesView implements FxmlView<PurchasesViewModel> {
     @FXML
     private void onRefresh() {
         viewModel.load();
+        refreshFilterCombos();
+    }
+
+    @FXML
+    private void onClearFilters() {
+        viewModel.clearFilters();
+        // With a null value the searchable combos would show an empty button
+        // cell, so their "todos" option is selected again.
+        selectAllOption(supplierFilterCombo);
+        selectAllOption(statusFilterCombo);
+    }
+
+    /** Rebuilds the filter combos after a load, keeping the selected values. */
+    private void refreshFilterCombos() {
+        Supplier supplier = supplierFilterCombo.getValue();
+        supplierFilterCombo.setItems(withAllOption(viewModel.supplierFilterOptions()));
+        supplierFilterCombo.setValue(supplier);
+        selectAllOption(supplierFilterCombo);
+
+        String status = statusFilterCombo.getValue();
+        statusFilterCombo.setItems(withAllOption(viewModel.statusFilterOptions()));
+        statusFilterCombo.setValue(status);
+        selectAllOption(statusFilterCombo);
+    }
+
+    /** Options with a leading {@code null} that stands for "no filter". */
+    private static <T> ObservableList<T> withAllOption(List<T> options) {
+        ObservableList<T> items = FXCollections.observableArrayList();
+        items.add(null);
+        items.addAll(options);
+        return items;
+    }
+
+    private static <T> void selectAllOption(ComboBox<T> combo) {
+        if (combo.getValue() == null && !combo.getItems().isEmpty()) {
+            combo.getSelectionModel().select(0);
+        }
     }
 
     @FXML

@@ -3,6 +3,7 @@ package com.entidaddesconocida.monte_erp.viewmodel;
 import com.entidaddesconocida.monte_erp.app.SessionValidator;
 import com.entidaddesconocida.monte_erp.domain.model.Product;
 import com.entidaddesconocida.monte_erp.domain.model.Purchase;
+import com.entidaddesconocida.monte_erp.domain.model.PurchaseFilter;
 import com.entidaddesconocida.monte_erp.domain.model.Stock;
 import com.entidaddesconocida.monte_erp.domain.model.Supplier;
 import com.entidaddesconocida.monte_erp.domain.model.User;
@@ -27,6 +28,7 @@ import javafx.collections.ObservableList;
 
 import java.math.BigDecimal;
 import java.sql.SQLException;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -38,6 +40,12 @@ import java.util.logging.Logger;
  * history, never edited or deleted. It is a master-detail screen that creates a
  * purchase from several lots (product, quantity, purchase price) and shows the
  * read-only history with the detail of the selected purchase.</p>
+ *
+ * <p>The history can be filtered by date range, supplier and status. The criteria
+ * travel to the database as a {@link PurchaseFilter}: every change runs
+ * {@code findAll(filter)}, so nothing is filtered in memory. An inverted range is
+ * rejected in the domain before any query is issued, and every reload drops the
+ * selection so a filtered-out purchase never keeps its detail on screen.</p>
  *
  * <p>Every line generates a {@link Stock} lot that stays unavailable until the
  * purchase is received (decision D1/D6): the total is computed from the lots
@@ -66,6 +74,14 @@ public class PurchasesViewModel implements ViewModel {
     private static final BigDecimal MAX_STORED_TOTAL = new BigDecimal("99999999.99");
     private static final String TOTAL_LIMIT_ERROR =
             "El total de la compra no puede superar 99.999.999,99 €.";
+
+    /** Message shown when the "desde" date is after the "hasta" date. */
+    protected static final String PERIOD_ERROR =
+            "La fecha «desde» no puede ser posterior a la fecha «hasta».";
+
+    /** Shown when the purchase was saved but the filter hides the history. */
+    private static final String SAVED_WITH_BAD_FILTER =
+            "Compra #%d guardada correctamente. Corrige el filtro para verla en el historial.";
 
     /** No supplier chosen when saving a purchase. */
     protected static final String SUPPLIER_REQUIRED = "Selecciona un proveedor.";
@@ -119,6 +135,21 @@ public class PurchasesViewModel implements ViewModel {
     private final ObjectProperty<Purchase> selectedPurchase = new SimpleObjectProperty<>();
     private final ObservableList<Stock> selectedPurchaseLots = FXCollections.observableArrayList();
 
+    // History filters: they travel to the database, so every change re-runs
+    // findAll(filter) instead of filtering the loaded list in memory.
+    private final ObjectProperty<LocalDate> fromDate = new SimpleObjectProperty<>();
+    private final ObjectProperty<LocalDate> toDate = new SimpleObjectProperty<>();
+    private final ObjectProperty<Supplier> supplierFilter = new SimpleObjectProperty<>();
+    private final ObjectProperty<String> statusFilter = new SimpleObjectProperty<>();
+    private final ObservableList<Supplier> supplierFilterOptions =
+            FXCollections.observableArrayList();
+    private final ObservableList<String> statusFilterOptions = FXCollections.observableArrayList(
+            Purchase.STATUS_PENDING, Purchase.STATUS_RECEIVED,
+            Purchase.STATUS_CANCELLED, Purchase.STATUS_RETURNED);
+
+    /** Guards a batched filter reset so it issues a single query. */
+    private boolean suppressReload;
+
     /** Statuses reachable from the selected purchase, in button order. */
     private final ObservableList<String> availableTransitions = FXCollections.observableArrayList();
 
@@ -147,6 +178,12 @@ public class PurchasesViewModel implements ViewModel {
         this.productRepository = productRepository;
         this.currentUser = currentUser;
         this.sessionValidator = sessionValidator;
+        // Every filter change runs one query; the DatePicker only fires when the
+        // user commits a value, so this is one reload per deliberate change.
+        fromDate.addListener((observable, oldValue, newValue) -> onFilterChanged());
+        toDate.addListener((observable, oldValue, newValue) -> onFilterChanged());
+        supplierFilter.addListener((observable, oldValue, newValue) -> onFilterChanged());
+        statusFilter.addListener((observable, oldValue, newValue) -> onFilterChanged());
     }
 
     /** Active suppliers offered in the combo (an inactive one cannot be assigned). */
@@ -187,7 +224,7 @@ public class PurchasesViewModel implements ViewModel {
         return purchaseTotal.getReadOnlyProperty();
     }
 
-    /** Read-only history of saved purchases, most recent first. */
+    /** Read-only history matching the active filter, most recent first. */
     public ObservableList<Purchase> purchases() {
         return purchases;
     }
@@ -199,6 +236,39 @@ public class PurchasesViewModel implements ViewModel {
     /** Lots of the selected purchase, loaded from the repository. */
     public ObservableList<Stock> selectedPurchaseLots() {
         return selectedPurchaseLots;
+    }
+
+    /** Lower bound of the history filter; {@code null} means "unbounded". */
+    public ObjectProperty<LocalDate> fromDateProperty() {
+        return fromDate;
+    }
+
+    /** Upper bound of the history filter; {@code null} means "unbounded". */
+    public ObjectProperty<LocalDate> toDateProperty() {
+        return toDate;
+    }
+
+    /** Supplier filter; {@code null} means "every supplier". */
+    public ObjectProperty<Supplier> supplierFilterProperty() {
+        return supplierFilter;
+    }
+
+    /** Status filter ({@code Purchase.STATUS_*}); {@code null} means "every status". */
+    public ObjectProperty<String> statusFilterProperty() {
+        return statusFilter;
+    }
+
+    /**
+     * Suppliers offered by the filter: every one, active or not, so an old
+     * purchase of a supplier given up can still be listed (like RF-11).
+     */
+    public ObservableList<Supplier> supplierFilterOptions() {
+        return supplierFilterOptions;
+    }
+
+    /** Statuses offered by the filter, in domain order. */
+    public ObservableList<String> statusFilterOptions() {
+        return statusFilterOptions;
     }
 
     /**
@@ -238,7 +308,7 @@ public class PurchasesViewModel implements ViewModel {
         return lotsError.getReadOnlyProperty();
     }
 
-    /** Loads the combos and the history, and resets the draft purchase. */
+    /** Loads the combos, the filter options and the filtered history. */
     public void load() {
         errorMessage.set("");
         statusMessage.set("");
@@ -247,20 +317,82 @@ public class PurchasesViewModel implements ViewModel {
         }
         try {
             suppliers.setAll(supplierRepository.findActive());
+            // The filter lists every supplier: an inactive one still sold to us.
+            supplierFilterOptions.setAll(supplierRepository.findAll());
             products.setAll(productRepository.findAll());
-            purchases.setAll(purchaseRepository.findAll());
         } catch (SQLException e) {
             LOGGER.log(Level.SEVERE, "Could not load the purchases", e);
             fail(DATABASE_ERROR);
             return;
         }
         resetDraft();
-        // The history is reloaded, so a previously selected purchase is no longer
-        // guaranteed to be in the table: drop the selection and its detail.
+        clearFieldErrors();
+        reloadHistory();
+    }
+
+    /** Drops every filter and re-queries the whole history. */
+    public void clearFilters() {
+        suppressReload = true;
+        try {
+            fromDate.set(null);
+            toDate.set(null);
+            supplierFilter.set(null);
+            statusFilter.set(null);
+        } finally {
+            suppressReload = false;
+        }
+        reloadHistory();
+    }
+
+    /**
+     * Runs the query of the current filter and drops the selection, because a
+     * filtered-out purchase must not stay selected with its detail on screen.
+     * Returns {@code false} when the history could not be refreshed: the error
+     * message is already set and the caller decides how to report its write.
+     */
+    private boolean reloadHistory() {
+        PurchaseFilter filter;
+        try {
+            filter = currentFilter();
+        } catch (IllegalArgumentException e) {
+            purchases.clear();
+            clearSelection();
+            fail(PERIOD_ERROR);
+            return false;
+        }
+        // A corrected range must clear the message that rejected the old one.
+        if (PERIOD_ERROR.equals(errorMessage.get())) {
+            errorMessage.set("");
+        }
+        try {
+            purchases.setAll(purchaseRepository.findAll(filter));
+        } catch (SQLException e) {
+            LOGGER.log(Level.SEVERE, "Could not load the purchases", e);
+            purchases.clear();
+            clearSelection();
+            fail(DATABASE_ERROR);
+            return false;
+        }
+        clearSelection();
+        return true;
+    }
+
+    private void onFilterChanged() {
+        if (!suppressReload) {
+            reloadHistory();
+        }
+    }
+
+    private PurchaseFilter currentFilter() {
+        Supplier supplier = supplierFilter.get();
+        return PurchaseFilter.of(fromDate.get(), toDate.get(),
+                supplier == null ? null : supplier.getId(), statusFilter.get());
+    }
+
+    private void clearSelection() {
         selectedPurchase.set(null);
         selectedPurchaseLots.clear();
         availableTransitions.clear();
-        clearFieldErrors();
     }
 
     /**
@@ -371,11 +503,13 @@ public class PurchasesViewModel implements ViewModel {
         // independent history read so a reload failure cannot cause a duplicate.
         resetDraft();
         clearFieldErrors();
-        try {
-            purchases.setAll(purchaseRepository.findAll());
+        if (reloadHistory()) {
             succeed("Compra #" + id + " guardada correctamente.");
-        } catch (SQLException e) {
-            LOGGER.log(Level.WARNING, "Purchase was saved but its history could not be reloaded", e);
+        } else if (PERIOD_ERROR.equals(errorMessage.get())) {
+            // The write succeeded; only the filter hides the history.
+            statusMessage.set(String.format(SAVED_WITH_BAD_FILTER, id));
+        } else {
+            LOGGER.log(Level.WARNING, "Purchase was saved but its history could not be reloaded");
             fail(String.format(SAVE_RELOAD_ERROR, id));
         }
     }
@@ -426,17 +560,23 @@ public class PurchasesViewModel implements ViewModel {
             int updated = purchaseRepository.changeStatus(purchase.getId(),
                     purchase.getStatus(), newStatus);
             if (updated == 0) {
-                purchases.setAll(purchaseRepository.findAll());
+                reloadHistory();
                 fail(CONFLICT);
                 return;
             }
             purchase.changeStatus(newStatus);
-            purchases.setAll(purchaseRepository.findAll());
+            String message = "Compra #" + purchase.getId() + " marcada como "
+                    + Purchase.labelFor(newStatus) + ".";
+            if (!reloadHistory()) {
+                // The write is committed: confirm it even though the filter or
+                // the database hides the reloaded history.
+                statusMessage.set(message);
+                return;
+            }
             Purchase reloaded = findById(purchase.getId());
             selectedPurchase.set(reloaded);
             selectPurchase(reloaded);
-            succeed("Compra #" + purchase.getId() + " marcada como "
-                    + Purchase.labelFor(newStatus) + ".");
+            succeed(message);
         } catch (PurchaseStockConsumedException e) {
             fail(e.getMessage());
         } catch (SQLException e) {
@@ -518,9 +658,7 @@ public class PurchasesViewModel implements ViewModel {
             return false;
         }
         purchases.clear();
-        selectedPurchase.set(null);
-        selectedPurchaseLots.clear();
-        availableTransitions.clear();
+        clearSelection();
         resetDraft();
         fail(SESSION_EXPIRED);
         return false;

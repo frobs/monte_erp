@@ -2,6 +2,7 @@
 
 <?import javafx.geometry.Insets?>
 <?import javafx.scene.control.Button?>
+<?import javafx.scene.control.DatePicker?>
 <?import javafx.scene.control.Label?>
 <?import javafx.scene.control.TableColumn?>
 <?import javafx.scene.control.TableView?>
@@ -16,7 +17,7 @@
             fx:controller="com.entidaddesconocida.monte_erp.view.PurchasesView"
             stylesheets="@../../../../css/app.css"
             styleClass="root-pane"
-            prefWidth="1180.0" prefHeight="720.0">
+            prefWidth="1280.0" prefHeight="720.0">
 
     <top>
         <HBox styleClass="topbar" alignment="CENTER_LEFT" spacing="12.0">
@@ -47,9 +48,22 @@
                     <Button text="Actualizar" onAction="#onRefresh" styleClass="secondary-button"/>
                 </HBox>
 
+                <HBox alignment="CENTER_LEFT" spacing="8.0">
+                    <DatePicker fx:id="fromDatePicker" promptText="Desde" prefWidth="125.0"/>
+                    <Label text="–" styleClass="subtitle"/>
+                    <DatePicker fx:id="toDatePicker" promptText="Hasta" prefWidth="125.0"/>
+                    <SearchableComboBox fx:id="supplierFilterCombo" promptText="Todos los proveedores"
+                                        prefWidth="180.0"/>
+                    <SearchableComboBox fx:id="statusFilterCombo" promptText="Todos los estados"
+                                        prefWidth="160.0"/>
+                    <Region HBox.hgrow="ALWAYS"/>
+                    <Button text="Limpiar filtros" onAction="#onClearFilters"
+                            styleClass="secondary-button"/>
+                </HBox>
+
                 <TableView fx:id="purchasesTable" VBox.vgrow="ALWAYS">
                     <placeholder>
-                        <Label text="Todavía no hay compras."/>
+                        <Label text="No hay compras con los filtros seleccionados."/>
                     </placeholder>
                     <columns>
                         <TableColumn fx:id="purchaseIdColumn" text="Compra" prefWidth="80.0"/>
