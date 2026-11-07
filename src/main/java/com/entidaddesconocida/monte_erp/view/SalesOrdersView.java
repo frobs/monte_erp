@@ -4,6 +4,7 @@ import com.entidaddesconocida.monte_erp.app.AppShell;
 import com.entidaddesconocida.monte_erp.domain.model.Customer;
 import com.entidaddesconocida.monte_erp.domain.model.Product;
 import com.entidaddesconocida.monte_erp.domain.model.SalesOrder;
+import com.entidaddesconocida.monte_erp.domain.model.SalesOrderFilter;
 import com.entidaddesconocida.monte_erp.domain.model.SalesOrderLine;
 import com.entidaddesconocida.monte_erp.domain.model.StockIssue;
 import com.entidaddesconocida.monte_erp.viewmodel.SalesOrdersViewModel;
@@ -12,20 +13,22 @@ import de.saxsys.mvvmfx.FxmlView;
 import de.saxsys.mvvmfx.InjectViewModel;
 
 import javafx.beans.binding.Bindings;
-import javafx.beans.binding.BooleanBinding;
 import javafx.beans.property.ReadOnlyStringWrapper;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.fxml.FXML;
+import javafx.geometry.Pos;
 import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
 import javafx.scene.control.ButtonType;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.DatePicker;
 import javafx.scene.control.Label;
+import javafx.scene.control.TableCell;
 import javafx.scene.control.TableColumn;
 import javafx.scene.control.TableView;
 import javafx.scene.control.TextField;
+import javafx.scene.layout.HBox;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -38,9 +41,10 @@ import java.util.Locale;
  *
  * <p>It is not a CRUD screen, so it does not extend {@link CrudView}: it shows the
  * read-only history with the detail of the selected order on the left and the new
- * order form on the right. RF-08 adds the contextual status buttons over the
- * selected order; the rules live in {@link SalesOrdersViewModel} and the
- * destructive confirmation (cancel) stays here, in the view.</p>
+ * order form on the right. RF-08 adds the status change: the <em>Acciones</em>
+ * column renders, on every row, only the buttons for the transitions the domain
+ * allows for that order (ship, deliver, cancel), and the destructive confirmation
+ * (cancel) stays here, in the view.</p>
  *
  * <p>The history is filtered by date range, customer and status; the filter bar
  * only binds the controls to the ViewModel, because the criteria travel to the
@@ -90,6 +94,9 @@ public class SalesOrdersView implements FxmlView<SalesOrdersViewModel> {
     private TableColumn<SalesOrder, String> totalColumn;
 
     @FXML
+    private TableColumn<SalesOrder, Void> orderActionsColumn;
+
+    @FXML
     private TableView<SalesOrderLine> orderLinesTable;
 
     @FXML
@@ -118,15 +125,6 @@ public class SalesOrdersView implements FxmlView<SalesOrdersViewModel> {
 
     @FXML
     private TableColumn<StockIssue, String> issuePurchaseColumn;
-
-    @FXML
-    private Button markShippedButton;
-
-    @FXML
-    private Button markDeliveredButton;
-
-    @FXML
-    private Button cancelOrderButton;
 
     @FXML
     private Label detailErrorLabel;
@@ -201,6 +199,10 @@ public class SalesOrdersView implements FxmlView<SalesOrdersViewModel> {
                 new ReadOnlyStringWrapper(cell.getValue().getStatusLabel()));
         totalColumn.setCellValueFactory(cell ->
                 new ReadOnlyStringWrapper(formatMoney(cell.getValue().getTotal())));
+
+        // The action column has no value: every row renders the buttons its own
+        // status allows, so nothing can be clicked that the domain would reject.
+        orderActionsColumn.setCellFactory(column -> new ActionsCell());
 
         lineProductColumn.setCellValueFactory(cell -> new ReadOnlyStringWrapper(
                 productLabel(cell.getValue().getProduct())));
@@ -285,28 +287,77 @@ public class SalesOrdersView implements FxmlView<SalesOrdersViewModel> {
                 status -> status == null ? ALL_STATUSES : SalesOrder.labelFor(status));
         statusFilterCombo.valueProperty().bindBidirectional(viewModel.statusFilterProperty());
         selectAllOption(statusFilterCombo);
-
-        bindStatusActions();
     }
 
     /**
-     * RF-08: each status button is shown only while its transition is valid for
-     * the selected order; the {@code availableTransitions} list is the dependency
-     * of the binding, so it is re-evaluated when the selection changes.
+     * Cell of the <em>Acciones</em> column: builds the buttons of the order shown
+     * on that row. A terminal order has no transition, so its cell stays empty.
      */
-    private void bindStatusActions() {
-        markShippedButton.visibleProperty().bind(transitionAvailable(SalesOrder.STATUS_SHIPPED));
-        markShippedButton.managedProperty().bind(markShippedButton.visibleProperty());
-        markDeliveredButton.visibleProperty().bind(transitionAvailable(SalesOrder.STATUS_DELIVERED));
-        markDeliveredButton.managedProperty().bind(markDeliveredButton.visibleProperty());
-        cancelOrderButton.visibleProperty().bind(transitionAvailable(SalesOrder.STATUS_CANCELLED));
-        cancelOrderButton.managedProperty().bind(cancelOrderButton.visibleProperty());
+    private final class ActionsCell extends TableCell<SalesOrder, Void> {
+
+        @Override
+        protected void updateItem(Void item, boolean empty) {
+            super.updateItem(item, empty);
+            SalesOrder order = orderOfThisRow(empty);
+            if (order == null) {
+                setGraphic(null);
+                return;
+            }
+            HBox actions = new HBox(6.0);
+            actions.setAlignment(Pos.CENTER_LEFT);
+            if (order.canTransitionTo(SalesOrder.STATUS_SHIPPED)) {
+                actions.getChildren().add(actionButton("Marcar enviado", false,
+                        () -> changeStatus(order, SalesOrder.STATUS_SHIPPED)));
+            }
+            if (order.canTransitionTo(SalesOrder.STATUS_DELIVERED)) {
+                actions.getChildren().add(actionButton("Marcar entregado", false,
+                        () -> changeStatus(order, SalesOrder.STATUS_DELIVERED)));
+            }
+            if (order.canTransitionTo(SalesOrder.STATUS_CANCELLED)) {
+                actions.getChildren().add(actionButton("Cancelar", true,
+                        () -> onCancelOrder(order)));
+            }
+            setGraphic(actions.getChildren().isEmpty() ? null : actions);
+        }
+
+        private SalesOrder orderOfThisRow(boolean empty) {
+            if (empty || getTableView() == null || getTableView().getItems() == null) {
+                return null;
+            }
+            int index = getIndex();
+            if (index < 0 || index >= getTableView().getItems().size()) {
+                return null;
+            }
+            return getTableView().getItems().get(index);
+        }
     }
 
-    private BooleanBinding transitionAvailable(String status) {
-        return Bindings.createBooleanBinding(
-                () -> viewModel.availableTransitions().contains(status),
-                viewModel.availableTransitions());
+    private static Button actionButton(String text, boolean danger, Runnable action) {
+        Button button = new Button(text);
+        button.getStyleClass().add("table-action-button");
+        if (danger) {
+            button.getStyleClass().add("table-action-button-danger");
+        }
+        button.setOnAction(event -> action.run());
+        return button;
+    }
+
+    /** Selects the row the button belongs to, then delegates the transition. */
+    private void changeStatus(SalesOrder order, String newStatus) {
+        viewModel.selectedOrderProperty().set(order);
+        viewModel.changeStatus(newStatus);
+    }
+
+    /** Cancels the given order after a destructive confirmation (RNF-05). */
+    private void onCancelOrder(SalesOrder order) {
+        Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
+        alert.setTitle("Monte ERP");
+        alert.setHeaderText("Cancelar el pedido #" + order.getId());
+        alert.setContentText("El pedido quedará cancelado y no podrá volver a cambiar de estado."
+                + " ¿Quieres continuar?");
+        alert.showAndWait()
+                .filter(button -> button == ButtonType.OK)
+                .ifPresent(button -> changeStatus(order, SalesOrder.STATUS_CANCELLED));
     }
 
     /** Stock hint of the chosen product: no text without a selection. */
@@ -380,31 +431,6 @@ public class SalesOrdersView implements FxmlView<SalesOrdersViewModel> {
     @FXML
     private void onNewOrder() {
         viewModel.newOrder();
-    }
-
-    /** RF-08: marks the selected order as shipped (only offered while pending). */
-    @FXML
-    private void onMarkShipped() {
-        viewModel.changeStatus(SalesOrder.STATUS_SHIPPED);
-    }
-
-    /** RF-08: marks the selected order as delivered (only offered while shipped). */
-    @FXML
-    private void onMarkDelivered() {
-        viewModel.changeStatus(SalesOrder.STATUS_DELIVERED);
-    }
-
-    /** RF-08: cancels the selected order after a destructive confirmation (RNF-05). */
-    @FXML
-    private void onCancelOrder() {
-        Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
-        alert.setTitle("Monte ERP");
-        alert.setHeaderText("Cancelar el pedido");
-        alert.setContentText("El pedido quedará cancelado y no podrá volver a cambiar de estado."
-                + " ¿Quieres continuar?");
-        alert.showAndWait()
-                .filter(button -> button == ButtonType.OK)
-                .ifPresent(button -> viewModel.changeStatus(SalesOrder.STATUS_CANCELLED));
     }
 
     @FXML
