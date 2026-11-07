@@ -4,6 +4,7 @@ import com.entidaddesconocida.monte_erp.domain.model.Customer;
 import com.entidaddesconocida.monte_erp.domain.model.Product;
 import com.entidaddesconocida.monte_erp.domain.model.ReportPeriod;
 import com.entidaddesconocida.monte_erp.domain.model.SalesOrder;
+import com.entidaddesconocida.monte_erp.domain.model.SalesOrderFilter;
 import com.entidaddesconocida.monte_erp.domain.model.SalesOrderLine;
 import com.entidaddesconocida.monte_erp.domain.model.SalesReportLine;
 import com.entidaddesconocida.monte_erp.domain.model.StockIssue;
@@ -268,10 +269,76 @@ class MySqlSalesOrderRepositoryTest {
         assertEquals(0, new BigDecimal("36.50").compareTo(order.getTotal()));
         assertEquals("Acme", order.getCustomer().getName());
 
-        String sql = fake.executedStatements().get(0);
+        String sql = fake.preparedSql().get(0);
         assertTrue(sql.contains("FROM SALES_ORDER"));
         assertTrue(sql.contains("JOIN CUSTOMER"));
         assertTrue(sql.contains("ORDER BY o.order_date DESC"));
+
+        // No filter: every guard binds NULL, so the same statement serves the
+        // whole history without concatenating SQL.
+        Map<Integer, Object> parameters = fake.boundParameters().get(0);
+        for (int index = 1; index <= 8; index++) {
+            assertNull(parameters.get(index), "parámetro " + index + " debe ser NULL");
+        }
+    }
+
+    @Test
+    @DisplayName("findAll enlaza el rango de fechas, el cliente y el estado en la consulta")
+    void findAllBindsEveryFilter() throws SQLException {
+        SalesOrderFilter filter = SalesOrderFilter.of(LocalDate.of(2024, 1, 1),
+                LocalDate.of(2024, 1, 31), 3, SalesOrder.STATUS_PENDING);
+
+        List<SalesOrder> orders = repository.findAll(filter);
+
+        assertTrue(orders.isEmpty());
+        String sql = fake.preparedSql().get(0);
+        assertTrue(sql.contains("WHERE (? IS NULL OR o.order_date >= ?)"));
+        assertTrue(sql.contains("(? IS NULL OR o.order_date < DATE_ADD(?, INTERVAL 1 DAY))"));
+        assertTrue(sql.contains("(? IS NULL OR o.customer_id = ?)"));
+        assertTrue(sql.contains("(? IS NULL OR o.status = ?)"));
+
+        Map<Integer, Object> parameters = fake.boundParameters().get(0);
+        assertEquals(java.sql.Date.valueOf(LocalDate.of(2024, 1, 1)), parameters.get(1));
+        assertEquals(java.sql.Date.valueOf(LocalDate.of(2024, 1, 1)), parameters.get(2));
+        assertEquals(java.sql.Date.valueOf(LocalDate.of(2024, 1, 31)), parameters.get(3));
+        assertEquals(java.sql.Date.valueOf(LocalDate.of(2024, 1, 31)), parameters.get(4));
+        assertEquals(3, parameters.get(5));
+        assertEquals(3, parameters.get(6));
+        assertEquals(SalesOrder.STATUS_PENDING, parameters.get(7));
+        assertEquals(SalesOrder.STATUS_PENDING, parameters.get(8));
+    }
+
+    @Test
+    @DisplayName("findAll con un solo criterio deja NULL los demás")
+    void findAllBindsOnlyTheGivenCriterion() throws SQLException {
+        repository.findAll(SalesOrderFilter.of(null, null, 7, null));
+
+        Map<Integer, Object> parameters = fake.boundParameters().get(0);
+        for (int index : List.of(1, 2, 3, 4, 7, 8)) {
+            assertNull(parameters.get(index), "parámetro " + index + " debe ser NULL");
+        }
+        assertEquals(7, parameters.get(5));
+        assertEquals(7, parameters.get(6));
+    }
+
+    @Test
+    @DisplayName("findAll() sin filtro consulta el histórico completo")
+    void findAllWithoutArgumentsUsesTheWholeHistory() throws SQLException {
+        fake.withRows(FakeJdbc.row(
+                "id", 5,
+                "order_date", Timestamp.valueOf(LocalDateTime.of(2024, 5, 1, 10, 30)),
+                "status", SalesOrder.STATUS_DELIVERED,
+                "total", new BigDecimal("36.50"),
+                "customer_id", 3,
+                "customer_name", "Acme"));
+
+        List<SalesOrder> orders = repository.findAll();
+
+        assertEquals(1, orders.size());
+        Map<Integer, Object> parameters = fake.boundParameters().get(0);
+        for (int index = 1; index <= 8; index++) {
+            assertNull(parameters.get(index), "parámetro " + index + " debe ser NULL");
+        }
     }
 
     @Test

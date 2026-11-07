@@ -2,6 +2,7 @@ package com.entidaddesconocida.monte_erp.domain.repository;
 
 import com.entidaddesconocida.monte_erp.domain.model.ReportPeriod;
 import com.entidaddesconocida.monte_erp.domain.model.SalesOrder;
+import com.entidaddesconocida.monte_erp.domain.model.SalesOrderFilter;
 import com.entidaddesconocida.monte_erp.domain.model.SalesOrderLine;
 import com.entidaddesconocida.monte_erp.domain.model.SalesReportLine;
 import com.entidaddesconocida.monte_erp.domain.model.StockIssue;
@@ -42,8 +43,19 @@ public interface SalesOrderRepository {
      */
     int insert(SalesOrder order) throws SQLException, InsufficientStockException;
 
-    /** Every order, most recent first (the read-only history). */
-    List<SalesOrder> findAll() throws SQLException;
+    /**
+     * Orders matching {@code filter}, most recent first (the read-only history).
+     * The filtering happens <strong>in the query</strong>: an absent criterion
+     * means "no bound" and the date range is compared by day with both bounds
+     * inclusive (the adapter translates the upper bound to
+     * {@code < to + 1 day}).
+     */
+    List<SalesOrder> findAll(SalesOrderFilter filter) throws SQLException;
+
+    /** Every order, most recent first; equivalent to {@code findAll(SalesOrderFilter.all())}. */
+    default List<SalesOrder> findAll() throws SQLException {
+        return findAll(SalesOrderFilter.all());
+    }
 
     /** Lines of the given order, with their product, ordered by line id. */
     List<SalesOrderLine> findLines(int salesOrderId) throws SQLException;

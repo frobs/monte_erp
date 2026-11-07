@@ -5,6 +5,7 @@ import com.entidaddesconocida.monte_erp.domain.model.Product;
 import com.entidaddesconocida.monte_erp.domain.model.Purchase;
 import com.entidaddesconocida.monte_erp.domain.model.ReportPeriod;
 import com.entidaddesconocida.monte_erp.domain.model.SalesOrder;
+import com.entidaddesconocida.monte_erp.domain.model.SalesOrderFilter;
 import com.entidaddesconocida.monte_erp.domain.model.SalesOrderLine;
 import com.entidaddesconocida.monte_erp.domain.model.SalesReportLine;
 import com.entidaddesconocida.monte_erp.domain.model.Stock;
@@ -30,10 +31,13 @@ import java.util.Set;
  * makes every method throw {@link SQLException} and {@link #failOn(String)} fails
  * only one. The double stores <em>copies</em> so a bug in the ViewModel cannot
  * mutate the fixtures, and it mimics the database: {@link #insert(SalesOrder)}
- * assigns the generated id, {@link #findAll()} returns the orders most recent
- * first and {@link #changeStatus(int, String, String)} applies the same
+ * assigns the generated id, {@link #findAll(SalesOrderFilter)} returns the orders
+ * most recent first, filtering in memory exactly like the SQL guards of the real
+ * adapter, and {@link #changeStatus(int, String, String)} applies the same
  * optimistic guard as the {@code UPDATE ... WHERE id = ? AND status = ?}: it
- * returns 1 only when the stored status still matches {@code currentStatus}.</p>
+ * returns 1 only when the stored status still matches {@code currentStatus}. It
+ * also records the last filter and the number of queries, so the tests can
+ * prove the ViewModel filters <strong>in the query</strong>.</p>
  */
 public class FakeSalesOrderRepository implements SalesOrderRepository {
 
@@ -45,6 +49,8 @@ public class FakeSalesOrderRepository implements SalesOrderRepository {
     private boolean throwOnAccess;
     private InsufficientStockException insufficientStock;
     private int nextId = 1;
+    private SalesOrderFilter lastFilter = SalesOrderFilter.all();
+    private int findAllCalls;
 
     /** Stores a pre-existing order (and its lines) as if it came from the database. */
     public FakeSalesOrderRepository withOrder(SalesOrder order) {
@@ -98,6 +104,16 @@ public class FakeSalesOrderRepository implements SalesOrderRepository {
         return this;
     }
 
+    /** Filter of the last {@code findAll} query, for the assertions. */
+    public SalesOrderFilter lastFilter() {
+        return lastFilter;
+    }
+
+    /** Number of {@code findAll} queries issued so far. */
+    public int findAllCalls() {
+        return findAllCalls;
+    }
+
     private void maybeThrow(String method) throws SQLException {
         if (throwOnAccess || failingMethods.contains(method) || failingNextCalls.remove(method)) {
             throw new SQLException("Simulated database failure in " + method);
@@ -121,10 +137,13 @@ public class FakeSalesOrderRepository implements SalesOrderRepository {
     }
 
     @Override
-    public List<SalesOrder> findAll() throws SQLException {
+    public List<SalesOrder> findAll(SalesOrderFilter filter) throws SQLException {
         maybeThrow("findAll");
+        lastFilter = filter;
+        findAllCalls++;
         List<SalesOrder> result = new ArrayList<>();
         orders.values().stream()
+                .filter(order -> matches(order, filter))
                 .sorted(Comparator.comparing(SalesOrder::getOrderDate).reversed()
                         .thenComparing(Comparator.comparingInt(SalesOrder::getId).reversed()))
                 .forEach(order -> {
@@ -133,6 +152,23 @@ public class FakeSalesOrderRepository implements SalesOrderRepository {
                     result.add(copy);
                 });
         return result;
+    }
+
+    /**
+     * Mirrors the SQL guards: an absent criterion does not filter, the date range
+     * compares by day with both bounds inclusive, and a customer without an id
+     * can never match a customer filter.
+     */
+    private static boolean matches(SalesOrder order, SalesOrderFilter filter) {
+        if (!filter.period().isEmpty()
+                && !filter.period().contains(order.getOrderDate())) {
+            return false;
+        }
+        if (filter.customerId() != null && (order.getCustomer() == null
+                || order.getCustomer().getId() != filter.customerId())) {
+            return false;
+        }
+        return filter.status() == null || filter.status().equals(order.getStatus());
     }
 
     @Override

@@ -5,6 +5,7 @@ import com.entidaddesconocida.monte_erp.domain.model.Product;
 import com.entidaddesconocida.monte_erp.domain.model.Purchase;
 import com.entidaddesconocida.monte_erp.domain.model.ReportPeriod;
 import com.entidaddesconocida.monte_erp.domain.model.SalesOrder;
+import com.entidaddesconocida.monte_erp.domain.model.SalesOrderFilter;
 import com.entidaddesconocida.monte_erp.domain.model.SalesOrderLine;
 import com.entidaddesconocida.monte_erp.domain.model.SalesReportLine;
 import com.entidaddesconocida.monte_erp.domain.model.Stock;
@@ -85,6 +86,10 @@ public class MySqlSalesOrderRepository implements SalesOrderRepository {
             SELECT o.id, o.order_date, o.status, o.total, o.customer_id, c.name AS customer_name
               FROM SALES_ORDER o
               JOIN CUSTOMER c ON c.id = o.customer_id
+             WHERE (? IS NULL OR o.order_date >= ?)
+               AND (? IS NULL OR o.order_date < DATE_ADD(?, INTERVAL 1 DAY))
+               AND (? IS NULL OR o.customer_id = ?)
+               AND (? IS NULL OR o.status = ?)
              ORDER BY o.order_date DESC, o.id DESC
             """;
     private static final String SELECT_LINES = """
@@ -173,12 +178,24 @@ public class MySqlSalesOrderRepository implements SalesOrderRepository {
     }
 
     @Override
-    public List<SalesOrder> findAll() throws SQLException {
+    public List<SalesOrder> findAll(SalesOrderFilter filter) throws SQLException {
         List<SalesOrder> orders = new ArrayList<>();
-        try (Statement statement = DatabaseConnection.getConnection().createStatement();
-             ResultSet rs = statement.executeQuery(SELECT_ORDERS)) {
-            while (rs.next()) {
-                orders.add(mapOrder(rs));
+        try (PreparedStatement ps = DatabaseConnection.getConnection()
+                .prepareStatement(SELECT_ORDERS)) {
+            // Both placeholders of each guard receive the same value, so a null
+            // criterion disables its comparison instead of filtering by NULL.
+            bindDate(ps, 1, filter.period().from());
+            bindDate(ps, 2, filter.period().from());
+            bindDate(ps, 3, filter.period().to());
+            bindDate(ps, 4, filter.period().to());
+            bindInt(ps, 5, filter.customerId());
+            bindInt(ps, 6, filter.customerId());
+            bindString(ps, 7, filter.status());
+            bindString(ps, 8, filter.status());
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    orders.add(mapOrder(rs));
+                }
             }
         }
         return orders;
@@ -237,6 +254,25 @@ public class MySqlSalesOrderRepository implements SalesOrderRepository {
             ps.setNull(index, Types.DATE);
         } else {
             ps.setDate(index, java.sql.Date.valueOf(date));
+        }
+    }
+
+    /** Binds an optional integer (the customer id), using SQL NULL when absent. */
+    private static void bindInt(PreparedStatement ps, int index, Integer value) throws SQLException {
+        if (value == null) {
+            ps.setNull(index, Types.INTEGER);
+        } else {
+            ps.setInt(index, value);
+        }
+    }
+
+    /** Binds an optional string (the status), using SQL NULL when absent. */
+    private static void bindString(PreparedStatement ps, int index, String value)
+            throws SQLException {
+        if (value == null) {
+            ps.setNull(index, Types.VARCHAR);
+        } else {
+            ps.setString(index, value);
         }
     }
 
