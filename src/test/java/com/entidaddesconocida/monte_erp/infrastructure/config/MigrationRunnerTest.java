@@ -83,7 +83,7 @@ class MigrationRunnerTest {
     }
 
     @Test
-    @DisplayName("The V1, V4, V8 and V9 scripts are discovered on the classpath (exploded or inside a JAR)")
+    @DisplayName("The V1, V4, V8, V9 and V10 scripts are discovered on the classpath (exploded or inside a JAR)")
     void discoversScripts() throws Exception {
         List<String> scripts = MigrationRunner.discoverScripts();
         assertTrue(scripts.contains("V1__schema.sql"), "scripts found: " + scripts);
@@ -96,5 +96,7 @@ class MigrationRunnerTest {
         // The purchase history filter relies on the V9 index to keep the filtered
         // queries cheap on a long history.
         assertTrue(scripts.contains("V9__purchase_filter_index.sql"), "scripts found: " + scripts);
+        // The sales-order history filter relies on the V10 index in the same way.
+        assertTrue(scripts.contains("V10__sales_order_filter_index.sql"), "scripts found: " + scripts);
     }
 }
