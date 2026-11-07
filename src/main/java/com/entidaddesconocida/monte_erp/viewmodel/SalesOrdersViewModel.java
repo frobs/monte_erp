@@ -4,6 +4,7 @@ import com.entidaddesconocida.monte_erp.app.SessionValidator;
 import com.entidaddesconocida.monte_erp.domain.model.Customer;
 import com.entidaddesconocida.monte_erp.domain.model.Product;
 import com.entidaddesconocida.monte_erp.domain.model.SalesOrder;
+import com.entidaddesconocida.monte_erp.domain.model.SalesOrderFilter;
 import com.entidaddesconocida.monte_erp.domain.model.SalesOrderLine;
 import com.entidaddesconocida.monte_erp.domain.model.Stock;
 import com.entidaddesconocida.monte_erp.domain.model.StockIssue;
@@ -33,6 +34,7 @@ import javafx.collections.ObservableList;
 
 import java.math.BigDecimal;
 import java.sql.SQLException;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -56,6 +58,12 @@ import java.util.logging.Logger;
  * re-reads the lots under lock and may still reject the order). The detail of a
  * selected order also loads the consumed lots ({@link SalesOrderRepository#findIssues(int)}, RF-15).</p>
  *
+ * <p>The history can be filtered by date range, customer and status. The criteria
+ * travel to the database as a {@link SalesOrderFilter}: every change runs
+ * {@code findAll(filter)}, so nothing is filtered in memory. An inverted range is
+ * rejected in the domain before any query is issued, and every reload drops the
+ * selection so a filtered-out order never keeps its detail on screen.</p>
+ *
  * <p>Like the CRUD ViewModels it is free of ValidatorFX: the per-field rules are
  * exposed as one error property per field, so it stays testable with plain JUnit
  * and no JavaFX toolkit.</p>
@@ -73,6 +81,14 @@ public class SalesOrdersViewModel implements ViewModel {
     private static final BigDecimal MAX_STORED_TOTAL = new BigDecimal("99999999.99");
     private static final String TOTAL_LIMIT_ERROR =
             "El total del pedido no puede superar 99.999.999,99 €.";
+
+    /** Message shown when the "desde" date is after the "hasta" date. */
+    protected static final String PERIOD_ERROR =
+            "La fecha «desde» no puede ser posterior a la fecha «hasta».";
+
+    /** Shown when the order was saved but the filter hides the history. */
+    private static final String SAVED_WITH_BAD_FILTER =
+            "Pedido #%d guardado correctamente. Corrige el filtro para verlo en el histórico.";
 
     /** No customer chosen when saving an order. */
     protected static final String CUSTOMER_REQUIRED = "Selecciona un cliente.";
@@ -133,6 +149,21 @@ public class SalesOrdersViewModel implements ViewModel {
     /** RF-08: statuses reachable from the selected order, in button order. */
     private final ObservableList<String> availableTransitions = FXCollections.observableArrayList();
 
+    // History filters: they travel to the database, so every change re-runs
+    // findAll(filter) instead of filtering the loaded list in memory.
+    private final ObjectProperty<LocalDate> fromDate = new SimpleObjectProperty<>();
+    private final ObjectProperty<LocalDate> toDate = new SimpleObjectProperty<>();
+    private final ObjectProperty<Customer> customerFilter = new SimpleObjectProperty<>();
+    private final ObjectProperty<String> statusFilter = new SimpleObjectProperty<>();
+    private final ObservableList<Customer> customerFilterOptions =
+            FXCollections.observableArrayList();
+    private final ObservableList<String> statusFilterOptions = FXCollections.observableArrayList(
+            SalesOrder.STATUS_PENDING, SalesOrder.STATUS_SHIPPED,
+            SalesOrder.STATUS_DELIVERED, SalesOrder.STATUS_CANCELLED);
+
+    /** Guards a batched filter reset so it issues a single query. */
+    private boolean suppressReload;
+
     private final StringProperty errorMessage = new SimpleStringProperty("");
     private final StringProperty statusMessage = new SimpleStringProperty("");
     private final ReadOnlyStringWrapper customerError = new ReadOnlyStringWrapper("");
@@ -164,6 +195,12 @@ public class SalesOrdersViewModel implements ViewModel {
         // The view shows the available units of the chosen product and caps the
         // quantity field with them, so the stock is refreshed on every change.
         selectedProduct.addListener((observable, previous, product) -> refreshAvailableStock(product));
+        // Every filter change runs one query; the DatePicker only fires when the
+        // user commits a value, so this is one reload per deliberate change.
+        fromDate.addListener((observable, oldValue, newValue) -> onFilterChanged());
+        toDate.addListener((observable, oldValue, newValue) -> onFilterChanged());
+        customerFilter.addListener((observable, oldValue, newValue) -> onFilterChanged());
+        statusFilter.addListener((observable, oldValue, newValue) -> onFilterChanged());
     }
 
     /** Active customers offered in the combo (decision: an inactive one cannot be assigned). */
@@ -236,6 +273,40 @@ public class SalesOrdersViewModel implements ViewModel {
         return availableTransitions;
     }
 
+    /** Lower bound of the history filter; {@code null} means "unbounded". */
+    public ObjectProperty<LocalDate> fromDateProperty() {
+        return fromDate;
+    }
+
+    /** Upper bound of the history filter; {@code null} means "unbounded". */
+    public ObjectProperty<LocalDate> toDateProperty() {
+        return toDate;
+    }
+
+    /** Customer filter; {@code null} means "every customer". */
+    public ObjectProperty<Customer> customerFilterProperty() {
+        return customerFilter;
+    }
+
+    /** Status filter ({@code SalesOrder.STATUS_*}); {@code null} means "every status". */
+    public ObjectProperty<String> statusFilterProperty() {
+        return statusFilter;
+    }
+
+    /**
+     * Customers offered by the filter: every one, active or not, so an old order
+     * of a customer given up can still be listed (like RF-11 and the purchase
+     * filter).
+     */
+    public ObservableList<Customer> customerFilterOptions() {
+        return customerFilterOptions;
+    }
+
+    /** Statuses offered by the filter, in domain order. */
+    public ObservableList<String> statusFilterOptions() {
+        return statusFilterOptions;
+    }
+
     public StringProperty errorMessageProperty() {
         return errorMessage;
     }
@@ -265,7 +336,7 @@ public class SalesOrdersViewModel implements ViewModel {
         return linesError.getReadOnlyProperty();
     }
 
-    /** Loads the combos and the history, and resets the draft order. */
+    /** Loads the combos, the filter options and the filtered history. */
     public void load() {
         errorMessage.set("");
         statusMessage.set("");
@@ -274,21 +345,83 @@ public class SalesOrdersViewModel implements ViewModel {
         }
         try {
             customers.setAll(customerRepository.findActive());
+            // The filter lists every customer: an inactive one still bought from us.
+            customerFilterOptions.setAll(customerRepository.findAll());
             products.setAll(productRepository.findAll());
-            orders.setAll(salesOrderRepository.findAll());
         } catch (SQLException e) {
             LOGGER.log(Level.SEVERE, "Could not load the sales orders", e);
             fail(DATABASE_ERROR);
             return;
         }
         resetDraft();
-        // The history is reloaded, so a previously selected order is no longer
-        // guaranteed to be in the table: drop the selection and its detail.
+        clearFieldErrors();
+        reloadHistory();
+    }
+
+    /** Drops every filter and re-queries the whole history. */
+    public void clearFilters() {
+        suppressReload = true;
+        try {
+            fromDate.set(null);
+            toDate.set(null);
+            customerFilter.set(null);
+            statusFilter.set(null);
+        } finally {
+            suppressReload = false;
+        }
+        reloadHistory();
+    }
+
+    /**
+     * Runs the query of the current filter and drops the selection, because a
+     * filtered-out order must not stay selected with its detail on screen.
+     * Returns {@code false} when the history could not be refreshed: the error
+     * message is already set and the caller decides how to report its write.
+     */
+    private boolean reloadHistory() {
+        SalesOrderFilter filter;
+        try {
+            filter = currentFilter();
+        } catch (IllegalArgumentException e) {
+            orders.clear();
+            clearSelection();
+            fail(PERIOD_ERROR);
+            return false;
+        }
+        // A corrected range must clear the message that rejected the old one.
+        if (PERIOD_ERROR.equals(errorMessage.get())) {
+            errorMessage.set("");
+        }
+        try {
+            orders.setAll(salesOrderRepository.findAll(filter));
+        } catch (SQLException e) {
+            LOGGER.log(Level.SEVERE, "Could not load the sales orders", e);
+            orders.clear();
+            clearSelection();
+            fail(DATABASE_ERROR);
+            return false;
+        }
+        clearSelection();
+        return true;
+    }
+
+    private void onFilterChanged() {
+        if (!suppressReload) {
+            reloadHistory();
+        }
+    }
+
+    private SalesOrderFilter currentFilter() {
+        Customer customer = customerFilter.get();
+        return SalesOrderFilter.of(fromDate.get(), toDate.get(),
+                customer == null ? null : customer.getId(), statusFilter.get());
+    }
+
+    private void clearSelection() {
         selectedOrder.set(null);
         selectedOrderLines.clear();
         selectedOrderIssues.clear();
         availableTransitions.clear();
-        clearFieldErrors();
     }
 
     /**
@@ -404,11 +537,13 @@ public class SalesOrdersViewModel implements ViewModel {
         // independent history read so a reload failure cannot cause a duplicate.
         resetDraft();
         clearFieldErrors();
-        try {
-            orders.setAll(salesOrderRepository.findAll());
+        if (reloadHistory()) {
             succeed("Pedido #" + id + " guardado correctamente.");
-        } catch (SQLException e) {
-            LOGGER.log(Level.WARNING, "Sales order was saved but its history could not be reloaded", e);
+        } else if (PERIOD_ERROR.equals(errorMessage.get())) {
+            // The write succeeded; only the filter hides the history.
+            statusMessage.set(String.format(SAVED_WITH_BAD_FILTER, id));
+        } else {
+            LOGGER.log(Level.WARNING, "Sales order was saved but its history could not be reloaded");
             fail(String.format(SAVE_RELOAD_ERROR, id));
         }
     }
@@ -459,17 +594,23 @@ public class SalesOrdersViewModel implements ViewModel {
         try {
             int updated = salesOrderRepository.changeStatus(order.getId(), order.getStatus(), newStatus);
             if (updated == 0) {
-                orders.setAll(salesOrderRepository.findAll());
+                reloadHistory();
                 fail(CONFLICT);
                 return;
             }
             order.changeStatus(newStatus);
-            orders.setAll(salesOrderRepository.findAll());
+            String message = "Pedido #" + order.getId() + " marcado como "
+                    + SalesOrder.labelFor(newStatus) + ".";
+            if (!reloadHistory()) {
+                // The write is committed: confirm it even though the filter or
+                // the database hides the reloaded history.
+                statusMessage.set(message);
+                return;
+            }
             SalesOrder reloaded = findById(order.getId());
             selectedOrder.set(reloaded);
             selectOrder(reloaded);
-            succeed("Pedido #" + order.getId() + " marcado como "
-                    + SalesOrder.labelFor(newStatus) + ".");
+            succeed(message);
         } catch (SQLException e) {
             LOGGER.log(Level.SEVERE, "Could not change the sales order status", e);
             fail(DATABASE_ERROR);
@@ -490,10 +631,7 @@ public class SalesOrdersViewModel implements ViewModel {
             return false;
         }
         orders.clear();
-        selectedOrder.set(null);
-        selectedOrderLines.clear();
-        selectedOrderIssues.clear();
-        availableTransitions.clear();
+        clearSelection();
         resetDraft();
         fail(SESSION_EXPIRED);
         return false;

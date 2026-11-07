@@ -3,6 +3,7 @@ package com.entidaddesconocida.monte_erp.viewmodel;
 import com.entidaddesconocida.monte_erp.domain.model.Customer;
 import com.entidaddesconocida.monte_erp.domain.model.Product;
 import com.entidaddesconocida.monte_erp.domain.model.SalesOrder;
+import com.entidaddesconocida.monte_erp.domain.model.SalesOrderFilter;
 import com.entidaddesconocida.monte_erp.domain.model.SalesOrderLine;
 import com.entidaddesconocida.monte_erp.domain.model.Stock;
 import com.entidaddesconocida.monte_erp.domain.model.StockIssue;
@@ -18,6 +19,7 @@ import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
 import java.sql.SQLException;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -630,5 +632,181 @@ class SalesOrdersViewModelTest {
 
         assertEquals(SalesOrdersViewModel.LINES_REQUIRED, viewModel.linesErrorProperty().get());
         assertEquals(1, salesOrderRepository.findAll().size());
+    }
+
+    // --- History filters (queried in the database) ----------------------
+
+    private SalesOrder storeOrder(LocalDate date, Customer customer, String status) {
+        SalesOrder order = new SalesOrder(0, date.atTime(10, 0), status,
+                new BigDecimal("20.00"), customer, user(), List.of());
+        salesOrderRepository.withOrder(order);
+        return order;
+    }
+
+    /** Three orders in two months, from three customers, in three statuses. */
+    private void loadThreeOrders() {
+        storeOrder(LocalDate.of(2024, 1, 15), ACME, SalesOrder.STATUS_PENDING);
+        storeOrder(LocalDate.of(2024, 2, 15), GLOBEX, SalesOrder.STATUS_SHIPPED);
+        storeOrder(LocalDate.of(2024, 2, 29), INACTIVE, SalesOrder.STATUS_DELIVERED);
+        viewModel.load();
+    }
+
+    @Test
+    @DisplayName("El filtro de fechas viaja a la consulta y respeta los dos extremos por día")
+    void dateRangeFilterIsQueriedInclusive() {
+        loadThreeOrders();
+
+        viewModel.fromDateProperty().set(LocalDate.of(2024, 2, 15));
+        viewModel.toDateProperty().set(LocalDate.of(2024, 2, 29));
+
+        assertEquals(2, viewModel.orders().size());
+        assertEquals(SalesOrderFilter.of(LocalDate.of(2024, 2, 15), LocalDate.of(2024, 2, 29),
+                null, null), salesOrderRepository.lastFilter());
+    }
+
+    @Test
+    @DisplayName("Un rango invertido avisa, vacía la tabla y no consulta la base de datos")
+    void invertedRangeIsRejectedWithoutQuerying() {
+        loadThreeOrders();
+        viewModel.fromDateProperty().set(LocalDate.of(2024, 3, 1));
+        int calls = salesOrderRepository.findAllCalls();
+
+        viewModel.toDateProperty().set(LocalDate.of(2024, 2, 1));
+
+        assertEquals(SalesOrdersViewModel.PERIOD_ERROR, viewModel.errorMessageProperty().get());
+        assertEquals(0, viewModel.orders().size());
+        assertEquals(calls, salesOrderRepository.findAllCalls());
+    }
+
+    @Test
+    @DisplayName("Corregir el rango limpia el error y vuelve a consultar")
+    void correctedRangeClearsTheError() {
+        loadThreeOrders();
+        viewModel.fromDateProperty().set(LocalDate.of(2024, 1, 1));
+        viewModel.toDateProperty().set(LocalDate.of(2023, 12, 31));
+        assertEquals(SalesOrdersViewModel.PERIOD_ERROR, viewModel.errorMessageProperty().get());
+
+        viewModel.toDateProperty().set(LocalDate.of(2024, 12, 31));
+
+        assertEquals("", viewModel.errorMessageProperty().get());
+        assertEquals(3, viewModel.orders().size());
+    }
+
+    @Test
+    @DisplayName("El filtro de cliente consulta por id, incluso uno dado de baja")
+    void customerFilterIsQueriedById() {
+        loadThreeOrders();
+        assertTrue(viewModel.customerFilterOptions().stream()
+                .anyMatch(customer -> customer.getName().equals("Old")));
+
+        viewModel.customerFilterProperty().set(INACTIVE);
+
+        assertEquals(1, viewModel.orders().size());
+        assertEquals(INACTIVE.getId(), salesOrderRepository.lastFilter().customerId());
+    }
+
+    @Test
+    @DisplayName("El filtro de estado consulta por el valor del dominio")
+    void statusFilterIsQueried() {
+        loadThreeOrders();
+
+        viewModel.statusFilterProperty().set(SalesOrder.STATUS_SHIPPED);
+
+        assertEquals(1, viewModel.orders().size());
+        assertEquals(SalesOrder.STATUS_SHIPPED, salesOrderRepository.lastFilter().status());
+    }
+
+    @Test
+    @DisplayName("Los tres criterios se combinan en una única consulta")
+    void filtersCombineInOneQuery() {
+        loadThreeOrders();
+        int calls = salesOrderRepository.findAllCalls();
+
+        viewModel.fromDateProperty().set(LocalDate.of(2024, 2, 1));
+        viewModel.customerFilterProperty().set(GLOBEX);
+        viewModel.statusFilterProperty().set(SalesOrder.STATUS_SHIPPED);
+
+        assertEquals(1, viewModel.orders().size());
+        assertEquals(calls + 3, salesOrderRepository.findAllCalls());
+        assertEquals(SalesOrderFilter.of(LocalDate.of(2024, 2, 1), null, GLOBEX.getId(),
+                SalesOrder.STATUS_SHIPPED), salesOrderRepository.lastFilter());
+    }
+
+    @Test
+    @DisplayName("clearFilters borra los criterios y hace una sola consulta")
+    void clearFiltersDropsEveryCriterionWithOneQuery() {
+        loadThreeOrders();
+        viewModel.customerFilterProperty().set(GLOBEX);
+        int calls = salesOrderRepository.findAllCalls();
+
+        viewModel.clearFilters();
+
+        assertNull(viewModel.fromDateProperty().get());
+        assertNull(viewModel.toDateProperty().get());
+        assertNull(viewModel.customerFilterProperty().get());
+        assertNull(viewModel.statusFilterProperty().get());
+        assertEquals(3, viewModel.orders().size());
+        assertEquals(SalesOrderFilter.all(), salesOrderRepository.lastFilter());
+        assertEquals(calls + 1, salesOrderRepository.findAllCalls());
+    }
+
+    @Test
+    @DisplayName("Filtrar deja sin selección un pedido que ya no se muestra")
+    void filteringDropsTheSelectionOfAHiddenOrder() {
+        loadThreeOrders();
+        SalesOrder pending = viewModel.orders().stream()
+                .filter(order -> SalesOrder.STATUS_PENDING.equals(order.getStatus()))
+                .findFirst().orElseThrow();
+        viewModel.selectedOrderProperty().set(pending);
+        viewModel.selectOrder(pending);
+        assertEquals(2, viewModel.availableTransitions().size());
+
+        viewModel.statusFilterProperty().set(SalesOrder.STATUS_SHIPPED);
+
+        assertNull(viewModel.selectedOrderProperty().get());
+        assertEquals(0, viewModel.availableTransitions().size());
+        assertEquals(0, viewModel.selectedOrderLines().size());
+    }
+
+    @Test
+    @DisplayName("La consulta de filtros fallida vacía la tabla y muestra el error de conexión")
+    void filterQueryFailureReportsDatabaseError() {
+        loadThreeOrders();
+        salesOrderRepository.failOn("findAll");
+
+        viewModel.statusFilterProperty().set(SalesOrder.STATUS_SHIPPED);
+
+        assertEquals(SalesOrdersViewModel.DATABASE_ERROR, viewModel.errorMessageProperty().get());
+        assertEquals(0, viewModel.orders().size());
+    }
+
+    @Test
+    @DisplayName("Guardar mantiene el filtro activo en la recarga del histórico")
+    void saveReloadsWithTheActiveFilter() {
+        viewModel.statusFilterProperty().set(SalesOrder.STATUS_PENDING);
+        viewModel.selectedCustomerProperty().set(ACME);
+        addLine("Teclado", "1");
+
+        viewModel.save();
+
+        assertEquals(1, viewModel.orders().size());
+        assertEquals(SalesOrder.STATUS_PENDING, salesOrderRepository.lastFilter().status());
+    }
+
+    @Test
+    @DisplayName("Cambiar el estado recarga respetando el filtro y confirma aunque oculte la fila")
+    void changeStatusKeepsTheActiveFilter() {
+        loadThreeOrders();
+        viewModel.statusFilterProperty().set(SalesOrder.STATUS_PENDING);
+        SalesOrder pending = viewModel.orders().get(0);
+        viewModel.selectedOrderProperty().set(pending);
+        viewModel.selectOrder(pending);
+
+        viewModel.changeStatus(SalesOrder.STATUS_SHIPPED);
+
+        assertEquals("", viewModel.errorMessageProperty().get());
+        assertTrue(viewModel.statusMessageProperty().get().contains("marcado como Enviado"));
+        assertEquals(0, viewModel.orders().size());
+        assertEquals(SalesOrder.STATUS_PENDING, salesOrderRepository.lastFilter().status());
     }
 }
