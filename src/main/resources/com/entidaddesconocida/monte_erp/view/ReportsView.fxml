@@ -87,6 +87,8 @@
                                 <HBox alignment="CENTER_LEFT" spacing="10.0">
                                     <Label fx:id="stockTotalsLabel" styleClass="section-title"/>
                                     <Region HBox.hgrow="ALWAYS"/>
+                                    <Button text="Exportar PDF" onAction="#onExportStockPdf"
+                                            styleClass="secondary-button"/>
                                     <Button text="Exportar CSV" onAction="#onExportStock"
                                             styleClass="secondary-button"/>
                                 </HBox>
@@ -120,6 +122,8 @@
                                 <HBox alignment="CENTER_LEFT" spacing="10.0">
                                     <Label fx:id="salesTotalsLabel" styleClass="section-title"/>
                                     <Region HBox.hgrow="ALWAYS"/>
+                                    <Button text="Exportar PDF" onAction="#onExportSalesPdf"
+                                            styleClass="secondary-button"/>
                                     <Button text="Exportar CSV" onAction="#onExportSales"
                                             styleClass="secondary-button"/>
                                 </HBox>

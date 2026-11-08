@@ -238,8 +238,18 @@ public class ReportsView implements FxmlView<ReportsViewModel> {
     }
 
     @FXML
+    private void onExportStockPdf() {
+        exportPdf("informe-stock.pdf", viewModel.stockReportPdf());
+    }
+
+    @FXML
     private void onExportSales() {
         exportCsv("informe-ventas.csv", viewModel.salesReportCsv());
+    }
+
+    @FXML
+    private void onExportSalesPdf() {
+        exportPdf("informe-ventas.pdf", viewModel.salesReportPdf());
     }
 
     @FXML
@@ -261,6 +271,25 @@ public class ReportsView implements FxmlView<ReportsViewModel> {
         try {
             // UTF-8 keeps the accents and the BOM makes Excel open the columns.
             Files.writeString(file.toPath(), content, StandardCharsets.UTF_8);
+            showExported(file);
+        } catch (IOException e) {
+            showExportError(file, e);
+        }
+    }
+
+    /** Same flow for the PDF, whose bytes are already serialised by the ViewModel. */
+    private void exportPdf(String defaultFileName, byte[] content) {
+        FileChooser chooser = new FileChooser();
+        chooser.setTitle("Guardar informe PDF");
+        chooser.setInitialFileName(defaultFileName);
+        chooser.getExtensionFilters().add(
+                new FileChooser.ExtensionFilter("Archivos PDF", "*.pdf"));
+        File file = chooser.showSaveDialog(stockLotsTable.getScene().getWindow());
+        if (file == null) {
+            return;
+        }
+        try {
+            Files.write(file.toPath(), content);
             showExported(file);
         } catch (IOException e) {
             showExportError(file, e);

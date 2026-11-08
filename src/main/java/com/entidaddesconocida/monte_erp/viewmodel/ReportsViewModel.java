@@ -222,6 +222,34 @@ public class ReportsViewModel implements ViewModel {
         return ReportCsv.salesReport(salesRows, salesSummary.get());
     }
 
+    /** PDF bytes of the stock report currently loaded. */
+    public byte[] stockReportPdf() {
+        if (!ensureActiveSession()) {
+            return ReportPdf.stockReport(stockLots, stockSummary.get(), loadedPeriod());
+        }
+        return ReportPdf.stockReport(stockLots, stockSummary.get(), loadedPeriod());
+    }
+
+    /** PDF bytes of the sales report currently loaded. */
+    public byte[] salesReportPdf() {
+        if (!ensureActiveSession()) {
+            return ReportPdf.salesReport(salesRows, salesSummary.get(), loadedPeriod());
+        }
+        return ReportPdf.salesReport(salesRows, salesSummary.get(), loadedPeriod());
+    }
+
+    /**
+     * Period shown in the PDF: the selected one, or the whole history when the
+     * bounds are inverted (the report in memory was not generated with them).
+     */
+    private ReportPeriod loadedPeriod() {
+        try {
+            return period();
+        } catch (IllegalArgumentException e) {
+            return ReportPeriod.all();
+        }
+    }
+
     private void publish(StockReportSummary stock, SalesReportSummary sales) {
         stockSummary.set(stock);
         salesSummary.set(sales);

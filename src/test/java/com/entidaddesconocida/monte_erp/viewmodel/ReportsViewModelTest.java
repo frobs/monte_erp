@@ -13,11 +13,16 @@ import com.entidaddesconocida.monte_erp.viewmodel.support.FakeSalesOrderReposito
 import com.entidaddesconocida.monte_erp.viewmodel.support.FakeStockRepository;
 import com.entidaddesconocida.monte_erp.viewmodel.support.FakeUserRepository;
 
+import com.lowagie.text.pdf.PdfReader;
+import com.lowagie.text.pdf.parser.PdfTextExtractor;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import java.io.IOException;
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -248,5 +253,28 @@ class ReportsViewModelTest {
         assertEquals("Lotes: 1 · Excluidos: 0 · Unidades disponibles: 7 · Valor del stock: 10,50 €",
                 viewModel.stockTotalsProperty().get());
         assertTrue(viewModel.salesReportCsv().contains("Teclado;SKU-1;3;30,00;50;"));
+    }
+
+    @Test
+    @DisplayName("Los informes se exportan a PDF con los mismos datos")
+    void pdfContainsLoadedRows() {
+        viewModel.load();
+
+        byte[] stockPdf = viewModel.stockReportPdf();
+        byte[] salesPdf = viewModel.salesReportPdf();
+
+        assertTrue(new String(stockPdf, 0, 5, StandardCharsets.ISO_8859_1).startsWith("%PDF-"));
+        assertTrue(new String(salesPdf, 0, 5, StandardCharsets.ISO_8859_1).startsWith("%PDF-"));
+        assertTrue(pdfText(stockPdf).contains("Estado compra"));
+        assertTrue(pdfText(stockPdf).contains("Teclado"));
+        assertTrue(pdfText(salesPdf).contains("Unidades vendidas"));
+    }
+
+    private static String pdfText(byte[] pdf) {
+        try (PdfReader reader = new PdfReader(pdf)) {
+            return new PdfTextExtractor(reader).getTextFromPage(1);
+        } catch (IOException e) {
+            throw new IllegalStateException("No se pudo leer el PDF generado", e);
+        }
     }
 }

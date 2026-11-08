@@ -22,6 +22,10 @@
  *       and locate the companion {@code .fxml} resource).</li>
  *   <li>The {@code viewmodel} package is opened to {@code de.saxsys.mvvmfx} so
  *       the framework can instantiate ViewModels and inject {@code @InjectViewModel}.</li>
+ *   <li>{@code com.github.librepdf.openpdf} is an <em>automatic module</em> used
+ *       only to export the reports as PDF; it declares
+ *       {@code Automatic-Module-Name: com.github.librepdf.openpdf} in its
+ *       manifest.</li>
  * </ul>
  */
 module com.entidaddesconocida.monte_erp {
@@ -37,10 +41,12 @@ module com.entidaddesconocida.monte_erp {
     requires eu.hansolo.tilesfx;
 
     requires java.sql;
+    requires java.desktop;
     requires mysql.connector.j;
     requires java.keyring;
 
     requires de.saxsys.mvvmfx;
+    requires com.github.librepdf.openpdf;
 
     opens com.entidaddesconocida.monte_erp.view to de.saxsys.mvvmfx, javafx.fxml;
     opens com.entidaddesconocida.monte_erp.viewmodel to de.saxsys.mvvmfx;
