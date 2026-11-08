@@ -63,7 +63,7 @@
                                 <padding>
                                     <Insets top="14.0" right="14.0" bottom="14.0" left="14.0"/>
                                 </padding>
-                                <Label text="Cada fila es un lote: el valor usa las unidades disponibles."
+                                <Label text="Cada fila es un lote: el valor usa las unidades disponibles. Los lotes de compras devueltas o canceladas salen en rojo y no cuentan en los totales."
                                        styleClass="subtitle" wrapText="true"/>
                                 <TableView fx:id="stockLotsTable" VBox.vgrow="ALWAYS">
                                     <placeholder>
@@ -77,6 +77,8 @@
                                         <TableColumn fx:id="stockAvailableColumn" text="Disponible" prefWidth="90.0"/>
                                         <TableColumn fx:id="stockPurchasePriceColumn" text="P. compra" prefWidth="100.0"/>
                                         <TableColumn fx:id="stockPurchaseColumn" text="Compra" prefWidth="80.0"/>
+                                        <TableColumn fx:id="stockPurchaseStatusColumn" text="Estado compra" prefWidth="120.0"/>
+                                        <TableColumn fx:id="stockReasonColumn" text="Motivo" prefWidth="150.0"/>
                                     </columns>
                                     <columnResizePolicy>
                                         <TableView fx:constant="CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN"/>
@@ -97,7 +99,7 @@
                                 <padding>
                                     <Insets top="14.0" right="14.0" bottom="14.0" left="14.0"/>
                                 </padding>
-                                <Label text="Unidades e importe por producto; los pedidos cancelados no cuentan."
+                                <Label text="Unidades e importe por producto; los pedidos cancelados no cuentan y salen marcados en rojo con su motivo."
                                        styleClass="subtitle" wrapText="true"/>
                                 <TableView fx:id="salesTable" VBox.vgrow="ALWAYS">
                                     <placeholder>
@@ -108,6 +110,8 @@
                                         <TableColumn fx:id="salesSkuColumn" text="SKU" prefWidth="150.0"/>
                                         <TableColumn fx:id="salesUnitsColumn" text="Unidades vendidas" prefWidth="150.0"/>
                                         <TableColumn fx:id="salesRevenueColumn" text="Importe" prefWidth="150.0"/>
+                                        <TableColumn fx:id="salesCancelledUnitsColumn" text="Unidades canceladas" prefWidth="160.0"/>
+                                        <TableColumn fx:id="salesReasonColumn" text="Motivo" prefWidth="200.0"/>
                                     </columns>
                                     <columnResizePolicy>
                                         <TableView fx:constant="CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN"/>

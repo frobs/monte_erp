@@ -61,6 +61,11 @@ class ReportsViewModelTest {
         return new Stock(11, 10, 7, new BigDecimal("1.50"), JANUARY, product(), purchase);
     }
 
+    private static Stock lot(int id, int initial, int available, String purchaseStatus) {
+        Purchase purchase = new Purchase(5, null, purchaseStatus, null, null, null, null);
+        return new Stock(id, initial, available, new BigDecimal("1.50"), JANUARY, product(), purchase);
+    }
+
     private static SalesOrder order(int id, String status, int quantity, String price) {
         Product product = product();
         SalesOrderLine line = new SalesOrderLine(quantity, new BigDecimal(price), product);
@@ -76,9 +81,9 @@ class ReportsViewModelTest {
 
         assertEquals(1, viewModel.stockLots().size());
         assertEquals(1, viewModel.salesRows().size());
-        assertEquals("Lotes: 1 · Unidades disponibles: 7 · Valor del stock: 10,50 €",
+        assertEquals("Lotes: 1 · Excluidos: 0 · Unidades disponibles: 7 · Valor del stock: 10,50 €",
                 viewModel.stockTotalsProperty().get());
-        assertEquals("Pedidos: 1 · Unidades vendidas: 3 · Facturación: 30,00 €",
+        assertEquals("Pedidos: 1 · Pedidos cancelados: 1 · Unidades vendidas: 3 · Facturación: 30,00 €",
                 viewModel.salesTotalsProperty().get());
     }
 
@@ -109,7 +114,7 @@ class ReportsViewModelTest {
 
         assertEquals(0, viewModel.stockLots().size());
         assertEquals(0, viewModel.salesRows().size());
-        assertEquals("Lotes: 0 · Unidades disponibles: 0 · Valor del stock: 0,00 €",
+        assertEquals("Lotes: 0 · Excluidos: 0 · Unidades disponibles: 0 · Valor del stock: 0,00 €",
                 viewModel.stockTotalsProperty().get());
     }
 
@@ -208,5 +213,40 @@ class ReportsViewModelTest {
         String salesCsv = viewModel.salesReportCsv();
         assertTrue(salesCsv.contains("Teclado;SKU-1;3;30,00"));
         assertTrue(salesCsv.contains("Facturación;30,00"));
+    }
+
+    @Test
+    @DisplayName("Un lote de compra devuelta se muestra marcado pero no suma en el total")
+    void returnedLotIsShownButNotTotaled() {
+        stockRepository = new FakeStockRepository()
+                .withLot(1, lot(1, 10, 4, Purchase.STATUS_RECEIVED))
+                .withLot(1, lot(2, 5, 0, Purchase.STATUS_RETURNED))
+                .withLot(1, lot(3, 2, 0, Purchase.STATUS_CANCELLED));
+        viewModel = new ReportsViewModel(salesOrderRepository, stockRepository);
+
+        viewModel.load();
+
+        assertEquals(3, viewModel.stockLots().size());
+        assertEquals("Lotes: 1 · Excluidos: 2 · Unidades disponibles: 4 · Valor del stock: 6,00 €",
+                viewModel.stockTotalsProperty().get());
+        String csv = viewModel.stockReportCsv();
+        assertTrue(csv.contains(";Devuelta;Devuelta al proveedor"));
+        assertTrue(csv.contains(";Cancelada;Compra cancelada"));
+    }
+
+    @Test
+    @DisplayName("Un producto solo con pedidos cancelados aparece marcado y no suma en ventas")
+    void onlyCancelledProductIsShownButNotTotaled() {
+        salesOrderRepository = new FakeSalesOrderRepository()
+                .withOrder(order(1, SalesOrder.STATUS_PENDING, 3, "10.00"))
+                .withOrder(order(2, SalesOrder.STATUS_CANCELLED, 50, "10.00"));
+        viewModel = new ReportsViewModel(salesOrderRepository, stockRepository);
+
+        viewModel.load();
+
+        assertEquals(1, viewModel.salesRows().size());
+        assertEquals("Lotes: 1 · Excluidos: 0 · Unidades disponibles: 7 · Valor del stock: 10,50 €",
+                viewModel.stockTotalsProperty().get());
+        assertTrue(viewModel.salesReportCsv().contains("Teclado;SKU-1;3;30,00;50;"));
     }
 }

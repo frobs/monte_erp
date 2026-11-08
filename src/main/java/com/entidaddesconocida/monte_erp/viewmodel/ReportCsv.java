@@ -6,6 +6,7 @@ import com.entidaddesconocida.monte_erp.domain.model.SalesReportRow;
 import com.entidaddesconocida.monte_erp.domain.model.SalesReportSummary;
 import com.entidaddesconocida.monte_erp.domain.model.Stock;
 import com.entidaddesconocida.monte_erp.domain.model.StockReportSummary;
+import com.entidaddesconocida.monte_erp.domain.service.StockReportCalculator;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -47,7 +48,7 @@ public final class ReportCsv {
     public static String stockReport(List<Stock> lots, StockReportSummary summary) {
         StringBuilder csv = new StringBuilder(BOM);
         appendRow(csv, "Producto", "SKU", "Entrada", "Inicial", "Disponible",
-                "Precio compra", "Compra");
+                "Precio compra", "Compra", "Estado compra", "Motivo");
         if (lots != null) {
             for (Stock lot : lots) {
                 Product product = lot.getProduct();
@@ -57,12 +58,16 @@ public final class ReportCsv {
                 csv.append(lot.getInitialQuantity()).append(SEPARATOR);
                 csv.append(lot.getAvailableQuantity()).append(SEPARATOR);
                 csv.append(escape(money(lot.getPurchasePrice()))).append(SEPARATOR);
-                csv.append(escape(purchaseLabel(lot.getPurchase()))).append(LINE_BREAK);
+                csv.append(escape(purchaseLabel(lot.getPurchase()))).append(SEPARATOR);
+                csv.append(escape(ReportLabels.purchaseStatus(lot))).append(SEPARATOR);
+                csv.append(escape(ReportLabels.availabilityReason(lot))).append(LINE_BREAK);
             }
         }
         StockReportSummary total = summary == null ? StockReportSummary.empty() : summary;
         csv.append(LINE_BREAK);
         appendRow(csv, "Lotes", String.valueOf(total.lotCount()));
+        appendRow(csv, "Lotes excluidos (devueltos o cancelados)",
+                String.valueOf(StockReportCalculator.excludedCount(lots)));
         appendRow(csv, "Unidades disponibles", String.valueOf(total.totalAvailableUnits()));
         appendRow(csv, "Valor del stock", money(total.totalStockValue()));
         return csv.toString();
@@ -71,20 +76,25 @@ public final class ReportCsv {
     /** Serialises the sales report: one row per product plus its totals at the end. */
     public static String salesReport(List<SalesReportRow> rows, SalesReportSummary summary) {
         StringBuilder csv = new StringBuilder(BOM);
-        appendRow(csv, "Producto", "SKU", "Unidades vendidas", "Importe");
+        appendRow(csv, "Producto", "SKU", "Unidades vendidas", "Importe",
+                "Unidades canceladas", "Motivo");
         if (rows != null) {
             for (SalesReportRow row : rows) {
                 Product product = row.getProduct();
                 csv.append(escape(product == null ? "" : product.getName())).append(SEPARATOR);
                 csv.append(escape(product == null ? "" : product.getSku())).append(SEPARATOR);
                 csv.append(row.getUnitsSold()).append(SEPARATOR);
-                csv.append(escape(money(row.getRevenue()))).append(LINE_BREAK);
+                csv.append(escape(money(row.getRevenue()))).append(SEPARATOR);
+                csv.append(row.getCancelledUnits()).append(SEPARATOR);
+                csv.append(escape(ReportLabels.salesReason(row))).append(LINE_BREAK);
             }
         }
         SalesReportSummary total = summary == null ? SalesReportSummary.empty() : summary;
         csv.append(LINE_BREAK);
         appendRow(csv, "Pedidos", String.valueOf(total.orderCount()));
+        appendRow(csv, "Pedidos cancelados", String.valueOf(total.cancelledOrderCount()));
         appendRow(csv, "Unidades vendidas", String.valueOf(total.totalUnits()));
+        appendRow(csv, "Unidades canceladas", String.valueOf(total.cancelledUnits()));
         appendRow(csv, "Facturación", money(total.totalRevenue()));
         return csv.toString();
     }

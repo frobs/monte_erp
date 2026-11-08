@@ -376,3 +376,25 @@
     -fx-border-color: #cbd5e1;
     -fx-border-radius: 0 8 8 8;
 }
+
+/* Lots of a purchase that was returned or cancelled: they still appear in the
+   stock report (to explain the 0 available) but they do not count in the totals,
+   so the whole row is painted in red. The :excluded pseudo-class is set by the
+   row factory of ReportsView; the rules carry one extra class so they win over
+   the zebra and selection rules of the generic table. */
+.table-view .table-row-cell:excluded,
+.table-view .table-row-cell:excluded:odd {
+    -fx-background-color: #fde2e1;
+}
+
+.table-view .table-row-cell:excluded:hover {
+    -fx-background-color: #fbd0ce;
+}
+
+.table-view .table-row-cell:excluded:selected {
+    -fx-background-color: #f7bdb9;
+}
+
+.table-view .table-row-cell:excluded .text {
+    -fx-fill: #7f1d1d;
+}

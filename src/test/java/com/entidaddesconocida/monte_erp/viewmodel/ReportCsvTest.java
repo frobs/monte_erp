@@ -34,9 +34,14 @@ class ReportCsvTest {
 
     private static Stock lot(int id, String name, String sku, int initial, int available,
                              String price) {
+        return lot(id, name, sku, initial, available, price, Purchase.STATUS_RECEIVED);
+    }
+
+    private static Stock lot(int id, String name, String sku, int initial, int available,
+                             String price, String purchaseStatus) {
         Product product = product(name, sku);
         product.setId(1);
-        Purchase purchase = new Purchase(5, null, null, null, null, null, null);
+        Purchase purchase = new Purchase(5, null, purchaseStatus, null, null, null, null);
         return new Stock(id, initial, available, new BigDecimal(price), ENTRY_DATE, product, purchase);
     }
 
@@ -50,12 +55,42 @@ class ReportCsvTest {
 
         assertTrue(csv.startsWith("\uFEFF"));
         List<String> lines = csv.substring(1).lines().toList();
-        assertEquals("Producto;SKU;Entrada;Inicial;Disponible;Precio compra;Compra", lines.get(0));
-        assertEquals("Teclado;SKU-1;15/01/2025 10:30;10;7;1,50;#5", lines.get(1));
+        assertEquals("Producto;SKU;Entrada;Inicial;Disponible;Precio compra;Compra;Estado compra;Motivo",
+                lines.get(0));
+        assertEquals("Teclado;SKU-1;15/01/2025 10:30;10;7;1,50;#5;Recibida;", lines.get(1));
         assertEquals("", lines.get(2));
         assertTrue(lines.contains("Lotes;1"));
+        assertTrue(lines.contains("Lotes excluidos (devueltos o cancelados);0"));
         assertTrue(lines.contains("Unidades disponibles;7"));
         assertTrue(lines.contains("Valor del stock;10,50"));
+    }
+
+    @Test
+    @DisplayName("Una compra devuelta se marca y no suma en los totales del CSV")
+    void returnedPurchaseIsMarkedAndExcludedFromTheTotals() {
+        Stock returned = lot(1, "Teclado", "SKU-1", 10, 0, "1.50", Purchase.STATUS_RETURNED);
+
+        String csv = ReportCsv.stockReport(List.of(returned),
+                StockReportCalculator.summarize(List.of(returned)));
+
+        List<String> lines = csv.substring(1).lines().toList();
+        assertEquals("Teclado;SKU-1;15/01/2025 10:30;10;0;1,50;#5;Devuelta;Devuelta al proveedor",
+                lines.get(1));
+        assertTrue(lines.contains("Lotes;0"));
+        assertTrue(lines.contains("Lotes excluidos (devueltos o cancelados);1"));
+        assertTrue(lines.contains("Unidades disponibles;0"));
+        assertTrue(lines.contains("Valor del stock;0,00"));
+    }
+
+    @Test
+    @DisplayName("Una compra cancelada se marca como cancelada en el CSV")
+    void cancelledPurchaseIsMarked() {
+        Stock cancelled = lot(1, "Teclado", "SKU-1", 4, 0, "2.00", Purchase.STATUS_CANCELLED);
+
+        String csv = ReportCsv.stockReport(List.of(cancelled),
+                StockReportCalculator.summarize(List.of(cancelled)));
+
+        assertTrue(csv.contains(";Cancelada;Compra cancelada"));
     }
 
     @Test
@@ -64,18 +99,39 @@ class ReportCsvTest {
         Product product = product("Teclado", "SKU-1");
         product.setId(1);
         SalesReportSummary summary = new SalesReportSummary(
-                List.of(new SalesReportRow(product, 3, new BigDecimal("30.00"))),
-                2, 3, new BigDecimal("30.00"));
+                List.of(new SalesReportRow(product, 3, new BigDecimal("30.00"), 2,
+                        new BigDecimal("20.00"))),
+                2, 1, 3, new BigDecimal("30.00"));
 
         String csv = ReportCsv.salesReport(summary.rows(), summary);
 
         assertTrue(csv.startsWith("\uFEFF"));
         List<String> lines = csv.substring(1).lines().toList();
-        assertEquals("Producto;SKU;Unidades vendidas;Importe", lines.get(0));
-        assertEquals("Teclado;SKU-1;3;30,00", lines.get(1));
+        assertEquals("Producto;SKU;Unidades vendidas;Importe;Unidades canceladas;Motivo",
+                lines.get(0));
+        assertEquals("Teclado;SKU-1;3;30,00;2;Parte de los pedidos cancelados", lines.get(1));
         assertTrue(lines.contains("Pedidos;2"));
+        assertTrue(lines.contains("Pedidos cancelados;1"));
         assertTrue(lines.contains("Unidades vendidas;3"));
+        assertTrue(lines.contains("Unidades canceladas;2"));
         assertTrue(lines.contains("Facturación;30,00"));
+    }
+
+    @Test
+    @DisplayName("Un producto solo con pedidos cancelados sale marcado y sin importe en el CSV")
+    void productWithOnlyCancelledOrdersIsMarked() {
+        Product product = product("Teclado", "SKU-1");
+        product.setId(1);
+        SalesReportSummary summary = new SalesReportSummary(
+                List.of(new SalesReportRow(product, 0, BigDecimal.ZERO, 4,
+                        new BigDecimal("40.00"))),
+                0, 1, 0, BigDecimal.ZERO);
+
+        String csv = ReportCsv.salesReport(summary.rows(), summary);
+
+        List<String> lines = csv.substring(1).lines().toList();
+        assertEquals("Teclado;SKU-1;0;0,00;4;Todos los pedidos cancelados", lines.get(1));
+        assertTrue(lines.contains("Facturación;0,00"));
     }
 
     @Test
@@ -104,8 +160,9 @@ class ReportCsvTest {
         String csv = ReportCsv.stockReport(List.of(), StockReportSummary.empty());
 
         List<String> lines = csv.substring(1).lines().toList();
-        assertEquals(5, lines.size()); // header + blank + 3 totals
+        assertEquals(6, lines.size()); // header + blank + 4 totals
         assertTrue(lines.contains("Lotes;0"));
+        assertTrue(lines.contains("Lotes excluidos (devueltos o cancelados);0"));
         assertTrue(lines.contains("Unidades disponibles;0"));
         assertFalse(lines.contains("Valor del stock;"));
         assertTrue(lines.contains("Valor del stock;0,00"));
@@ -130,6 +187,8 @@ class ReportCsvTest {
 
         List<String> lines = csv.substring(1).lines().toList();
         assertTrue(lines.contains("Pedidos;0"));
+        assertTrue(lines.contains("Pedidos cancelados;0"));
+        assertTrue(lines.contains("Unidades canceladas;0"));
         assertTrue(lines.contains("Facturación;0,00"));
     }
 }

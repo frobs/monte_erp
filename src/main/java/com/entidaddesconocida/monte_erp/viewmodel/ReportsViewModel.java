@@ -37,10 +37,12 @@ import java.util.logging.Logger;
  * ViewModel of the reports screen (RF-12 / CU-09).
  *
  * <p>It exposes the two reports at once, selected with a {@code TabPane} in the
- * view: the stock-by-lot report (one row per lot) and the sales-by-product report
- * (one aggregated row per product, cancelled orders excluded). The shared period
- * filters both, {@link #load()} aggregates with the pure calculators and the CSV
- * text is produced here so the view only writes the chosen file.</p>
+ * view: the stock-by-lot report (one row per lot, marked in red and left out of
+ * the totals when its purchase was returned or cancelled) and the
+ * sales-by-product report (one aggregated row per product, cancelled orders
+ * excluded). The shared period filters both, {@link #load()} aggregates with the
+ * pure calculators and the exportable CSV text and PDF bytes are produced here
+ * so the view only writes the chosen file.</p>
  *
  * <p>The period is validated <strong>before</strong> querying: an inverted range
  * fills {@link #errorMessageProperty()} and leaves the repository untouched. Like
@@ -224,9 +226,11 @@ public class ReportsViewModel implements ViewModel {
         stockSummary.set(stock);
         salesSummary.set(sales);
         stockTotals.set("Lotes: " + stock.lotCount()
+                + " · Excluidos: " + StockReportCalculator.excludedCount(stockLots)
                 + " · Unidades disponibles: " + stock.totalAvailableUnits()
                 + " · Valor del stock: " + money(stock.totalStockValue()));
         salesTotals.set("Pedidos: " + sales.orderCount()
+                + " · Pedidos cancelados: " + sales.cancelledOrderCount()
                 + " · Unidades vendidas: " + sales.totalUnits()
                 + " · Facturación: " + money(sales.totalRevenue()));
     }
