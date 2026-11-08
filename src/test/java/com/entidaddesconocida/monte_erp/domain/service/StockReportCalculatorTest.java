@@ -1,6 +1,7 @@
 package com.entidaddesconocida.monte_erp.domain.service;
 
 import com.entidaddesconocida.monte_erp.domain.model.Product;
+import com.entidaddesconocida.monte_erp.domain.model.Purchase;
 import com.entidaddesconocida.monte_erp.domain.model.Stock;
 import com.entidaddesconocida.monte_erp.domain.model.StockReportSummary;
 
@@ -19,11 +20,23 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  */
 class StockReportCalculatorTest {
 
-    private static Stock lot(int id, int initial, int available, String price) {
+    private static final LocalDateTime ENTRY = LocalDateTime.of(2025, 1, 1, 10, 0);
+
+    private static Product product() {
         Product product = new Product("Teclado", "SKU-1", null, new BigDecimal("10.00"), 0, null, true);
         product.setId(1);
-        return new Stock(id, initial, available, new BigDecimal(price),
-                LocalDateTime.of(2025, 1, 1, 10, 0), product, null);
+        return product;
+    }
+
+    private static Stock lot(int id, int initial, int available, String price) {
+        return new Stock(id, initial, available, new BigDecimal(price), ENTRY, product(), null);
+    }
+
+    private static Stock lotOfPurchase(int id, int initial, int available, String price,
+                                       String purchaseStatus) {
+        Purchase purchase = new Purchase(7, ENTRY, purchaseStatus, BigDecimal.ZERO, null, null,
+                List.of());
+        return new Stock(id, initial, available, new BigDecimal(price), ENTRY, product(), purchase);
     }
 
     @Test
@@ -72,5 +85,58 @@ class StockReportCalculatorTest {
 
         assertEquals(5, summary.totalAvailableUnits());
         assertEquals(0, BigDecimal.ZERO.compareTo(summary.totalStockValue()));
+    }
+
+    @Test
+    @DisplayName("Los lotes de compras devueltas o canceladas no cuentan en los totales (RF-12)")
+    void returnedOrCancelledLotsAreExcludedFromTheTotals() {
+        List<Stock> lots = List.of(
+                lotOfPurchase(1, 10, 4, "1.50", Purchase.STATUS_RECEIVED),
+                lotOfPurchase(2, 5, 0, "9.00", Purchase.STATUS_RETURNED),
+                lotOfPurchase(3, 2, 0, "9.00", Purchase.STATUS_CANCELLED));
+
+        StockReportSummary summary = StockReportCalculator.summarize(lots);
+
+        assertEquals(1, summary.lotCount());
+        assertEquals(1, summary.lots().size());
+        assertEquals(4, summary.totalAvailableUnits());
+        assertEquals(0, new BigDecimal("6.00").compareTo(summary.totalStockValue()));
+        assertEquals(2, StockReportCalculator.excludedCount(lots));
+    }
+
+    @Test
+    @DisplayName("Un lote pendiente de recibir sí cuenta (no es una devolución)")
+    void pendingLotIsNotExcluded() {
+        List<Stock> lots = List.of(
+                lotOfPurchase(1, 5, 0, "2.00", Purchase.STATUS_PENDING));
+
+        StockReportSummary summary = StockReportCalculator.summarize(lots);
+
+        assertEquals(1, summary.lotCount());
+        assertEquals(0, summary.totalAvailableUnits());
+        assertEquals(0, StockReportCalculator.excludedCount(lots));
+    }
+
+    @Test
+    @DisplayName("Si todo está excluido el resumen queda a cero, no revienta")
+    void allLotsExcludedYieldsEmptySummary() {
+        List<Stock> lots = List.of(
+                lotOfPurchase(1, 5, 0, "2.00", Purchase.STATUS_RETURNED),
+                lotOfPurchase(2, 3, 0, "2.00", Purchase.STATUS_CANCELLED));
+
+        StockReportSummary summary = StockReportCalculator.summarize(lots);
+
+        assertEquals(0, summary.lotCount());
+        assertEquals(0, summary.totalAvailableUnits());
+        assertEquals(0, BigDecimal.ZERO.compareTo(summary.totalStockValue()));
+        assertEquals(2, StockReportCalculator.excludedCount(lots));
+    }
+
+    @Test
+    @DisplayName("excludedCount es 0 sin lotes o sin exclusiones")
+    void excludedCountWithoutExclusionsIsZero() {
+        assertEquals(0, StockReportCalculator.excludedCount(null));
+        assertEquals(0, StockReportCalculator.excludedCount(List.of()));
+        assertEquals(0, StockReportCalculator.excludedCount(List.of(lot(1, 5, 5, "1.00"))));
     }
 }

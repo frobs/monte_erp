@@ -4,6 +4,7 @@ import com.entidaddesconocida.monte_erp.domain.model.Stock;
 import com.entidaddesconocida.monte_erp.domain.model.StockReportSummary;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -15,6 +16,11 @@ import java.util.List;
  * initial one: a lot that has already been sold does not inflate the valuation.
  * Money is a {@link BigDecimal}, never a {@code double}.</p>
  *
+ * <p>The lots whose purchase was <strong>returned or cancelled</strong> are left
+ * out of the totals ({@link Stock#countsInStockReport()}): they stay in the
+ * report, marked, so the 0 available has an explanation, but they are no longer
+ * stock. {@link #excludedCount(List)} counts them for the footer.</p>
+ *
  * <p>Like {@link FifoAllocator} it is a stateless utility: no database, no
  * JavaFX, so the valuation rule is unit tested in isolation.</p>
  */
@@ -25,14 +31,23 @@ public final class StockReportCalculator {
     }
 
     /**
-     * Totals the given lots. {@code null} or an empty list yields an empty
-     * summary with zero totals.
+     * Totals the given lots, ignoring the ones excluded from the report. {@code
+     * null} or an empty list yields an empty summary with zero totals.
      */
     public static StockReportSummary summarize(List<Stock> lots) {
         if (lots == null || lots.isEmpty()) {
             return StockReportSummary.empty();
         }
-        List<Stock> snapshot = List.copyOf(lots);
+        List<Stock> counted = new ArrayList<>();
+        for (Stock lot : lots) {
+            if (lot != null && lot.countsInStockReport()) {
+                counted.add(lot);
+            }
+        }
+        if (counted.isEmpty()) {
+            return StockReportSummary.empty();
+        }
+        List<Stock> snapshot = List.copyOf(counted);
         int totalAvailableUnits = 0;
         BigDecimal totalStockValue = BigDecimal.ZERO;
         for (Stock lot : snapshot) {
@@ -41,5 +56,18 @@ public final class StockReportCalculator {
         }
         return new StockReportSummary(snapshot, snapshot.size(), totalAvailableUnits,
                 totalStockValue);
+    }
+
+    /**
+     * Number of lots the report shows but does not total: those whose purchase
+     * was returned or cancelled. {@code null} yields 0.
+     */
+    public static long excludedCount(List<Stock> lots) {
+        if (lots == null) {
+            return 0;
+        }
+        return lots.stream()
+                .filter(lot -> lot == null || !lot.countsInStockReport())
+                .count();
     }
 }
