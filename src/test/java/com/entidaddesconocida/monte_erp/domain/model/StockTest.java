@@ -5,10 +5,13 @@ import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Unit tests for {@link Stock} (RF-14 / CU-10): the lot invariants that mirror
@@ -113,5 +116,28 @@ class StockTest {
 
         assertThrows(IllegalArgumentException.class, () -> lot.restore(1));
         assertThrows(IllegalArgumentException.class, () -> lot.restore(0));
+    }
+
+    private static Stock lotWithPurchaseStatus(String status) {
+        Purchase purchase = new Purchase(7, LocalDateTime.now(), status, BigDecimal.ZERO,
+                null, null, List.of());
+        return new Stock(1, 5, 5, new BigDecimal("1.00"), LocalDateTime.now(), product(), purchase);
+    }
+
+    @Test
+    @DisplayName("countsInStockReport descarta solo las compras devueltas o canceladas (RF-12)")
+    void onlyReturnedOrCancelledLotsAreExcludedFromTheReport() {
+        assertTrue(lotWithPurchaseStatus(Purchase.STATUS_RECEIVED).countsInStockReport());
+        assertTrue(lotWithPurchaseStatus(Purchase.STATUS_PENDING).countsInStockReport());
+        assertFalse(lotWithPurchaseStatus(Purchase.STATUS_RETURNED).countsInStockReport());
+        assertFalse(lotWithPurchaseStatus(Purchase.STATUS_CANCELLED).countsInStockReport());
+    }
+
+    @Test
+    @DisplayName("Un lote sin compra cargada sigue contando en el informe")
+    void lotWithoutPurchaseStillCounts() {
+        Stock lot = new Stock(1, 5, 5, new BigDecimal("1.00"), LocalDateTime.now(), product(), null);
+
+        assertTrue(lot.countsInStockReport());
     }
 }

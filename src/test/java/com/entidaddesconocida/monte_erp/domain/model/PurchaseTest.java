@@ -127,6 +127,15 @@ class PurchaseTest {
     }
 
     @Test
+    @DisplayName("isReturnedOrCancelled marca los estados que ya no son stock (RF-12)")
+    void returnedOrCancelledAreNoLongerStock() {
+        assertFalse(purchaseWithStatus(Purchase.STATUS_PENDING).isReturnedOrCancelled());
+        assertFalse(purchaseWithStatus(Purchase.STATUS_RECEIVED).isReturnedOrCancelled());
+        assertTrue(purchaseWithStatus(Purchase.STATUS_RETURNED).isReturnedOrCancelled());
+        assertTrue(purchaseWithStatus(Purchase.STATUS_CANCELLED).isReturnedOrCancelled());
+    }
+
+    @Test
     @DisplayName("canTransitionTo rechaza repetición, retroceso, destino desconocido y null")
     void canTransitionToRejectsInvalidTargets() {
         Purchase pending = purchaseWithStatus(Purchase.STATUS_PENDING);

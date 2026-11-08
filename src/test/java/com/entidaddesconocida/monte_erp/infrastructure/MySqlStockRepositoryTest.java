@@ -1,5 +1,6 @@
 package com.entidaddesconocida.monte_erp.infrastructure;
 
+import com.entidaddesconocida.monte_erp.domain.model.Purchase;
 import com.entidaddesconocida.monte_erp.domain.model.ReportPeriod;
 import com.entidaddesconocida.monte_erp.domain.model.Stock;
 import com.entidaddesconocida.monte_erp.domain.model.StockLevel;
@@ -61,6 +62,11 @@ class MySqlStockRepositoryTest {
     }
 
     private static FakeJdbc.Row lotRow(int id, int initial, int available, int purchaseId) {
+        return lotRow(id, initial, available, purchaseId, Purchase.STATUS_RECEIVED);
+    }
+
+    private static FakeJdbc.Row lotRow(int id, int initial, int available, int purchaseId,
+                                       String purchaseStatus) {
         return FakeJdbc.row(
                 "id", id,
                 "initial_quantity", initial,
@@ -68,6 +74,7 @@ class MySqlStockRepositoryTest {
                 "purchase_price", new BigDecimal("1.50"),
                 "entry_date", ENTRY,
                 "purchase_id", purchaseId,
+                "purchase_status", purchaseStatus,
                 "product_id", 1,
                 "product_name", "Teclado",
                 "product_sku", "SKU-1");
@@ -134,7 +141,7 @@ class MySqlStockRepositoryTest {
     }
 
     @Test
-    @DisplayName("findAllLots uno el producto, filtra por período y ordena por nombre/fecha")
+    @DisplayName("findAllLots uno el producto y la compra, filtra por período y ordena por nombre/fecha")
     void findAllLotsJoinsAndFiltersByPeriod() throws SQLException {
         fake.withRows(lotRow(11, 10, 7, 5));
         ReportPeriod period = ReportPeriod.of(LocalDate.of(2025, 1, 1), LocalDate.of(2025, 1, 31));
@@ -143,8 +150,11 @@ class MySqlStockRepositoryTest {
 
         assertEquals(1, lots.size());
         assertEquals("Teclado", lots.get(0).getProduct().getName());
+        assertEquals(Purchase.STATUS_RECEIVED, lots.get(0).getPurchase().getStatus());
         String sql = fake.preparedSql().get(0);
         assertTrue(sql.contains("JOIN PRODUCT"));
+        assertTrue(sql.contains("JOIN PURCHASE"));
+        assertTrue(sql.contains("purchase_status"));
         assertTrue(sql.contains("(? IS NULL OR s.entry_date >= ?)"));
         assertTrue(sql.contains("DATE_ADD(?, INTERVAL 1 DAY)"));
         assertTrue(sql.contains("ORDER BY p.name, s.entry_date, s.id"));
@@ -153,6 +163,17 @@ class MySqlStockRepositoryTest {
         assertEquals(parameters.get(1), parameters.get(2));
         assertEquals(java.sql.Date.valueOf(LocalDate.of(2025, 1, 31)), parameters.get(3));
         assertEquals(parameters.get(3), parameters.get(4));
+    }
+
+    @Test
+    @DisplayName("findAllLots trae el estado de la compra: una devuelta no cuenta en los totales")
+    void findAllLotsMapsThePurchaseStatus() throws SQLException {
+        fake.withRows(lotRow(12, 4, 0, 8, Purchase.STATUS_RETURNED));
+
+        List<Stock> lots = repository.findAllLots(ReportPeriod.all());
+
+        assertEquals(Purchase.STATUS_RETURNED, lots.get(0).getPurchase().getStatus());
+        assertFalse(lots.get(0).countsInStockReport());
     }
 
     @Test

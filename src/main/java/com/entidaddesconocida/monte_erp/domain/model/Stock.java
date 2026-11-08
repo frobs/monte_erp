@@ -136,6 +136,19 @@ public class Stock {
     }
 
     /**
+     * Whether the lot still counts in the stock report (RF-12).
+     *
+     * <p>A lot whose purchase was returned to the supplier or cancelled is kept
+     * in the history (so the report can explain why it shows 0 available), but it
+     * is <strong>not</strong> stock any more: the totals of the report leave it
+     * out. A lot without a loaded purchase keeps counting, so a light read model
+     * never hides stock by accident.</p>
+     */
+    public boolean countsInStockReport() {
+        return purchase == null || !purchase.isReturnedOrCancelled();
+    }
+
+    /**
      * Amount the lot adds to the purchase total: {@code purchasePrice ×
      * initialQuantity} (0 when the price is missing).
      */

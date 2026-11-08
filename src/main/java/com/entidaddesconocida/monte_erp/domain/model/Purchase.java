@@ -144,6 +144,17 @@ public class Purchase {
 
     /** Whether the status is final: no transition leaves {@code returned}/{@code cancelled}. */
     public boolean isTerminal() {
+        return isReturnedOrCancelled();
+    }
+
+    /**
+     * Whether the purchase no longer feeds the stock: it was returned to the
+     * supplier ({@code returned}, its lots were emptied) or cancelled before
+     * arriving ({@code cancelled}, its lots never became available). Its lots are
+     * kept for traceability, but they are no longer stock, so the reports show
+     * them marked and leave them out of the totals (RF-12).
+     */
+    public boolean isReturnedOrCancelled() {
         return STATUS_RETURNED.equals(status) || STATUS_CANCELLED.equals(status);
     }
 

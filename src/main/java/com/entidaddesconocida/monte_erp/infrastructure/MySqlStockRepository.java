@@ -45,32 +45,41 @@ public class MySqlStockRepository implements StockRepository {
             """;
     private static final String SELECT_LOTS = """
             SELECT s.id, s.initial_quantity, s.available_quantity, s.purchase_price, s.entry_date,
-                   s.purchase_id, p.id AS product_id, p.name AS product_name, p.sku AS product_sku
+                   s.purchase_id, pu.status AS purchase_status,
+                   p.id AS product_id, p.name AS product_name, p.sku AS product_sku
               FROM STOCK s
               JOIN PRODUCT p ON p.id = s.product_id
+              JOIN PURCHASE pu ON pu.id = s.purchase_id
              WHERE s.product_id = ?
              ORDER BY s.entry_date, s.id
             """;
     private static final String SELECT_AVAILABLE = """
             SELECT s.id, s.initial_quantity, s.available_quantity, s.purchase_price, s.entry_date,
-                   s.purchase_id, p.id AS product_id, p.name AS product_name, p.sku AS product_sku
+                   s.purchase_id, pu.status AS purchase_status,
+                   p.id AS product_id, p.name AS product_name, p.sku AS product_sku
               FROM STOCK s
               JOIN PRODUCT p ON p.id = s.product_id
+              JOIN PURCHASE pu ON pu.id = s.purchase_id
              WHERE s.product_id = ? AND s.available_quantity > 0
              ORDER BY s.entry_date, s.id
             """;
     /**
-     * Lots of the stock report (RF-12): the whole table joined to its product,
-     * optionally bounded by {@code entry_date}. The {@code ? IS NULL} guards let
-     * the same statement serve the whole history and a period without
-     * concatenating SQL; the upper bound is exclusive at {@code + 1 day} so a
-     * whole "hasta" day is included without a time component.
+     * Lots of the stock report (RF-12): the whole table joined to its product
+     * and to the purchase it comes from, optionally bounded by {@code
+     * entry_date}. The purchase status travels with the lot so the report can
+     * tell <em>why</em> a lot shows 0 available (returned, cancelled, pending or
+     * already sold). The {@code ? IS NULL} guards let the same statement serve
+     * the whole history and a period without concatenating SQL; the upper bound
+     * is exclusive at {@code + 1 day} so a whole "hasta" day is included without
+     * a time component.
      */
     private static final String SELECT_ALL_LOTS = """
             SELECT s.id, s.initial_quantity, s.available_quantity, s.purchase_price, s.entry_date,
-                   s.purchase_id, p.id AS product_id, p.name AS product_name, p.sku AS product_sku
+                   s.purchase_id, pu.status AS purchase_status,
+                   p.id AS product_id, p.name AS product_name, p.sku AS product_sku
               FROM STOCK s
               JOIN PRODUCT p ON p.id = s.product_id
+              JOIN PURCHASE pu ON pu.id = s.purchase_id
              WHERE (? IS NULL OR s.entry_date >= ?)
                AND (? IS NULL OR s.entry_date < DATE_ADD(?, INTERVAL 1 DAY))
              ORDER BY p.name, s.entry_date, s.id
@@ -152,9 +161,10 @@ public class MySqlStockRepository implements StockRepository {
         Product product = new Product(rs.getString("product_name"), rs.getString("product_sku"),
                 null, null, 0, null, true);
         product.setId(rs.getInt("product_id"));
-        // Light purchase: only its id is needed, to show "Compra #id" in the detail.
-        Purchase purchase = new Purchase(rs.getInt("purchase_id"), null, null, null,
-                null, null, null);
+        // Light purchase: the id to show "Compra #id" and the status that explains
+        // the available quantity of the lot in the report (RF-12).
+        Purchase purchase = new Purchase(rs.getInt("purchase_id"), null,
+                rs.getString("purchase_status"), null, null, null, null);
         return new Stock(rs.getInt("id"), rs.getInt("initial_quantity"),
                 rs.getInt("available_quantity"), rs.getBigDecimal("purchase_price"),
                 rs.getTimestamp("entry_date").toLocalDateTime(), product, purchase);
