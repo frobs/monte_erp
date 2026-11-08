@@ -7,6 +7,7 @@ import java.math.BigDecimal;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -59,6 +60,47 @@ class SalesReportSummaryTest {
         assertEquals(0, BigDecimal.ZERO.compareTo(summary.totalRevenue()));
         assertThrows(UnsupportedOperationException.class,
                 () -> summary.rows().add(new SalesReportRow(product(1, "X"), 1, BigDecimal.ONE)));
+    }
+
+    @Test
+    @DisplayName("Los pedidos y unidades canceladas viajan en el resumen sin tocar los totales")
+    void cancelledFiguresTravelWithTheSummaryWithoutTouchingTheTotals() {
+        SalesReportSummary summary = new SalesReportSummary(List.of(
+                new SalesReportRow(product(1, "Teclado"), 2, new BigDecimal("20.00"),
+                        5, new BigDecimal("50.00")),
+                new SalesReportRow(product(2, "Ratón"), 0, BigDecimal.ZERO,
+                        3, new BigDecimal("9.00"))),
+                1, 2, 2, new BigDecimal("20.00"));
+
+        assertEquals(1, summary.orderCount());
+        assertEquals(2, summary.cancelledOrderCount());
+        assertEquals(8, summary.cancelledUnits());
+        assertEquals(2, summary.totalUnits());
+        assertEquals(0, new BigDecimal("20.00").compareTo(summary.totalRevenue()));
+        assertTrue(summary.rows().get(0).countsInSalesReport());
+        assertFalse(summary.rows().get(1).countsInSalesReport());
+    }
+
+    @Test
+    @DisplayName("Un número de pedidos cancelados negativo se rechaza")
+    void negativeCancelledOrdersAreRejected() {
+        assertThrows(IllegalArgumentException.class,
+                () -> new SalesReportSummary(List.of(), 0, -1, 0, BigDecimal.ZERO));
+    }
+
+    @Test
+    @DisplayName("Una fila con solo cancelaciones es válida, pero no cuenta")
+    void rowWithOnlyCancelledUnitsIsValidButDoesNotCount() {
+        SalesReportRow row = new SalesReportRow(product(1, "X"), 0, BigDecimal.ZERO,
+                4, new BigDecimal("8.00"));
+
+        assertFalse(row.countsInSalesReport());
+        assertEquals(4, row.getCancelledUnits());
+        assertEquals(0, new BigDecimal("8.00").compareTo(row.getCancelledRevenue()));
+        assertThrows(IllegalArgumentException.class,
+                () -> new SalesReportRow(product(1, "X"), 0, BigDecimal.ZERO, 0, BigDecimal.ZERO));
+        assertThrows(IllegalArgumentException.class,
+                () -> new SalesReportRow(product(1, "X"), 0, BigDecimal.ZERO, -1, BigDecimal.ZERO));
     }
 
     @Test

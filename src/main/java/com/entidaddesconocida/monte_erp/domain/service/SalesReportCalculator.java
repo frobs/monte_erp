@@ -20,10 +20,17 @@ import java.util.Set;
  * decisions D2/D3/D9).
  *
  * <p>It receives the flat lines the adapter read (no {@code GROUP BY} of business
- * in SQL), discards the <strong>cancelled</strong> orders (their stock was given
- * back, RF-08, so counting them would inflate the revenue), groups the rest by
- * product and sums units and amounts with {@link BigDecimal}. The result is
- * ordered by revenue descending and, on a tie, by product name.</p>
+ * in SQL), groups them by product and sums units and amounts with
+ * {@link BigDecimal}. The result is ordered by revenue descending and, on a tie,
+ * by product name.</p>
+ *
+ * <p>The lines of a <strong>cancelled</strong> order never add to the units sold
+ * nor to the revenue: their stock was given back (RF-08), so counting them would
+ * inflate the report (decision D3). They are not thrown away either: they are
+ * accumulated in the row as {@link SalesReportRow#getCancelledUnits()} so the
+ * report can show, next to the product, why it sold nothing instead of hiding the
+ * product completely (the same treatment the stock report gives to the lots of a
+ * returned/cancelled purchase).</p>
  *
  * <p>Like {@link FifoAllocator} it is a stateless utility: no database, no
  * JavaFX, no side effects, so its invariants are unit tested without any
@@ -45,13 +52,17 @@ public final class SalesReportCalculator {
         }
         Map<Integer, Accumulator> byProduct = new LinkedHashMap<>();
         Set<Integer> orders = new HashSet<>();
+        Set<Integer> cancelledOrders = new HashSet<>();
         for (SalesReportLine line : lines) {
-            if (SalesOrder.STATUS_CANCELLED.equals(line.getStatus())) {
-                continue;
-            }
             Product product = line.getProduct();
             Accumulator accumulator = byProduct.computeIfAbsent(product.getId(),
                     key -> new Accumulator(product));
+            if (SalesOrder.STATUS_CANCELLED.equals(line.getStatus())) {
+                accumulator.cancelledUnits += line.getQuantity();
+                accumulator.cancelledRevenue = accumulator.cancelledRevenue.add(line.subtotal());
+                cancelledOrders.add(line.getOrderId());
+                continue;
+            }
             accumulator.unitsSold += line.getQuantity();
             accumulator.revenue = accumulator.revenue.add(line.subtotal());
             orders.add(line.getOrderId());
@@ -59,12 +70,13 @@ public final class SalesReportCalculator {
         List<SalesReportRow> rows = new ArrayList<>();
         for (Accumulator accumulator : byProduct.values()) {
             rows.add(new SalesReportRow(accumulator.product, accumulator.unitsSold,
-                    accumulator.revenue));
+                    accumulator.revenue, accumulator.cancelledUnits,
+                    accumulator.cancelledRevenue));
         }
         rows.sort(Comparator.comparing(SalesReportRow::getRevenue).reversed()
                 .thenComparing(row -> row.getProduct().getName(),
                         Comparator.nullsLast(String::compareToIgnoreCase)));
-        return new SalesReportSummary(rows, orders.size(),
+        return new SalesReportSummary(rows, orders.size(), cancelledOrders.size(),
                 rows.stream().mapToInt(SalesReportRow::getUnitsSold).sum(),
                 rows.stream().map(SalesReportRow::getRevenue).reduce(BigDecimal.ZERO,
                         BigDecimal::add));
@@ -76,6 +88,8 @@ public final class SalesReportCalculator {
         private final Product product;
         private int unitsSold;
         private BigDecimal revenue = BigDecimal.ZERO;
+        private int cancelledUnits;
+        private BigDecimal cancelledRevenue = BigDecimal.ZERO;
 
         private Accumulator(Product product) {
             this.product = product;

@@ -14,6 +14,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -36,14 +37,22 @@ class SalesReportCalculatorTest {
     }
 
     @Test
-    @DisplayName("Un pedido cancelado no suma facturación ni unidades (D3)")
-    void cancelledOrdersAreExcluded() {
+    @DisplayName("Un pedido cancelado no suma facturación ni unidades, pero se marca en la fila (D3)")
+    void cancelledOrdersAreExcludedFromTheTotalsButListed() {
         SalesReportSummary summary = SalesReportCalculator.summarize(List.of(
                 line(1, SalesOrder.STATUS_PENDING, product(1, "Teclado"), 2, "10.00"),
                 line(2, SalesOrder.STATUS_CANCELLED, product(1, "Teclado"), 50, "10.00")));
 
         assertEquals(1, summary.rows().size());
+        SalesReportRow row = summary.rows().get(0);
+        assertEquals(2, row.getUnitsSold());
+        assertEquals(0, new BigDecimal("20.00").compareTo(row.getRevenue()));
+        assertEquals(50, row.getCancelledUnits());
+        assertEquals(0, new BigDecimal("500.00").compareTo(row.getCancelledRevenue()));
+        assertTrue(row.countsInSalesReport());
         assertEquals(1, summary.orderCount());
+        assertEquals(1, summary.cancelledOrderCount());
+        assertEquals(50, summary.cancelledUnits());
         assertEquals(2, summary.totalUnits());
         assertEquals(0, new BigDecimal("20.00").compareTo(summary.totalRevenue()));
     }
@@ -111,14 +120,42 @@ class SalesReportCalculatorTest {
     }
 
     @Test
-    @DisplayName("Todos los pedidos cancelados producen un informe vacío")
-    void allCancelledYieldsEmptySummary() {
+    @DisplayName("Un producto solo con pedidos cancelados aparece marcado y no cuenta")
+    void allCancelledProductIsListedButDoesNotCount() {
         SalesReportSummary summary = SalesReportCalculator.summarize(List.of(
-                line(1, SalesOrder.STATUS_CANCELLED, product(1, "A"), 5, "10.00")));
+                line(1, SalesOrder.STATUS_CANCELLED, product(1, "A"), 5, "10.00"),
+                line(2, SalesOrder.STATUS_CANCELLED, product(1, "A"), 1, "10.00")));
 
-        assertTrue(summary.rows().isEmpty());
+        assertEquals(1, summary.rows().size());
+        SalesReportRow row = summary.rows().get(0);
+        assertEquals(0, row.getUnitsSold());
+        assertEquals(6, row.getCancelledUnits());
+        assertFalse(row.countsInSalesReport());
         assertEquals(0, summary.orderCount());
+        assertEquals(2, summary.cancelledOrderCount());
+        assertEquals(6, summary.cancelledUnits());
         assertEquals(0, summary.totalUnits());
+        assertEquals(0, BigDecimal.ZERO.compareTo(summary.totalRevenue()));
+    }
+
+    @Test
+    @DisplayName("Los pedidos cancelados de un producto no se mezclan con los vendidos")
+    void cancelledOrdersOfOneProductDoNotLeakIntoAnother() {
+        SalesReportSummary summary = SalesReportCalculator.summarize(List.of(
+                line(1, SalesOrder.STATUS_PENDING, product(1, "A"), 2, "1.00"),
+                line(2, SalesOrder.STATUS_CANCELLED, product(2, "B"), 7, "1.00")));
+
+        assertEquals(2, summary.rows().size());
+        SalesReportRow sold = summary.rows().stream()
+                .filter(row -> "A".equals(row.getProduct().getName())).findFirst().orElseThrow();
+        SalesReportRow cancelled = summary.rows().stream()
+                .filter(row -> "B".equals(row.getProduct().getName())).findFirst().orElseThrow();
+        assertEquals(0, sold.getCancelledUnits());
+        assertTrue(sold.countsInSalesReport());
+        assertEquals(7, cancelled.getCancelledUnits());
+        assertFalse(cancelled.countsInSalesReport());
+        assertEquals(1, summary.orderCount());
+        assertEquals(1, summary.cancelledOrderCount());
     }
 
     @Test
