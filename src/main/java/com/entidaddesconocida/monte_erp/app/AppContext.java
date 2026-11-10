@@ -105,7 +105,7 @@ public final class AppContext {
                 () -> new UsersViewModel(userRepository, session.requireCurrentUser(), sessionValidator));
         bind(ProductsViewModel.class,
                 () -> new ProductsViewModel(productRepository, categoryRepository,
-                        supplierRepository, purchaseRepository, sessionValidator));
+                        supplierRepository, sessionValidator));
         bind(CategoriesViewModel.class,
                 () -> new CategoriesViewModel(categoryRepository, sessionValidator));
         bind(SuppliersViewModel.class,

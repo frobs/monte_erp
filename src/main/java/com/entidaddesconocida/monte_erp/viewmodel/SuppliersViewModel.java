@@ -19,11 +19,16 @@ import java.util.regex.Pattern;
 /**
  * ViewModel of the supplier management screen (RF-05 / CU-05).
  *
- * <p>Holds the supplier list, the in-memory search and the edition form.
- * Suppliers are disabled logically, never deleted physically (decision D1),
- * because {@code PURCHASE} references {@code SUPPLIER} with
+ * <p>Holds the supplier list, the search and the edition form. Suppliers are
+ * disabled logically, never deleted physically (decision D1), because
+ * {@code PURCHASE} references {@code SUPPLIER} with
  * {@code ON DELETE RESTRICT}. A supplier given up (inactive) cannot be assigned
  * to a purchase but is still shown and searchable.</p>
+ *
+ * <p>The search travels to the database through
+ * {@link SupplierRepository#findActive(String)} /
+ * {@link SupplierRepository#findInactive(String)}, so the rows are filtered in
+ * the SQL {@code WHERE} and not in memory.</p>
  *
  * <p>Only the supplier specific parts live here: the field rules, the
  * duplicate-name rule and the labels. The CRUD skeleton (selection ↔ form,
@@ -142,19 +147,12 @@ public class SuppliersViewModel extends FilterableCrudViewModel<Supplier> {
 
     @Override
     protected List<Supplier> loadActive() throws SQLException {
-        return supplierRepository.findActive();
+        return supplierRepository.findActive(searchText.get());
     }
 
     @Override
     protected List<Supplier> loadInactive() throws SQLException {
-        return supplierRepository.findInactive();
-    }
-
-    @Override
-    protected boolean matches(Supplier supplier) {
-        // Case- and accent-insensitive over name, phone and email (decision D5).
-        return SearchText.matches(searchText.get(), supplier.getName(), supplier.getPhone(),
-                supplier.getEmail());
+        return supplierRepository.findInactive(searchText.get());
     }
 
     @Override

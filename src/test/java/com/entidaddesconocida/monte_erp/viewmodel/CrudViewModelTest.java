@@ -251,19 +251,12 @@ class CrudViewModelTest {
 
         @Override
         protected List<FakeCrudItem> loadActive() throws SQLException {
-            return repository.findActive();
+            return repository.findActive(searchText.get());
         }
 
         @Override
         protected List<FakeCrudItem> loadInactive() throws SQLException {
-            return repository.findInactive();
-        }
-
-        @Override
-        protected boolean matches(FakeCrudItem item) {
-            String text = trimmed(searchText.get()).toLowerCase(java.util.Locale.ROOT);
-            return text.isEmpty() || (item.getName() != null
-                    && item.getName().toLowerCase(java.util.Locale.ROOT).contains(text));
+            return repository.findInactive(searchText.get());
         }
 
         @Override

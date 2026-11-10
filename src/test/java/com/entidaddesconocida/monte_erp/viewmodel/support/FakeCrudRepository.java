@@ -1,5 +1,7 @@
 package com.entidaddesconocida.monte_erp.viewmodel.support;
 
+import com.entidaddesconocida.monte_erp.viewmodel.SearchText;
+
 import java.sql.SQLException;
 import java.sql.SQLIntegrityConstraintViolationException;
 import java.util.ArrayList;
@@ -63,9 +65,19 @@ public class FakeCrudRepository {
         return ordered(FakeCrudItem::isActive);
     }
 
+    public List<FakeCrudItem> findActive(String search) throws SQLException {
+        maybeThrow("findActive");
+        return ordered(item -> item.isActive() && SearchText.matches(search, item.getName()));
+    }
+
     public List<FakeCrudItem> findInactive() throws SQLException {
         maybeThrow("findInactive");
         return ordered(item -> !item.isActive());
+    }
+
+    public List<FakeCrudItem> findInactive(String search) throws SQLException {
+        maybeThrow("findInactive");
+        return ordered(item -> !item.isActive() && SearchText.matches(search, item.getName()));
     }
 
     public FakeCrudItem findByName(String name) throws SQLException {

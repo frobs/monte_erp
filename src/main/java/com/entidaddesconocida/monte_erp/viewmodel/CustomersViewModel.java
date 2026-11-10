@@ -19,11 +19,16 @@ import java.util.regex.Pattern;
 /**
  * ViewModel of the customer management screen (RF-06 / CU-06).
  *
- * <p>Holds the customer list, the in-memory search and the edition form.
- * Customers are disabled logically, never deleted physically (decision D1),
- * because {@code SALES_ORDER} references {@code CUSTOMER} with
+ * <p>Holds the customer list, the search and the edition form. Customers are
+ * disabled logically, never deleted physically (decision D1), because
+ * {@code SALES_ORDER} references {@code CUSTOMER} with
  * {@code ON DELETE RESTRICT}. A customer given up (inactive) cannot be assigned
  * to a sales order but is still shown and searchable.</p>
+ *
+ * <p>The search travels to the database through
+ * {@link CustomerRepository#findActive(String)} /
+ * {@link CustomerRepository#findInactive(String)}, so the rows are filtered in
+ * the SQL {@code WHERE} and not in memory.</p>
  *
  * <p>Only the customer specific parts live here: the field rules, the
  * duplicate-name rule and the labels. The CRUD skeleton (selection ↔ form,
@@ -142,19 +147,12 @@ public class CustomersViewModel extends FilterableCrudViewModel<Customer> {
 
     @Override
     protected List<Customer> loadActive() throws SQLException {
-        return customerRepository.findActive();
+        return customerRepository.findActive(searchText.get());
     }
 
     @Override
     protected List<Customer> loadInactive() throws SQLException {
-        return customerRepository.findInactive();
-    }
-
-    @Override
-    protected boolean matches(Customer customer) {
-        // Case- and accent-insensitive over name, phone and email (decision D5).
-        return SearchText.matches(searchText.get(), customer.getName(), customer.getPhone(),
-                customer.getEmail());
+        return customerRepository.findInactive(searchText.get());
     }
 
     @Override

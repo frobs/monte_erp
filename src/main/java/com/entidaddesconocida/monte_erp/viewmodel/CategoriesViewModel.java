@@ -18,11 +18,16 @@ import java.util.List;
 /**
  * ViewModel of the category management screen (RF-04 / CU-04).
  *
- * <p>Holds the category list, the in-memory search and the edition form.
- * Categories are disabled logically, never deleted physically (decision D2),
- * because {@code PRODUCT} references {@code CATEGORY} with
- * {@code ON DELETE RESTRICT}. A category given up (inactive) cannot be assigned
- * to a product (decision D4) but is still shown and filterable (decision D5).</p>
+ * <p>Holds the category list, the search and the edition form. Categories are
+ * disabled logically, never deleted physically (decision D2), because
+ * {@code PRODUCT} references {@code CATEGORY} with {@code ON DELETE RESTRICT}.
+ * A category given up (inactive) cannot be assigned to a product (decision D4)
+ * but is still shown and searchable (decision D5).</p>
+ *
+ * <p>The search travels to the database through
+ * {@link CategoryRepository#findActive(String)} /
+ * {@link CategoryRepository#findInactive(String)}, so the rows are filtered in
+ * the SQL {@code WHERE} and not in memory.</p>
  *
  * <p>The exception of CU-04 ("a category with associated products cannot be
  * deleted") is superseded by the logical deletion (decision D6): giving a
@@ -111,18 +116,12 @@ public class CategoriesViewModel extends FilterableCrudViewModel<Category> {
 
     @Override
     protected List<Category> loadActive() throws SQLException {
-        return categoryRepository.findActive();
+        return categoryRepository.findActive(searchText.get());
     }
 
     @Override
     protected List<Category> loadInactive() throws SQLException {
-        return categoryRepository.findInactive();
-    }
-
-    @Override
-    protected boolean matches(Category category) {
-        // Case- and accent-insensitive over name/description (decision D5).
-        return SearchText.matches(searchText.get(), category.getName(), category.getDescription());
+        return categoryRepository.findInactive(searchText.get());
     }
 
     @Override

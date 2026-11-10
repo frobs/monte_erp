@@ -2,12 +2,11 @@ package com.entidaddesconocida.monte_erp.viewmodel;
 
 import com.entidaddesconocida.monte_erp.app.SessionValidator;
 
-import javafx.beans.Observable;
-import javafx.beans.binding.Bindings;
 import javafx.beans.property.BooleanProperty;
 import javafx.beans.property.SimpleBooleanProperty;
-import javafx.beans.property.StringProperty;
 import javafx.beans.property.SimpleStringProperty;
+import javafx.beans.property.StringProperty;
+import javafx.beans.value.ObservableValue;
 import javafx.collections.ListChangeListener;
 import javafx.collections.transformation.FilteredList;
 
@@ -17,18 +16,21 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
- * Optional CRUD layer for the screens that add the in-memory search and the
- * "show inactive" checkbox (RF-03 products and RF-04 categories).
+ * Optional CRUD layer for the screens that add the free-text search and the
+ * "show inactive" checkbox (RF-03 products, RF-04 categories, RF-05 suppliers
+ * and RF-06 customers).
  *
- * <p>Wraps {@link CrudViewModel#items} in a {@link FilteredList} whose predicate
- * is composed by the subclass (the search text and, for products, the category
- * filter), and implements {@link #refreshItems()} by alternating the active and
- * inactive queries. If that reload fails while toggling the checkbox, the
- * checkbox is rolled back so it never disagrees with the rows still on
- * screen.</p>
+ * <p>Every filter travels to the database: changing the search text or a combo
+ * reloads the master list with the criteria in the {@code WHERE}, so no row is
+ * discarded in memory. {@link #filteredItems} is still the list bound to the
+ * table (and the counter), but it no longer carries a {@code Predicate}. If a
+ * reload fails while toggling the checkbox, the checkbox is rolled back so it
+ * never disagrees with the rows still on screen.</p>
  *
- * <p>{@code UsersViewModel} does not extend this layer: users have no search and
- * no active/inactive visibility toggle.</p>
+ * <p>The subclass exposes its criteria through {@link #loadActive()} /
+ * {@link #loadInactive()}; {@link #bindFilter} only registers the reload
+ * listeners. {@code UsersViewModel} does not extend this layer: users have no
+ * search and no active/inactive visibility toggle.</p>
  *
  * @param <T> entity managed by the screen
  */
@@ -36,10 +38,10 @@ public abstract class FilterableCrudViewModel<T> extends CrudViewModel<T> {
 
     private static final Logger LOGGER = Logger.getLogger(FilterableCrudViewModel.class.getName());
 
-    /** Filtered view bound to the table. */
+    /** List bound to the table; the database already applied the filters. */
     protected final FilteredList<T> filteredItems = new FilteredList<>(items);
 
-    /** Free text matched by {@link #matches(Object)}. */
+    /** Free text sent to the repository query. */
     protected final StringProperty searchText = new SimpleStringProperty("");
 
     /** {@code true} to list logically deleted rows instead of active ones. */
@@ -47,6 +49,9 @@ public abstract class FilterableCrudViewModel<T> extends CrudViewModel<T> {
 
     /** Guards the checkbox rollback so reverting does not fire the reload listener again. */
     private boolean revertingShowInactive;
+
+    /** Avoids one query per property while a batch filter change is applied. */
+    private boolean suppressFilterReload;
 
     protected FilterableCrudViewModel() {
         this(null);
@@ -58,7 +63,7 @@ public abstract class FilterableCrudViewModel<T> extends CrudViewModel<T> {
         // checkbox reloads the master list. If the reload fails the checkbox is
         // rolled back, so it never disagrees with the rows still on screen.
         showInactive.addListener((observable, oldValue, newValue) -> {
-            if (revertingShowInactive) {
+            if (revertingShowInactive || suppressFilterReload) {
                 return;
             }
             if (!ensureActiveSession()) {
@@ -76,25 +81,48 @@ public abstract class FilterableCrudViewModel<T> extends CrudViewModel<T> {
     }
 
     /**
-     * Binds the filter predicate to the given dependencies and registers the
-     * counter listeners. Called by every subclass from its own constructor,
-     * because the dependencies (search text, category filter) are subclass
-     * fields.
+     * Registers the counter listeners and reloads the list whenever one of the
+     * given filter properties changes. Called by every subclass from its own
+     * constructor, because the dependencies (search text, category filter, …)
+     * are subclass fields.
      */
-    protected final void bindFilter(Observable... dependencies) {
-        // Filters run in memory over the loaded list; FilteredList lives in
-        // javafx.base, so the ViewModel stays testable without the toolkit.
-        filteredItems.predicateProperty().bind(Bindings.createObjectBinding(
-                () -> this::matches, dependencies));
+    protected final void bindFilter(ObservableValue<?>... dependencies) {
+        for (ObservableValue<?> dependency : dependencies) {
+            dependency.addListener((observable, oldValue, newValue) -> {
+                if (!suppressFilterReload) {
+                    reloadFilteredItems();
+                }
+            });
+        }
         items.addListener((ListChangeListener<T>) change -> updateCount());
         filteredItems.addListener((ListChangeListener<T>) change -> updateCount());
     }
 
     /**
+     * Applies a batch of filter changes without issuing one query per property.
+     * The caller must invoke {@link #reloadFilters()} afterwards (or rely on the
+     * {@code showInactive} change, which is not suppressed by every caller).
+     */
+    protected final void withoutFilterReload(Runnable changes) {
+        boolean previous = suppressFilterReload;
+        suppressFilterReload = true;
+        try {
+            changes.run();
+        } finally {
+            suppressFilterReload = previous;
+        }
+    }
+
+    /** Reloads the list with the current filter criteria. */
+    protected final void reloadFilters() {
+        reloadFilteredItems();
+    }
+
+    /**
      * Reloads the master list with the active or inactive rows, depending on
      * {@link #showInactive}. A reload can drop the selected row (e.g. it moved
-     * to the other list): the form must not keep editing a row that is no
-     * longer shown.
+     * to the other list or no longer matches the search): the form must not keep
+     * editing a row that is no longer shown.
      */
     @Override
     protected final void refreshItems() throws SQLException {
@@ -106,13 +134,22 @@ public abstract class FilterableCrudViewModel<T> extends CrudViewModel<T> {
         }
     }
 
-    /** {@code true} when the given row must be kept by the in-memory filters. */
-    protected abstract boolean matches(T item);
+    private void reloadFilteredItems() {
+        if (!ensureActiveSession()) {
+            return;
+        }
+        try {
+            refreshItems();
+        } catch (SQLException e) {
+            LOGGER.log(Level.SEVERE, "Could not reload the filtered list", e);
+            fail(DATABASE_ERROR);
+        }
+    }
 
-    /** Active rows query. */
+    /** Active rows query, with the current filter criteria in the SQL. */
     protected abstract List<T> loadActive() throws SQLException;
 
-    /** Logically deleted rows query. */
+    /** Logically deleted rows query, with the current filter criteria in the SQL. */
     protected abstract List<T> loadInactive() throws SQLException;
 
     public final StringProperty searchTextProperty() {

@@ -3,11 +3,10 @@ package com.entidaddesconocida.monte_erp.viewmodel;
 import com.entidaddesconocida.monte_erp.app.SessionValidator;
 import com.entidaddesconocida.monte_erp.domain.model.Category;
 import com.entidaddesconocida.monte_erp.domain.model.Product;
-import com.entidaddesconocida.monte_erp.domain.model.ProductSupplier;
+import com.entidaddesconocida.monte_erp.domain.model.ProductFilter;
 import com.entidaddesconocida.monte_erp.domain.model.Supplier;
 import com.entidaddesconocida.monte_erp.domain.repository.CategoryRepository;
 import com.entidaddesconocida.monte_erp.domain.repository.ProductRepository;
-import com.entidaddesconocida.monte_erp.domain.repository.PurchaseRepository;
 import com.entidaddesconocida.monte_erp.domain.repository.SupplierRepository;
 
 import javafx.beans.property.ObjectProperty;
@@ -23,33 +22,29 @@ import javafx.collections.transformation.FilteredList;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.sql.SQLException;
-import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
-import java.util.Set;
 
 /**
  * ViewModel of the product management screen (RF-03 / CU-03, with the search
  * included from RF-11 / CU-10).
  *
- * <p>Holds the product list, the in-memory filters (text over name/SKU, category
- * and supplier combos) and the edition form. Products are disabled logically,
- * never physically deleted, because {@code STOCK} and {@code SALES_ORDER_LINE}
+ * <p>Holds the product list, the filters (text over name/SKU, category and
+ * supplier combos) and the edition form. Products are disabled logically, never
+ * physically deleted, because {@code STOCK} and {@code SALES_ORDER_LINE}
  * reference them with {@code ON DELETE RESTRICT}.</p>
  *
  * <p>The supplier is not a product attribute (it belongs to the purchase), so the
- * form does not offer it. The <strong>filter</strong> by supplier is fed from the
- * purchase/lot history (RF-14): {@link PurchaseRepository#findProductSuppliers()}
- * is loaded and grouped into {@code productId → supplierIds}. A product matches a
- * supplier when it has at least one lot of a purchase from that supplier, even if
- * the lot is at 0 (decision D3, the full history). The combo lists
+ * form does not offer it. The <strong>filter</strong> by supplier is resolved by
+ * the repository through the purchase/lot history (RF-14): a product matches a
+ * supplier when it has at least one lot of a purchase from that supplier, even
+ * if the lot is at 0 (decision D3, the full history). The combo lists
  * {@code SupplierRepository.findAll()}, so an inactive supplier is still
  * filterable (decision D2, parallel to the category rule D5).</p>
  *
- * <p>The text search is case- and accent-insensitive through {@link SearchText}
- * (decision D5), so it matches the {@code utf8mb4_unicode_ci} collation of the
- * database: "cafe" finds "Café".</p>
+ * <p>Every filter travels to the database as a {@link ProductFilter}: the text
+ * matches name/SKU with the {@code utf8mb4_unicode_ci} collation (case- and
+ * accent-insensitive, decision D5) and the category/supplier are compared in the
+ * SQL {@code WHERE}, so no row is discarded in memory.</p>
  *
  * <p>The stock is out of scope: it is computed from the lots ({@code STOCK}) in
  * RF-09/RF-10. The category is optional: a product saved with an empty combo is
@@ -76,7 +71,6 @@ public class ProductsViewModel extends FilterableCrudViewModel<Product> {
     private final ProductRepository productRepository;
     private final CategoryRepository categoryRepository;
     private final SupplierRepository supplierRepository;
-    private final PurchaseRepository purchaseRepository;
 
     private final StringProperty name = new SimpleStringProperty("");
     private final StringProperty sku = new SimpleStringProperty("");
@@ -91,9 +85,6 @@ public class ProductsViewModel extends FilterableCrudViewModel<Product> {
     private final ObservableList<Category> categoryFilterOptions = FXCollections.observableArrayList();
     private final ObservableList<Supplier> supplierFilterOptions = FXCollections.observableArrayList();
 
-    /** Suppliers of each product, from the purchase history (decision D3). */
-    private final Map<Integer, Set<Integer>> supplierIdsByProduct = new HashMap<>();
-
     private final ReadOnlyStringWrapper nameError = new ReadOnlyStringWrapper("");
     private final ReadOnlyStringWrapper skuError = new ReadOnlyStringWrapper("");
     private final ReadOnlyStringWrapper descriptionError = new ReadOnlyStringWrapper("");
@@ -103,21 +94,18 @@ public class ProductsViewModel extends FilterableCrudViewModel<Product> {
 
     public ProductsViewModel(ProductRepository productRepository,
                              CategoryRepository categoryRepository,
-                             SupplierRepository supplierRepository,
-                             PurchaseRepository purchaseRepository) {
-        this(productRepository, categoryRepository, supplierRepository, purchaseRepository, null);
+                             SupplierRepository supplierRepository) {
+        this(productRepository, categoryRepository, supplierRepository, null);
     }
 
     public ProductsViewModel(ProductRepository productRepository,
                              CategoryRepository categoryRepository,
                              SupplierRepository supplierRepository,
-                             PurchaseRepository purchaseRepository,
                              SessionValidator sessionValidator) {
         super(sessionValidator);
         this.productRepository = productRepository;
         this.categoryRepository = categoryRepository;
         this.supplierRepository = supplierRepository;
-        this.purchaseRepository = purchaseRepository;
         bindFilter(searchText, categoryFilter, supplierFilter);
         watchFields(name, sku, description, price, minStock, category);
         updateCount();
@@ -244,15 +232,17 @@ public class ProductsViewModel extends FilterableCrudViewModel<Product> {
     /**
      * Resets every filter to its default so the screen looks as if it had just
      * been opened (decision D6): empty search text, no category, no supplier and
-     * "Mostrar inactivos" unchecked. The checkbox is set <strong>last</strong>
-     * because it is the only one that triggers a reload, and only when it was
-     * checked (the listeners of the other filters update the counter).
+     * "Mostrar inactivos" unchecked. All changes are batched and followed by a
+     * single query.
      */
     public void clearFilters() {
-        searchText.set("");
-        categoryFilter.set(null);
-        supplierFilter.set(null);
-        showInactive.set(false);
+        withoutFilterReload(() -> {
+            searchText.set("");
+            categoryFilter.set(null);
+            supplierFilter.set(null);
+            showInactive.set(false);
+        });
+        reloadFilters();
     }
 
     @Override
@@ -261,42 +251,26 @@ public class ProductsViewModel extends FilterableCrudViewModel<Product> {
         // lists the ones given up so their products can be found (D4 / D5).
         categoryOptions.setAll(categoryRepository.findActive());
         categoryFilterOptions.setAll(categoryRepository.findAll());
-        // The supplier filter lists every supplier (active or not, D2) and the
-        // product↔supplier map comes from the whole purchase history (D3).
+        // The supplier filter lists every supplier (active or not, D2).
         supplierFilterOptions.setAll(supplierRepository.findAll());
-        supplierIdsByProduct.clear();
-        for (ProductSupplier pair : purchaseRepository.findProductSuppliers()) {
-            supplierIdsByProduct
-                    .computeIfAbsent(pair.getProductId(), key -> new HashSet<>())
-                    .add(pair.getSupplierId());
-        }
     }
 
     @Override
     protected List<Product> loadActive() throws SQLException {
-        return productRepository.findAll();
+        return productRepository.findAll(currentFilter());
     }
 
     @Override
     protected List<Product> loadInactive() throws SQLException {
-        return productRepository.findInactive();
+        return productRepository.findInactive(currentFilter());
     }
 
-    @Override
-    protected boolean matches(Product product) {
-        // Case- and accent-insensitive over name/SKU (decision D5).
-        if (!SearchText.matches(searchText.get(), product.getName(), product.getSku())) {
-            return false;
-        }
+    private ProductFilter currentFilter() {
         Category selectedCategory = categoryFilter.get();
-        if (selectedCategory != null && (product.getCategory() == null
-                || product.getCategory().getId() != selectedCategory.getId())) {
-            return false;
-        }
         Supplier selectedSupplier = supplierFilter.get();
-        return selectedSupplier == null || supplierIdsByProduct
-                .getOrDefault(product.getId(), Set.of())
-                .contains(selectedSupplier.getId());
+        return ProductFilter.of(searchText.get(),
+                selectedCategory == null ? null : selectedCategory.getId(),
+                selectedSupplier == null ? null : selectedSupplier.getId());
     }
 
     @Override

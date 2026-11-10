@@ -2,12 +2,9 @@ package com.entidaddesconocida.monte_erp.viewmodel;
 
 import com.entidaddesconocida.monte_erp.domain.model.Category;
 import com.entidaddesconocida.monte_erp.domain.model.Product;
-import com.entidaddesconocida.monte_erp.domain.model.Purchase;
-import com.entidaddesconocida.monte_erp.domain.model.Stock;
 import com.entidaddesconocida.monte_erp.domain.model.Supplier;
 import com.entidaddesconocida.monte_erp.viewmodel.support.FakeCategoryRepository;
 import com.entidaddesconocida.monte_erp.viewmodel.support.FakeProductRepository;
-import com.entidaddesconocida.monte_erp.viewmodel.support.FakePurchaseRepository;
 import com.entidaddesconocida.monte_erp.viewmodel.support.FakeSupplierRepository;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -17,7 +14,6 @@ import org.junit.jupiter.api.Test;
 import java.math.BigDecimal;
 import java.sql.SQLException;
 import java.sql.SQLIntegrityConstraintViolationException;
-import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -32,8 +28,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * ValidatorFX here, so the rules are asserted without a toolkit.</p>
  *
  * <p>The supplier is not a product attribute (it belongs to the purchase), so
- * the supplier filter is fed from the purchase history: the fakes link products
- * and suppliers through purchases and lots.</p>
+ * the supplier filter is resolved by the repository through the purchase
+ * history: the fake records the product ↔ supplier pairs and the ViewModel sends
+ * them in the {@code ProductFilter}.</p>
  */
 class ProductsViewModelTest {
 
@@ -44,7 +41,6 @@ class ProductsViewModelTest {
     private FakeProductRepository fakeRepository;
     private FakeCategoryRepository categoryRepository;
     private FakeSupplierRepository supplierRepository;
-    private FakePurchaseRepository purchaseRepository;
     private ProductsViewModel viewModel;
 
     @BeforeEach
@@ -53,23 +49,19 @@ class ProductsViewModelTest {
         supplierRepository = new FakeSupplierRepository()
                 .withSupplier(ACME)
                 .withSupplier(GLOBEX);
-        purchaseRepository = new FakePurchaseRepository();
         fakeRepository = new FakeProductRepository();
         viewModel = new ProductsViewModel(fakeRepository, categoryRepository,
-                supplierRepository, purchaseRepository);
+                supplierRepository);
         viewModel.load();
     }
 
     /**
-     * Registers a purchase from {@code supplier} with one lot of {@code product}
-     * as if it came from the database, so the supplier filter can be exercised.
-     * The lot is born at {@code availableQuantity} (0 keeps it in the history).
+     * Registers that the product has a lot from the supplier, which is what the
+     * repository query resolves through the purchase history. The available
+     * quantity is irrelevant for the filter (decision D3).
      */
     private void boughtFrom(Supplier supplier, Product product, int availableQuantity) {
-        Stock lot = new Stock(product, Math.max(1, availableQuantity), new BigDecimal("1.00"));
-        lot.setAvailableQuantity(availableQuantity);
-        Purchase purchase = new Purchase(supplier, null, List.of(lot));
-        purchaseRepository.withPurchase(purchase);
+        fakeRepository.withSupplier(product.getId(), supplier.getId());
     }
 
     private static Product product(String id, String name, String sku, String price,
@@ -605,7 +597,7 @@ class ProductsViewModelTest {
             }
         };
         ProductsViewModel racingViewModel = new ProductsViewModel(racing, categoryRepository,
-                supplierRepository, purchaseRepository);
+                supplierRepository);
         racingViewModel.nameProperty().set("Café");
         racingViewModel.skuProperty().set("CAF-001");
         racingViewModel.priceProperty().set("4.50");
