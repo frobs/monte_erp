@@ -29,7 +29,9 @@ import java.util.logging.Logger;
  * <p>Master-detail: the left table lists every active product with its aggregated
  * available quantity and its minimum-stock alert (RF-10), and the detail shows the
  * lots of the selected product, oldest first (RF-09). The search text and the
- * "only below minimum" toggle are in-memory filters over the loaded levels.</p>
+ * "only below minimum" toggle travel to the database through
+ * {@link StockRepository#findLevels(String, boolean)}, so the aggregation is
+ * filtered in the query and not in memory.</p>
  *
  * <p>It is a read-only screen: writing stock belongs to a sale
  * ({@code SalesOrderRepository}, decision D6), so the port it receives is
@@ -64,8 +66,8 @@ public class StockViewModel implements ViewModel {
     public StockViewModel(StockRepository stockRepository, SessionValidator sessionValidator) {
         this.stockRepository = stockRepository;
         this.sessionValidator = sessionValidator;
-        searchText.addListener((observable, oldValue, newValue) -> applyFilter());
-        onlyBelowMinimum.addListener((observable, oldValue, newValue) -> applyFilter());
+        searchText.addListener((observable, oldValue, newValue) -> reloadLevels());
+        onlyBelowMinimum.addListener((observable, oldValue, newValue) -> reloadLevels());
     }
 
     /** Master list of stock levels (product + available quantity). */
@@ -112,16 +114,16 @@ public class StockViewModel implements ViewModel {
             return;
         }
         try {
-            levels.setAll(stockRepository.findLevels());
+            levels.setAll(stockRepository.findLevels(searchText.get(), onlyBelowMinimum.get()));
+            alertCount.set("Productos bajo mínimo: " + stockRepository.countBelowMinimum());
         } catch (SQLException e) {
             LOGGER.log(Level.SEVERE, "Could not load the stock levels", e);
             levels.clear();
+            alertCount.set("Productos bajo mínimo: 0");
             errorMessage.set(DATABASE_ERROR);
         }
         selectedLevel.set(null);
         selectedLots.clear();
-        applyFilter();
-        updateAlertCount();
     }
 
     /**
@@ -158,37 +160,44 @@ public class StockViewModel implements ViewModel {
             LOGGER.log(Level.WARNING, "Could not revalidate the signed-in user", e);
             levels.clear();
             selectedLots.clear();
+            alertCount.set("Productos bajo mínimo: 0");
             errorMessage.set(DATABASE_ERROR);
-            updateAlertCount();
             return false;
         }
         levels.clear();
         selectedLevel.set(null);
         selectedLots.clear();
-        applyFilter();
-        updateAlertCount();
+        alertCount.set("Productos bajo mínimo: 0");
         errorMessage.set(SESSION_EXPIRED);
         return false;
     }
 
-    private boolean matches(StockLevel level) {
-        if (level == null || level.getProduct() == null) {
-            return false;
+    /**
+     * Re-runs the level query with the current filters. A row that no longer
+     * matches is dropped from the selection so its detail does not stay on
+     * screen. The global alert counter is not touched: the filters do not change
+     * how many products are below their minimum.
+     */
+    private void reloadLevels() {
+        if (!ensureActiveSession()) {
+            return;
         }
-        if (onlyBelowMinimum.get() && !level.isBelowMinimum()) {
-            return false;
+        try {
+            levels.setAll(stockRepository.findLevels(searchText.get(), onlyBelowMinimum.get()));
+        } catch (SQLException e) {
+            LOGGER.log(Level.SEVERE, "Could not reload the filtered stock levels", e);
+            errorMessage.set(DATABASE_ERROR);
+            return;
         }
-        // Case- and accent-insensitive over name/SKU, like the product screen.
-        return SearchText.matches(searchText.get(), level.getProduct().getName(),
-                level.getProduct().getSku());
+        StockLevel selected = selectedLevel.get();
+        if (selected != null && levels.stream().noneMatch(level -> sameProduct(level, selected))) {
+            selectedLevel.set(null);
+            selectedLots.clear();
+        }
     }
 
-    private void applyFilter() {
-        filteredLevels.setPredicate(this::matches);
-    }
-
-    private void updateAlertCount() {
-        long alerts = levels.stream().filter(StockLevel::isBelowMinimum).count();
-        alertCount.set("Productos bajo mínimo: " + alerts);
+    private static boolean sameProduct(StockLevel first, StockLevel second) {
+        return first.getProduct() != null && second.getProduct() != null
+                && first.getProduct().getId() == second.getProduct().getId();
     }
 }
