@@ -2,6 +2,7 @@ package com.entidaddesconocida.monte_erp.viewmodel.support;
 
 import com.entidaddesconocida.monte_erp.domain.model.Customer;
 import com.entidaddesconocida.monte_erp.domain.repository.CustomerRepository;
+import com.entidaddesconocida.monte_erp.viewmodel.SearchText;
 
 import java.sql.SQLException;
 import java.sql.SQLIntegrityConstraintViolationException;
@@ -69,9 +70,21 @@ public class FakeCustomerRepository implements CustomerRepository {
     }
 
     @Override
+    public List<Customer> findActive(String search) throws SQLException {
+        maybeThrow("findActive");
+        return ordered(customer -> customer.isActive() && matches(customer, search));
+    }
+
+    @Override
     public List<Customer> findInactive() throws SQLException {
         maybeThrow("findInactive");
         return ordered(customer -> !customer.isActive());
+    }
+
+    @Override
+    public List<Customer> findInactive(String search) throws SQLException {
+        maybeThrow("findInactive");
+        return ordered(customer -> !customer.isActive() && matches(customer, search));
     }
 
     @Override
@@ -137,6 +150,11 @@ public class FakeCustomerRepository implements CustomerRepository {
 
     private static String key(String name) {
         return name == null ? "" : name.toLowerCase(Locale.ROOT);
+    }
+
+    private static boolean matches(Customer customer, String search) {
+        return SearchText.matches(search, customer.getName(), customer.getPhone(),
+                customer.getEmail());
     }
 
     private static Customer copy(Customer customer) {

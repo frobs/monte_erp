@@ -104,6 +104,37 @@ class MySqlStockRepositoryTest {
     }
 
     @Test
+    @DisplayName("findLevels(search, onlyBelow) filtra texto y mínimo en la consulta")
+    void findLevelsWithFiltersBindsTheCriteria() throws SQLException {
+        fake.withRows(levelRow(1, "Teclado", "SKU-1", 5, 2));
+
+        List<StockLevel> levels = repository.findLevels("tec", true);
+
+        assertEquals(1, levels.size());
+        assertTrue(levels.get(0).isBelowMinimum());
+        String sql = fake.preparedSql().get(0);
+        assertTrue(sql.contains("p.name LIKE ? ESCAPE '!' OR p.sku LIKE ? ESCAPE '!'"));
+        assertTrue(sql.contains("HAVING (? = 0 OR COALESCE(SUM(s.available_quantity), 0) < p.min_stock)"));
+        Map<Integer, Object> parameters = fake.boundParameters().get(0);
+        assertEquals("%tec%", parameters.get(1));
+        assertEquals("%tec%", parameters.get(2));
+        assertEquals("%tec%", parameters.get(3));
+        assertEquals(true, parameters.get(4));
+    }
+
+    @Test
+    @DisplayName("countBelowMinimum cuenta los productos en alerta sin los filtros de pantalla")
+    void countBelowMinimumReadsTheGlobalCounter() throws SQLException {
+        fake.withRows(FakeJdbc.row("total", 3));
+
+        assertEquals(3, repository.countBelowMinimum());
+
+        String sql = fake.executedStatements().get(0);
+        assertTrue(sql.contains("COUNT(*) AS total"));
+        assertTrue(sql.contains("HAVING COALESCE(SUM(s.available_quantity), 0) < p.min_stock"));
+    }
+
+    @Test
     @DisplayName("findLots enlaza el producto y mapea lote y compra de origen")
     void findLotsBindsProductAndMapsPurchase() throws SQLException {
         fake.withRows(lotRow(11, 10, 7, 5));

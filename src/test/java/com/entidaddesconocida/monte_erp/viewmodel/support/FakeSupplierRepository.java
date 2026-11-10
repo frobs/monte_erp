@@ -2,6 +2,7 @@ package com.entidaddesconocida.monte_erp.viewmodel.support;
 
 import com.entidaddesconocida.monte_erp.domain.model.Supplier;
 import com.entidaddesconocida.monte_erp.domain.repository.SupplierRepository;
+import com.entidaddesconocida.monte_erp.viewmodel.SearchText;
 
 import java.sql.SQLException;
 import java.sql.SQLIntegrityConstraintViolationException;
@@ -69,9 +70,21 @@ public class FakeSupplierRepository implements SupplierRepository {
     }
 
     @Override
+    public List<Supplier> findActive(String search) throws SQLException {
+        maybeThrow("findActive");
+        return ordered(supplier -> supplier.isActive() && matches(supplier, search));
+    }
+
+    @Override
     public List<Supplier> findInactive() throws SQLException {
         maybeThrow("findInactive");
         return ordered(supplier -> !supplier.isActive());
+    }
+
+    @Override
+    public List<Supplier> findInactive(String search) throws SQLException {
+        maybeThrow("findInactive");
+        return ordered(supplier -> !supplier.isActive() && matches(supplier, search));
     }
 
     @Override
@@ -137,6 +150,11 @@ public class FakeSupplierRepository implements SupplierRepository {
 
     private static String key(String name) {
         return name == null ? "" : name.toLowerCase(Locale.ROOT);
+    }
+
+    private static boolean matches(Supplier supplier, String search) {
+        return SearchText.matches(search, supplier.getName(), supplier.getPhone(),
+                supplier.getEmail());
     }
 
     private static Supplier copy(Supplier supplier) {

@@ -26,6 +26,20 @@ public interface StockRepository {
     List<StockLevel> findLevels() throws SQLException;
 
     /**
+     * Stock levels matching the screen filters, ordered by name. The filtering
+     * happens <strong>in the query</strong>: the text is compared with the
+     * product name/SKU and {@code onlyBelowMinimum} keeps only the products whose
+     * aggregated available quantity is below their minimum (RF-10).
+     */
+    List<StockLevel> findLevels(String search, boolean onlyBelowMinimum) throws SQLException;
+
+    /**
+     * Number of active products below their minimum stock, regardless of the
+     * screen filters; feeds the footer alert counter (RF-10).
+     */
+    int countBelowMinimum() throws SQLException;
+
+    /**
      * Every lot of a product, oldest first, with its origin purchase; used by the
      * detail of the stock screen (a lot at 0 is still visible as history).
      */

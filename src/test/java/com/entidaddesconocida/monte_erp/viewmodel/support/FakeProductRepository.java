@@ -1,12 +1,15 @@
 package com.entidaddesconocida.monte_erp.viewmodel.support;
 
 import com.entidaddesconocida.monte_erp.domain.model.Product;
+import com.entidaddesconocida.monte_erp.domain.model.ProductFilter;
 import com.entidaddesconocida.monte_erp.domain.repository.ProductRepository;
+import com.entidaddesconocida.monte_erp.viewmodel.SearchText;
 
 import java.sql.SQLException;
 import java.sql.SQLIntegrityConstraintViolationException;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -27,6 +30,7 @@ import java.util.Set;
 public class FakeProductRepository implements ProductRepository {
 
     private final Map<Integer, Product> products = new LinkedHashMap<>();
+    private final Map<Integer, Set<Integer>> supplierIdsByProduct = new HashMap<>();
     private final Set<String> failingMethods = new HashSet<>();
     private boolean throwOnAccess;
     private int nextId = 1;
@@ -36,6 +40,16 @@ public class FakeProductRepository implements ProductRepository {
             product.setId(nextId++);
         }
         products.put(product.getId(), copy(product));
+        return this;
+    }
+
+    /**
+     * Registers that the product has at least one lot of a purchase from the
+     * supplier, which is what the real query resolves through
+     * {@code STOCK JOIN PURCHASE}.
+     */
+    public FakeProductRepository withSupplier(int productId, int supplierId) {
+        supplierIdsByProduct.computeIfAbsent(productId, key -> new HashSet<>()).add(supplierId);
         return this;
     }
 
@@ -63,9 +77,21 @@ public class FakeProductRepository implements ProductRepository {
     }
 
     @Override
+    public List<Product> findAll(ProductFilter filter) throws SQLException {
+        maybeThrow("findAll");
+        return ordered(product -> product.isActive() && matches(product, filter));
+    }
+
+    @Override
     public List<Product> findInactive() throws SQLException {
         maybeThrow("findInactive");
         return ordered(product -> !product.isActive());
+    }
+
+    @Override
+    public List<Product> findInactive(ProductFilter filter) throws SQLException {
+        maybeThrow("findInactive");
+        return ordered(product -> !product.isActive() && matches(product, filter));
     }
 
     @Override
@@ -127,6 +153,23 @@ public class FakeProductRepository implements ProductRepository {
                 .map(FakeProductRepository::copy)
                 .forEach(result::add);
         return result;
+    }
+
+    /** Mirrors the SQL criteria: text over name/SKU, category id and supplier history. */
+    private boolean matches(Product product, ProductFilter filter) {
+        if (filter == null) {
+            return true;
+        }
+        if (!SearchText.matches(filter.search(), product.getName(), product.getSku())) {
+            return false;
+        }
+        if (filter.categoryId() != null && (product.getCategory() == null
+                || product.getCategory().getId() != filter.categoryId())) {
+            return false;
+        }
+        return filter.supplierId() == null || supplierIdsByProduct
+                .getOrDefault(product.getId(), Set.of())
+                .contains(filter.supplierId());
     }
 
     private static String key(String sku) {

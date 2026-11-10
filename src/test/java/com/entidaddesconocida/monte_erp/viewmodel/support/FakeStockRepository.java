@@ -6,6 +6,7 @@ import com.entidaddesconocida.monte_erp.domain.model.ReportPeriod;
 import com.entidaddesconocida.monte_erp.domain.model.Stock;
 import com.entidaddesconocida.monte_erp.domain.model.StockLevel;
 import com.entidaddesconocida.monte_erp.domain.repository.StockRepository;
+import com.entidaddesconocida.monte_erp.viewmodel.SearchText;
 
 import java.sql.SQLException;
 import java.util.ArrayList;
@@ -71,12 +72,22 @@ public class FakeStockRepository implements StockRepository {
     @Override
     public List<StockLevel> findLevels() throws SQLException {
         maybeThrow("findLevels");
-        List<StockLevel> result = new ArrayList<>();
-        levels.values().stream()
-                .map(FakeStockRepository::copy)
-                .sorted(Comparator.comparing(level -> level.getProduct().getName()))
-                .forEach(result::add);
-        return result;
+        return orderedLevels(level -> true);
+    }
+
+    @Override
+    public List<StockLevel> findLevels(String search, boolean onlyBelowMinimum)
+            throws SQLException {
+        maybeThrow("findLevels");
+        return orderedLevels(level -> matches(level, search, onlyBelowMinimum));
+    }
+
+    @Override
+    public int countBelowMinimum() throws SQLException {
+        maybeThrow("countBelowMinimum");
+        return (int) levels.values().stream()
+                .filter(StockLevel::isBelowMinimum)
+                .count();
     }
 
     @Override
@@ -108,6 +119,26 @@ public class FakeStockRepository implements StockRepository {
                 .thenComparing(Stock::getEntryDate, Comparator.nullsLast(Comparator.naturalOrder()))
                 .thenComparingInt(Stock::getId));
         return result;
+    }
+
+    private List<StockLevel> orderedLevels(java.util.function.Predicate<StockLevel> filter) {
+        List<StockLevel> result = new ArrayList<>();
+        levels.values().stream()
+                .filter(filter)
+                .map(FakeStockRepository::copy)
+                .sorted(Comparator.comparing(level -> level.getProduct().getName()))
+                .forEach(result::add);
+        return result;
+    }
+
+    private static boolean matches(StockLevel level, String search, boolean onlyBelowMinimum) {
+        if (level.getProduct() == null) {
+            return false;
+        }
+        if (onlyBelowMinimum && !level.isBelowMinimum()) {
+            return false;
+        }
+        return SearchText.matches(search, level.getProduct().getName(), level.getProduct().getSku());
     }
 
     private List<Stock> orderedLots(int productId, boolean onlyAvailable) {

@@ -1,6 +1,7 @@
 package com.entidaddesconocida.monte_erp.domain.repository;
 
 import com.entidaddesconocida.monte_erp.domain.model.Product;
+import com.entidaddesconocida.monte_erp.domain.model.ProductFilter;
 
 import java.sql.SQLException;
 import java.util.List;
@@ -21,8 +22,20 @@ public interface ProductRepository {
     /** Returns every active product, ordered by name. */
     List<Product> findAll() throws SQLException;
 
+    /**
+     * Returns the active products matching {@code filter}, ordered by name. The
+     * filtering happens <strong>in the query</strong>: the text is compared with
+     * name/SKU, the category with {@code PRODUCT.category_id} and the supplier
+     * through the whole purchase history (a product matches when it has at least
+     * one lot of a purchase from that supplier, decision D3).
+     */
+    List<Product> findAll(ProductFilter filter) throws SQLException;
+
     /** Returns every logically deleted product, ordered by name. */
     List<Product> findInactive() throws SQLException;
+
+    /** Returns the logically deleted products matching {@code filter} (same rules as {@link #findAll(ProductFilter)}). */
+    List<Product> findInactive(ProductFilter filter) throws SQLException;
 
     /**
      * Looks a product up by its SKU (unique column), regardless of its state,

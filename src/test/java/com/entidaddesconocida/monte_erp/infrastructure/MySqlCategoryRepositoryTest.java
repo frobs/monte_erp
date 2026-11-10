@@ -96,6 +96,34 @@ class MySqlCategoryRepositoryTest {
     }
 
     @Test
+    @DisplayName("findActive(search) filtra nombre y descripción en la consulta")
+    void findActiveWithSearchBindsLikePattern() throws SQLException {
+        fake.withRows(drinksRow());
+
+        repository.findActive("bebi");
+
+        String sql = fake.preparedSql().get(0);
+        assertTrue(sql.contains("WHERE active = 1"));
+        assertTrue(sql.contains("name LIKE ? ESCAPE '!'"));
+        assertTrue(sql.contains("description LIKE ? ESCAPE '!'"));
+        assertTrue(sql.contains("ORDER BY name"));
+        assertEquals("%bebi%", fake.boundParameters().get(0).get(1));
+        assertEquals("%bebi%", fake.boundParameters().get(0).get(2));
+    }
+
+    @Test
+    @DisplayName("findInactive(search) busca solo en las categorías dadas de baja")
+    void findInactiveWithSearchUsesActiveZero() throws SQLException {
+        fake.withRows();
+
+        repository.findInactive("bebi");
+
+        String sql = fake.preparedSql().get(0);
+        assertTrue(sql.contains("WHERE active = 0"));
+        assertEquals("%bebi%", fake.boundParameters().get(0).get(1));
+    }
+
+    @Test
     @DisplayName("findByName enlaza el nombre y devuelve la categoría")
     void findByNameBindsName() throws SQLException {
         fake.withRows(drinksRow());

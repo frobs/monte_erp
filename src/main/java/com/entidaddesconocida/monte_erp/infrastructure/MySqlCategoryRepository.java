@@ -25,6 +25,14 @@ public class MySqlCategoryRepository implements CategoryRepository {
 
     private static final String COLUMNS = "id, name, description, active";
     private static final String SELECT_ALL = "SELECT " + COLUMNS + " FROM CATEGORY";
+    private static final String SELECT_ACTIVE_SEARCH = SELECT_ALL
+            + " WHERE active = 1"
+            + " AND (name LIKE ? ESCAPE '!' OR description LIKE ? ESCAPE '!')"
+            + " ORDER BY name";
+    private static final String SELECT_INACTIVE_SEARCH = SELECT_ALL
+            + " WHERE active = 0"
+            + " AND (name LIKE ? ESCAPE '!' OR description LIKE ? ESCAPE '!')"
+            + " ORDER BY name";
     private static final String INSERT_CATEGORY =
             "INSERT INTO CATEGORY (name, description, active) VALUES (?, ?, 1)";
     private static final String UPDATE_CATEGORY =
@@ -43,8 +51,20 @@ public class MySqlCategoryRepository implements CategoryRepository {
     }
 
     @Override
+    public List<Category> findActive(String search) throws SQLException {
+        String pattern = SqlSearch.likePattern(search);
+        return pattern == null ? findActive() : query(SELECT_ACTIVE_SEARCH, pattern, pattern);
+    }
+
+    @Override
     public List<Category> findInactive() throws SQLException {
         return query(SELECT_ALL + " WHERE active = 0 ORDER BY name");
+    }
+
+    @Override
+    public List<Category> findInactive(String search) throws SQLException {
+        String pattern = SqlSearch.likePattern(search);
+        return pattern == null ? findInactive() : query(SELECT_INACTIVE_SEARCH, pattern, pattern);
     }
 
     @Override
@@ -101,12 +121,25 @@ public class MySqlCategoryRepository implements CategoryRepository {
         }
     }
 
-    private List<Category> query(String sql) throws SQLException {
+    private List<Category> query(String sql, String... parameters) throws SQLException {
         List<Category> categories = new ArrayList<>();
-        try (Statement statement = DatabaseConnection.getConnection().createStatement();
-             ResultSet rs = statement.executeQuery(sql)) {
-            while (rs.next()) {
-                categories.add(map(rs));
+        if (parameters.length == 0) {
+            try (Statement statement = DatabaseConnection.getConnection().createStatement();
+                 ResultSet rs = statement.executeQuery(sql)) {
+                while (rs.next()) {
+                    categories.add(map(rs));
+                }
+            }
+            return categories;
+        }
+        try (PreparedStatement ps = DatabaseConnection.getConnection().prepareStatement(sql)) {
+            for (int index = 0; index < parameters.length; index++) {
+                ps.setString(index + 1, parameters[index]);
+            }
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    categories.add(map(rs));
+                }
             }
         }
         return categories;

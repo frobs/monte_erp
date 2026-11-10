@@ -2,6 +2,7 @@ package com.entidaddesconocida.monte_erp.infrastructure;
 
 import com.entidaddesconocida.monte_erp.domain.model.Category;
 import com.entidaddesconocida.monte_erp.domain.model.Product;
+import com.entidaddesconocida.monte_erp.domain.model.ProductFilter;
 import com.entidaddesconocida.monte_erp.infrastructure.config.DatabaseConnection;
 import com.entidaddesconocida.monte_erp.infrastructure.support.FakeJdbc;
 
@@ -152,6 +153,45 @@ class MySqlProductRepositoryTest {
         repository.findInactive();
 
         assertTrue(fake.executedStatements().get(0).contains("WHERE p.active = 0"));
+    }
+
+    @Test
+    @DisplayName("findAll(filter) filtra texto, categoría y proveedor en la consulta")
+    void findAllWithFilterBindsEveryCriterion() throws SQLException {
+        fake.withRows(coffeeRow());
+
+        List<Product> products = repository.findAll(ProductFilter.of("cafe", 3, 7));
+
+        assertEquals(1, products.size());
+        String sql = fake.preparedSql().get(0);
+        assertTrue(sql.contains("p.active = ?"));
+        assertTrue(sql.contains("p.name LIKE ? ESCAPE '!' OR p.sku LIKE ? ESCAPE '!'"));
+        assertTrue(sql.contains("p.category_id = ?"));
+        assertTrue(sql.contains("JOIN PURCHASE fp"));
+        assertTrue(sql.contains("fp.supplier_id = ?"));
+        assertTrue(sql.contains("ORDER BY p.name"));
+        Map<Integer, Object> parameters = fake.boundParameters().get(0);
+        assertEquals(true, parameters.get(1));
+        assertEquals("%cafe%", parameters.get(2));
+        assertEquals("%cafe%", parameters.get(3));
+        assertEquals("%cafe%", parameters.get(4));
+        assertEquals(3, parameters.get(5));
+        assertEquals(3, parameters.get(6));
+        assertEquals(7, parameters.get(7));
+        assertEquals(7, parameters.get(8));
+    }
+
+    @Test
+    @DisplayName("findInactive(filter) busca solo en las filas dadas de baja")
+    void findInactiveWithFilterUsesActiveZero() throws SQLException {
+        fake.withRows();
+
+        repository.findInactive(ProductFilter.of(null, 3, null));
+
+        String sql = fake.preparedSql().get(0);
+        assertEquals(false, fake.boundParameters().get(0).get(1));
+        assertNull(fake.boundParameters().get(0).get(2));
+        assertTrue(sql.contains("p.category_id = ?"));
     }
 
     @Test

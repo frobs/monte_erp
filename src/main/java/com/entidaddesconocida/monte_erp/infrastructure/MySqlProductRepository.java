@@ -2,6 +2,7 @@ package com.entidaddesconocida.monte_erp.infrastructure;
 
 import com.entidaddesconocida.monte_erp.domain.model.Category;
 import com.entidaddesconocida.monte_erp.domain.model.Product;
+import com.entidaddesconocida.monte_erp.domain.model.ProductFilter;
 import com.entidaddesconocida.monte_erp.domain.repository.ProductRepository;
 import com.entidaddesconocida.monte_erp.infrastructure.config.DatabaseConnection;
 
@@ -37,6 +38,20 @@ public class MySqlProductRepository implements ProductRepository {
     // still listed, with a NULL category_name.
     private static final String SELECT_ALL = "SELECT " + COLUMNS + " FROM PRODUCT p"
             + " LEFT JOIN CATEGORY c ON p.category_id = c.id";
+    /**
+     * Same projection as {@link #SELECT_ALL} plus the screen filters. One
+     * {@code ? IS NULL} guard per criterion keeps a single statement for every
+     * combination; the supplier is resolved with the full purchase history
+     * ({@code STOCK JOIN PURCHASE}), so a lot at 0 still counts (decision D3).
+     */
+    private static final String SELECT_FILTERED = SELECT_ALL
+            + " WHERE p.active = ?"
+            + " AND (? IS NULL OR p.name LIKE ? ESCAPE '!' OR p.sku LIKE ? ESCAPE '!')"
+            + " AND (? IS NULL OR p.category_id = ?)"
+            + " AND (? IS NULL OR EXISTS ("
+            + " SELECT 1 FROM STOCK fs JOIN PURCHASE fp ON fp.id = fs.purchase_id"
+            + " WHERE fs.product_id = p.id AND fp.supplier_id = ?))"
+            + " ORDER BY p.name";
     private static final String INSERT_PRODUCT = """
             INSERT INTO PRODUCT (name, sku, description, price, min_stock, category_id, active)
             VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -56,8 +71,24 @@ public class MySqlProductRepository implements ProductRepository {
     }
 
     @Override
+    public List<Product> findAll(ProductFilter filter) throws SQLException {
+        if (filter == null || !filter.isFiltered()) {
+            return findAll();
+        }
+        return queryFiltered(filter, true);
+    }
+
+    @Override
     public List<Product> findInactive() throws SQLException {
         return query(SELECT_ALL + " WHERE p.active = 0 ORDER BY p.name");
+    }
+
+    @Override
+    public List<Product> findInactive(ProductFilter filter) throws SQLException {
+        if (filter == null || !filter.isFiltered()) {
+            return findInactive();
+        }
+        return queryFiltered(filter, false);
     }
 
     @Override
@@ -141,6 +172,45 @@ public class MySqlProductRepository implements ProductRepository {
             }
         }
         return products;
+    }
+
+    private List<Product> queryFiltered(ProductFilter filter, boolean active) throws SQLException {
+        List<Product> products = new ArrayList<>();
+        String pattern = SqlSearch.likePattern(filter.search());
+        try (PreparedStatement ps = DatabaseConnection.getConnection()
+                .prepareStatement(SELECT_FILTERED)) {
+            ps.setBoolean(1, active);
+            bindString(ps, 2, pattern);
+            bindString(ps, 3, pattern);
+            bindString(ps, 4, pattern);
+            bindInt(ps, 5, filter.categoryId());
+            bindInt(ps, 6, filter.categoryId());
+            bindInt(ps, 7, filter.supplierId());
+            bindInt(ps, 8, filter.supplierId());
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    products.add(map(rs));
+                }
+            }
+        }
+        return products;
+    }
+
+    private static void bindString(PreparedStatement ps, int index, String value)
+            throws SQLException {
+        if (value == null) {
+            ps.setNull(index, Types.VARCHAR);
+        } else {
+            ps.setString(index, value);
+        }
+    }
+
+    private static void bindInt(PreparedStatement ps, int index, Integer value) throws SQLException {
+        if (value == null) {
+            ps.setNull(index, Types.INTEGER);
+        } else {
+            ps.setInt(index, value);
+        }
     }
 
     private Product map(ResultSet rs) throws SQLException {

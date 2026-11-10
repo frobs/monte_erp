@@ -25,8 +25,18 @@ public interface CategoryRepository {
     /** Returns only the active categories, ordered by name. */
     List<Category> findActive() throws SQLException;
 
+    /**
+     * Returns the active categories whose name or description contains
+     * {@code search}, ordered by name. The filtering happens <strong>in the
+     * query</strong>; a blank or {@code null} term lists every active category.
+     */
+    List<Category> findActive(String search) throws SQLException;
+
     /** Returns only the logically deleted categories, ordered by name. */
     List<Category> findInactive() throws SQLException;
+
+    /** Returns the logically deleted categories matching {@code search} (same rules as {@link #findActive(String)}). */
+    List<Category> findInactive(String search) throws SQLException;
 
     /** Returns the category with the given name in any state, or {@code null}. */
     Category findByName(String name) throws SQLException;

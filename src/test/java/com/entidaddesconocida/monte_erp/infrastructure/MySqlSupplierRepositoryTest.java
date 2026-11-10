@@ -100,6 +100,35 @@ class MySqlSupplierRepositoryTest {
     }
 
     @Test
+    @DisplayName("findActive(search) filtra nombre, teléfono y correo en la consulta")
+    void findActiveWithSearchBindsLikePattern() throws SQLException {
+        fake.withRows(acmeRow());
+
+        repository.findActive("acme@");
+
+        String sql = fake.preparedSql().get(0);
+        assertTrue(sql.contains("WHERE active = 1"));
+        assertTrue(sql.contains("name LIKE ? ESCAPE '!'"));
+        assertTrue(sql.contains("phone LIKE ? ESCAPE '!'"));
+        assertTrue(sql.contains("email LIKE ? ESCAPE '!'"));
+        assertEquals("%acme@%", fake.boundParameters().get(0).get(1));
+        assertEquals("%acme@%", fake.boundParameters().get(0).get(2));
+        assertEquals("%acme@%", fake.boundParameters().get(0).get(3));
+    }
+
+    @Test
+    @DisplayName("findInactive(search) busca solo en los proveedores dados de baja")
+    void findInactiveWithSearchUsesActiveZero() throws SQLException {
+        fake.withRows();
+
+        repository.findInactive("acme");
+
+        String sql = fake.preparedSql().get(0);
+        assertTrue(sql.contains("WHERE active = 0"));
+        assertEquals("%acme%", fake.boundParameters().get(0).get(1));
+    }
+
+    @Test
     @DisplayName("findByName enlaza el nombre y devuelve el proveedor")
     void findByNameBindsName() throws SQLException {
         fake.withRows(acmeRow());

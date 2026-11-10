@@ -25,8 +25,18 @@ public interface CustomerRepository {
     /** Returns only the active customers, ordered by name. */
     List<Customer> findActive() throws SQLException;
 
+    /**
+     * Returns the active customers whose name, phone or email contains
+     * {@code search}, ordered by name. The filtering happens <strong>in the
+     * query</strong>; a blank or {@code null} term lists every active customer.
+     */
+    List<Customer> findActive(String search) throws SQLException;
+
     /** Returns only the logically deleted customers, ordered by name. */
     List<Customer> findInactive() throws SQLException;
+
+    /** Returns the logically deleted customers matching {@code search} (same rules as {@link #findActive(String)}). */
+    List<Customer> findInactive(String search) throws SQLException;
 
     /** Returns the customer with the given name in any state, or {@code null}. */
     Customer findByName(String name) throws SQLException;

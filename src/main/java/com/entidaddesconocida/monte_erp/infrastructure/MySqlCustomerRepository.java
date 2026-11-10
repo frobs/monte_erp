@@ -25,6 +25,14 @@ public class MySqlCustomerRepository implements CustomerRepository {
 
     private static final String COLUMNS = "id, name, phone, email, address, active";
     private static final String SELECT_ALL = "SELECT " + COLUMNS + " FROM CUSTOMER";
+    private static final String SELECT_ACTIVE_SEARCH = SELECT_ALL
+            + " WHERE active = 1"
+            + " AND (name LIKE ? ESCAPE '!' OR phone LIKE ? ESCAPE '!' OR email LIKE ? ESCAPE '!')"
+            + " ORDER BY name";
+    private static final String SELECT_INACTIVE_SEARCH = SELECT_ALL
+            + " WHERE active = 0"
+            + " AND (name LIKE ? ESCAPE '!' OR phone LIKE ? ESCAPE '!' OR email LIKE ? ESCAPE '!')"
+            + " ORDER BY name";
     private static final String INSERT_CUSTOMER =
             "INSERT INTO CUSTOMER (name, phone, email, address, active) VALUES (?, ?, ?, ?, 1)";
     private static final String UPDATE_CUSTOMER =
@@ -43,8 +51,24 @@ public class MySqlCustomerRepository implements CustomerRepository {
     }
 
     @Override
+    public List<Customer> findActive(String search) throws SQLException {
+        String pattern = SqlSearch.likePattern(search);
+        return pattern == null
+                ? findActive()
+                : query(SELECT_ACTIVE_SEARCH, pattern, pattern, pattern);
+    }
+
+    @Override
     public List<Customer> findInactive() throws SQLException {
         return query(SELECT_ALL + " WHERE active = 0 ORDER BY name");
+    }
+
+    @Override
+    public List<Customer> findInactive(String search) throws SQLException {
+        String pattern = SqlSearch.likePattern(search);
+        return pattern == null
+                ? findInactive()
+                : query(SELECT_INACTIVE_SEARCH, pattern, pattern, pattern);
     }
 
     @Override
@@ -105,12 +129,25 @@ public class MySqlCustomerRepository implements CustomerRepository {
         }
     }
 
-    private List<Customer> query(String sql) throws SQLException {
+    private List<Customer> query(String sql, String... parameters) throws SQLException {
         List<Customer> customers = new ArrayList<>();
-        try (Statement statement = DatabaseConnection.getConnection().createStatement();
-             ResultSet rs = statement.executeQuery(sql)) {
-            while (rs.next()) {
-                customers.add(map(rs));
+        if (parameters.length == 0) {
+            try (Statement statement = DatabaseConnection.getConnection().createStatement();
+                 ResultSet rs = statement.executeQuery(sql)) {
+                while (rs.next()) {
+                    customers.add(map(rs));
+                }
+            }
+            return customers;
+        }
+        try (PreparedStatement ps = DatabaseConnection.getConnection().prepareStatement(sql)) {
+            for (int index = 0; index < parameters.length; index++) {
+                ps.setString(index + 1, parameters[index]);
+            }
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    customers.add(map(rs));
+                }
             }
         }
         return customers;

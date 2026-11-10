@@ -25,8 +25,18 @@ public interface SupplierRepository {
     /** Returns only the active suppliers, ordered by name. */
     List<Supplier> findActive() throws SQLException;
 
+    /**
+     * Returns the active suppliers whose name, phone or email contains
+     * {@code search}, ordered by name. The filtering happens <strong>in the
+     * query</strong>; a blank or {@code null} term lists every active supplier.
+     */
+    List<Supplier> findActive(String search) throws SQLException;
+
     /** Returns only the logically deleted suppliers, ordered by name. */
     List<Supplier> findInactive() throws SQLException;
+
+    /** Returns the logically deleted suppliers matching {@code search} (same rules as {@link #findActive(String)}). */
+    List<Supplier> findInactive(String search) throws SQLException;
 
     /** Returns the supplier with the given name in any state, or {@code null}. */
     Supplier findByName(String name) throws SQLException;

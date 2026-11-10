@@ -2,6 +2,7 @@ package com.entidaddesconocida.monte_erp.viewmodel.support;
 
 import com.entidaddesconocida.monte_erp.domain.model.Category;
 import com.entidaddesconocida.monte_erp.domain.repository.CategoryRepository;
+import com.entidaddesconocida.monte_erp.viewmodel.SearchText;
 
 import java.sql.SQLException;
 import java.sql.SQLIntegrityConstraintViolationException;
@@ -69,9 +70,21 @@ public class FakeCategoryRepository implements CategoryRepository {
     }
 
     @Override
+    public List<Category> findActive(String search) throws SQLException {
+        maybeThrow("findActive");
+        return ordered(category -> category.isActive() && matches(category, search));
+    }
+
+    @Override
     public List<Category> findInactive() throws SQLException {
         maybeThrow("findInactive");
         return ordered(category -> !category.isActive());
+    }
+
+    @Override
+    public List<Category> findInactive(String search) throws SQLException {
+        maybeThrow("findInactive");
+        return ordered(category -> !category.isActive() && matches(category, search));
     }
 
     @Override
@@ -137,6 +150,10 @@ public class FakeCategoryRepository implements CategoryRepository {
 
     private static String key(String name) {
         return name == null ? "" : name.toLowerCase(Locale.ROOT);
+    }
+
+    private static boolean matches(Category category, String search) {
+        return SearchText.matches(search, category.getName(), category.getDescription());
     }
 
     private static Category copy(Category category) {

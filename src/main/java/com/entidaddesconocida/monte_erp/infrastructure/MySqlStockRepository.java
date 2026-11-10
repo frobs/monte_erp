@@ -43,6 +43,34 @@ public class MySqlStockRepository implements StockRepository {
              GROUP BY p.id, p.name, p.sku, p.min_stock
              ORDER BY p.name
             """;
+    /**
+     * Same aggregation as {@link #SELECT_LEVELS} with the screen filters in the
+     * query: the text matches name/SKU and {@code onlyBelow} keeps the products
+     * whose aggregated available quantity is below their minimum (RF-10).
+     */
+    private static final String SELECT_LEVELS_FILTERED = """
+            SELECT p.id, p.name, p.sku, p.min_stock,
+                   COALESCE(SUM(s.available_quantity), 0) AS available
+              FROM PRODUCT p
+              LEFT JOIN STOCK s ON s.product_id = p.id
+             WHERE p.active = 1
+               AND (? IS NULL OR p.name LIKE ? ESCAPE '!' OR p.sku LIKE ? ESCAPE '!')
+             GROUP BY p.id, p.name, p.sku, p.min_stock
+            HAVING (? = 0 OR COALESCE(SUM(s.available_quantity), 0) < p.min_stock)
+             ORDER BY p.name
+            """;
+    /** Global alert counter (RF-10): independent from the screen filters. */
+    private static final String COUNT_BELOW_MINIMUM = """
+            SELECT COUNT(*) AS total
+              FROM (
+                    SELECT p.id
+                      FROM PRODUCT p
+                      LEFT JOIN STOCK s ON s.product_id = p.id
+                     WHERE p.active = 1
+                     GROUP BY p.id, p.min_stock
+                    HAVING COALESCE(SUM(s.available_quantity), 0) < p.min_stock
+                   ) alerts
+            """;
     private static final String SELECT_LOTS = """
             SELECT s.id, s.initial_quantity, s.available_quantity, s.purchase_price, s.entry_date,
                    s.purchase_id, pu.status AS purchase_status,
@@ -95,6 +123,37 @@ public class MySqlStockRepository implements StockRepository {
             }
         }
         return levels;
+    }
+
+    @Override
+    public List<StockLevel> findLevels(String search, boolean onlyBelowMinimum)
+            throws SQLException {
+        String pattern = SqlSearch.likePattern(search);
+        if (pattern == null && !onlyBelowMinimum) {
+            return findLevels();
+        }
+        List<StockLevel> levels = new ArrayList<>();
+        try (PreparedStatement ps = DatabaseConnection.getConnection()
+                .prepareStatement(SELECT_LEVELS_FILTERED)) {
+            ps.setString(1, pattern);
+            ps.setString(2, pattern);
+            ps.setString(3, pattern);
+            ps.setBoolean(4, onlyBelowMinimum);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    levels.add(mapLevel(rs));
+                }
+            }
+        }
+        return levels;
+    }
+
+    @Override
+    public int countBelowMinimum() throws SQLException {
+        try (Statement statement = DatabaseConnection.getConnection().createStatement();
+             ResultSet rs = statement.executeQuery(COUNT_BELOW_MINIMUM)) {
+            return rs.next() ? rs.getInt("total") : 0;
+        }
     }
 
     @Override
