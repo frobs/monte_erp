@@ -73,9 +73,11 @@ public interface PurchaseRepository {
      * Pairs (product, supplier) of the whole purchase history: a product appears
      * with a supplier when it has at least one lot of a purchase from that
      * supplier, <strong>even if the lot is at 0</strong> (decision D3, it asks
-     * "where does this product come from", not "what is available"). It feeds
-     * the supplier filter of RF-11, because the supplier is not an attribute of
-     * the product.
+     * "where does this product come from", not "what is available").
+     *
+     * <p>The product screen resolves its supplier filter directly in
+     * {@code ProductRepository}'s query; this projection exposes the same history
+     * for callers that need the relation explicitly.</p>
      */
     List<ProductSupplier> findProductSuppliers() throws SQLException;
 }

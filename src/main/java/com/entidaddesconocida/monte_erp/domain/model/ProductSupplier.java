@@ -6,17 +6,18 @@ package com.entidaddesconocida.monte_erp.domain.model;
  * ({@code PRODUCT} → {@code STOCK} → {@code PURCHASE} → {@code SUPPLIER}).
  *
  * <p>The supplier is not an attribute of {@link Product} and there is no direct
- * relation between the two tables, so the product filter of RF-11 is fed from the
+ * relation between the two tables, so the relation is derived from the
  * purchase/lot history (RF-14). A product shows up with a supplier when it has at
  * least one lot of a purchase from that supplier, regardless of the lot being
- * available or not (decision D3).</p>
+ * available or not (decision D3). The product screen resolves the supplier filter
+ * directly in its SQL query; this read model exposes the same relation.</p>
  *
  * <p>It is immutable on purpose: it is a snapshot computed by the repository, not
  * an entity. Both ids must be positive, mirroring the foreign keys
  * {@code STOCK.product_id} and {@code PURCHASE.supplier_id}: a pair with a
  * non-positive id does not represent a real row. {@link #equals(Object)} and
  * {@link #hashCode()} are defined by both ids so the pairs can be stored in a
- * {@code Set} (the ViewModel groups them per product).</p>
+ * {@code Set}.</p>
  */
 public final class ProductSupplier {
 

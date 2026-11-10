@@ -54,7 +54,9 @@ import java.util.List;
  * whole history with a {@code DISTINCT} over {@code STOCK JOIN PURCHASE}; it does
  * <strong>not</strong> filter {@code available_quantity} nor {@code PRODUCT.active}
  * (decision D3: the filter asks where the product comes from, so a lot at 0 still
- * counts and an inactive product is still listed with its suppliers).</p>
+ * counts and an inactive product is still listed with its suppliers). The product
+ * screen resolves the supplier filter in {@code MySqlProductRepository}, but the
+ * projection remains available for callers that need the relation explicitly.</p>
  */
 public class MySqlPurchaseRepository implements PurchaseRepository {
 

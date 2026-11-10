@@ -44,7 +44,7 @@ monte_erp/
 │   │   │       ├── view/                          # LoginView, SetupView, MainView, CrudView (base) y pantallas: UsersView, ProductsView, CategoriesView, SuppliersView, CustomersView, SalesOrdersView, PurchasesView, StockView, ReportsView + InputMasks/SearchableCombos
 │   │   │       ├── viewmodel/                     # Un ViewModel por pantalla + CrudViewModel/FilterableCrudViewModel, SearchText y ReportCsv
 │   │   │       ├── domain/
-│   │   │       │   ├── model/                     # User, Category, Supplier, Product, Purchase, Stock, StockLevel, ProductSupplier, Customer, SalesOrder, SalesOrderLine, StockIssue, ReportPeriod y modelos de informe
+│   │   │       │   ├── model/                     # User, Category, Supplier, Product, ProductFilter, Purchase, PurchaseFilter, Stock, StockLevel, ProductSupplier, Customer, SalesOrder, SalesOrderFilter, SalesOrderLine, StockIssue, ReportPeriod y modelos de informe
 │   │   │       │   ├── repository/                # UserRepository, CategoryRepository, SupplierRepository, ProductRepository, PurchaseRepository, StockRepository, CustomerRepository, SalesOrderRepository (puertos)
 │   │   │       │   └── service/                   # SetupService, FifoAllocator, SalesReportCalculator, StockReportCalculator
 │   │   │       ├── infrastructure/                # MySqlUserRepository, MySqlCategoryRepository, MySqlSupplierRepository, MySqlProductRepository, MySqlCustomerRepository, MySqlPurchaseRepository, MySqlStockRepository, MySqlSalesOrderRepository
@@ -169,6 +169,14 @@ añade el índice `(purchase_date, status)` que sirve al filtro del histórico d
 compras (rango de fechas, proveedor y estado); y `V10` añade el índice
 `(order_date, status)` que sirve al filtro del histórico de pedidos (rango de
 fechas, cliente y estado).
+
+Los filtros de las pantallas se aplican **en la consulta SQL**, no en memoria:
+las búsquedas de productos, categorías, proveedores, clientes y stock viajan
+como texto/ids al repositorio correspondiente (`ProductFilter` para la pantalla
+de productos), y los históricos de compras y pedidos usan `PurchaseFilter` y
+`SalesOrderFilter`. Todos los términos de texto se comparan con la colación
+`utf8mb4_unicode_ci` (insensible a mayúsculas y acentos) y los `%`/`_` se
+escapan para que se traten como texto literal.
 
 Esquema creado por `V1__schema.sql` (10 tablas):
 
