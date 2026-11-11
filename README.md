@@ -52,7 +52,8 @@ monte_erp/
 │   │   │       └── security/                      # PasswordHasher
 │   │   └── resources/
 │   │       ├── css/app.css                        # Estilos de la interfaz
-│   │       ├── db/migration/V1..V8__*.sql         # Migraciones: esquema + bajas lógicas (PRODUCT, CATEGORY, SUPPLIER, CUSTOMER) + dirección de proveedor + estados de compra
+│   │       ├── db/migration/V1..V10__*.sql        # Migraciones: esquema + bajas lógicas + índices de filtros
+│   │       └── db/seed/demo_seed.sql               # Dataset de demostración (no se aplica al arrancar)
 │   │       └── com/entidaddesconocida/monte_erp/view/
 │   │           ├── LoginView.fxml                 # vista de login (mismo paquete que LoginView)
 │   │           ├── SetupView.fxml                 # vista de configuración de BD
@@ -131,6 +132,72 @@ docker run -d \
 ```bash
 docker exec -it monte_erp_mysql mysql -u erp_user -p monte_erp
 ```
+
+---
+
+## Datos de demostración
+
+El script `src/main/resources/db/seed/demo_seed.sql` carga un dataset completo
+para una demo: usuarios, categorías, proveedores, clientes, productos, compras,
+lotes de stock, pedidos y consumos FIFO. Vive **fuera de `db/migration`**, así
+que `MigrationRunner` no lo ejecuta al arrancar la aplicación.
+
+Requisitos y orden de uso:
+
+1. Tener el contenedor MySQL creado (apartado anterior).
+2. Arrancar la aplicación una vez para que las migraciones creen el esquema
+   (o aplicar los scripts `V1`–`V10` manualmente).
+3. Cargar el seed:
+
+```bash
+docker exec -i monte_erp_mysql mysql -u erp_user -perp_pass monte_erp \
+  < src/main/resources/db/seed/demo_seed.sql
+```
+
+> **Aviso:** el script solo inserta datos y está pensado para una base de datos
+> recién creada. No lo ejecutes sobre una base con datos reales. El script
+> comprueba que la tabla `USER` esté vacía: si ya existe el administrador del
+> onboarding (u otros usuarios), aborta con `Base de datos no vacia: ...` antes
+> de insertar nada. Si lo vuelves a lanzar tras un seed correcto, el marcador
+> `demo_seed` provoca un error de clave duplicada.
+
+Para repetir la demo desde cero, se elimina el contenedor **y su volumen** y se
+vuelve a crear con el comando del apartado anterior:
+
+```bash
+docker rm -f monte_erp_mysql
+docker volume rm monte_erp_data
+# Volver a ejecutar el docker run y cargar el seed otra vez
+```
+
+### Usuarios demo
+
+| Usuario       | Contraseña | Rol           | Estado   |
+| ------------- | ---------- | ------------- | -------- |
+| `admin`       | `Admin1234` | Administrador | Activo   |
+| `ana.garcia`  | `Demo1234`  | Empleado      | Activo   |
+| `luis.moreno` | `Demo1234`  | Empleado      | Activo   |
+| `marta.sanz`  | `Demo1234`  | Empleado      | Inactivo |
+
+### Contenido del dataset
+
+- **25 productos** (2 inactivos con ventas históricas y 2 sin categoría), con
+  existencias repartidas en 44 lotes.
+- **18 compras** en los últimos cinco meses: 13 `received`, 2 `pending`,
+  2 `cancelled` y 1 `returned`. Una compra recibida queda totalmente consumida.
+- **30 pedidos** en los últimos cuatro meses: 14 `delivered`, 7 `shipped`,
+  5 `pending` y 4 `cancelled` (estos últimos sin consumir stock).
+- **73 líneas de pedido** y **65 consumos FIFO**, con varias líneas repartidas
+  entre dos lotes para poder enseñar la trazabilidad.
+- **Alertas de stock:** 9 productos activos por debajo de su mínimo, dos de
+  ellos a cero.
+- Fechas relativas a `NOW()`: siempre hay actividad en el mes actual para los
+  informes.
+
+Al final del script se ejecutan comprobaciones de integridad (stock fuera de
+rango, totales descuadrados, consumos incorrectos, compras no recibidas con
+stock…). Todas deben devolver **0 filas**; las únicas filas esperadas son las dos
+de aviso de productos activos sin existencias.
 
 ---
 
