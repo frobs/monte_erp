@@ -20,7 +20,6 @@ import javafx.scene.control.TabPane;
 import javafx.scene.control.TableColumn;
 import javafx.scene.control.TableRow;
 import javafx.scene.control.TableView;
-import javafx.stage.FileChooser;
 
 import java.io.File;
 import java.io.IOException;
@@ -55,6 +54,7 @@ public class ReportsView implements FxmlView<ReportsViewModel> {
     private static final PseudoClass EXCLUDED_ROW = PseudoClass.getPseudoClass("excluded");
 
     private final AppShell appShell;
+    private final FileSaveDialog fileSaveDialog;
 
     @FXML
     private DatePicker fromPicker;
@@ -132,7 +132,16 @@ public class ReportsView implements FxmlView<ReportsViewModel> {
     private ReportsViewModel viewModel;
 
     public ReportsView(AppShell appShell) {
+        this(appShell, new FileChooserFileSaveDialog());
+    }
+
+    /**
+     * Visible for tests: lets them inject a {@link FileSaveDialog} that returns a
+     * temporary file instead of opening the native chooser.
+     */
+    public ReportsView(AppShell appShell, FileSaveDialog fileSaveDialog) {
         this.appShell = appShell;
+        this.fileSaveDialog = fileSaveDialog;
     }
 
     @FXML
@@ -259,12 +268,8 @@ public class ReportsView implements FxmlView<ReportsViewModel> {
 
     /** Asks for a destination file and writes the CSV; a cancel does nothing. */
     private void exportCsv(String defaultFileName, String content) {
-        FileChooser chooser = new FileChooser();
-        chooser.setTitle("Guardar informe CSV");
-        chooser.setInitialFileName(defaultFileName);
-        chooser.getExtensionFilters().add(
-                new FileChooser.ExtensionFilter("Archivos CSV", "*.csv"));
-        File file = chooser.showSaveDialog(stockLotsTable.getScene().getWindow());
+        File file = fileSaveDialog.choose(stockLotsTable.getScene().getWindow(),
+                "Guardar informe CSV", defaultFileName, "Archivos CSV", "*.csv");
         if (file == null) {
             return;
         }
@@ -279,12 +284,8 @@ public class ReportsView implements FxmlView<ReportsViewModel> {
 
     /** Same flow for the PDF, whose bytes are already serialised by the ViewModel. */
     private void exportPdf(String defaultFileName, byte[] content) {
-        FileChooser chooser = new FileChooser();
-        chooser.setTitle("Guardar informe PDF");
-        chooser.setInitialFileName(defaultFileName);
-        chooser.getExtensionFilters().add(
-                new FileChooser.ExtensionFilter("Archivos PDF", "*.pdf"));
-        File file = chooser.showSaveDialog(stockLotsTable.getScene().getWindow());
+        File file = fileSaveDialog.choose(stockLotsTable.getScene().getWindow(),
+                "Guardar informe PDF", defaultFileName, "Archivos PDF", "*.pdf");
         if (file == null) {
             return;
         }
