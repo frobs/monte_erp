@@ -67,7 +67,8 @@ monte_erp/
 │   │           ├── PurchasesView.fxml             # vista de compras y lotes (RF-14)
 │   │           ├── StockView.fxml                 # vista de stock y alertas (RF-09/RF-10)
 │   │           └── ReportsView.fxml               # vista de informes (RF-12)
-│   └── test/java/...                              # Pruebas JUnit 5 unitarias (fakes en memoria y ficheros temporales)
+│   └── test/java/...                              # Pruebas JUnit 5: unitarias y ui/ (TestFX)
+├── scripts/run-ui-tests.sh                        # Suite de interfaz con Xvfb + MySQL efímero
 └── target/                  # Artefactos generados (tras compilar)
 ```
 
@@ -269,12 +270,57 @@ resto de usuarios se dan de alta desde "Gestión de usuarios" (RF-02).
 
 ### Pruebas
 
+Hay dos suites separadas por etiquetas JUnit (`@Tag`).
+
+#### Tests unitarios (rápidos, sin Docker)
+
 ```bash
 ./mvnw test
 ```
 
-Todos los tests son unitarios (fakes en memoria y ficheros temporales): no
-necesitan MySQL ni el toolkit de JavaFX.
+Usan fakes en memoria y ficheros temporales: no necesitan MySQL, Docker ni el
+toolkit de JavaFX. Los tests de interfaz quedan excluidos de esta ejecución.
+
+#### Tests de interfaz (TestFX + MySQL efímero)
+
+```bash
+scripts/run-ui-tests.sh
+# o, con un display ya disponible:
+./mvnw test -Pui-tests
+```
+
+El script:
+
+1. Comprueba que Docker está disponible.
+2. Arranca un **Xvfb privado** (1920×1200) para poder ejecutar la suite en CI o
+   en una máquina sin sesión gráfica.
+3. Ejecuta `./mvnw test -Pui-tests`.
+4. Elimina el contenedor MySQL y el Xvfb al terminar (también si la ejecución
+   falla).
+
+La suite conduce los propios controles de JavaFX (campos de texto, botones,
+combos, tablas y diálogos) a través de sus manejadores y bindings, sin depender
+del foco del sistema operativo: por eso también funciona directamente sobre un
+escritorio normal con `./mvnw test -Pui-tests`. El Xvfb del script es solo para
+que la ejecución sea reproducible en entornos sin pantalla.
+
+Durante los tests, `ui.support.TestDatabase` crea un contenedor MySQL
+`mysql:8.0` con las migraciones reales (`V1`–`V10`) y carga
+`src/main/resources/db/seed/demo_seed.sql` con el cliente `mysql` del
+contenedor. Después guarda un `mysqldump` del estado sembrado y **restaura ese
+baseline antes de cada test**, de modo que todos los tests ven exactamente el
+mismo dataset aunque alguno cree o modifique datos. El contenedor se elimina al
+final de la ejecución (hook de apagado y limpieza del script).
+
+Requisitos del entorno: Docker y las librerías de GTK3 que necesita JavaFX en
+Linux. Para usar el script en un servidor sin pantalla hacen falta `xvfb` o
+`xvfb-run` (si no está `xvfb-run`, el script arranca `Xvfb` directamente). Para
+ejecutar sobre el display actual: `UI_USE_EXISTING_DISPLAY=1 scripts/run-ui-tests.sh`.
+
+La suite cubre las 12 pantallas y los casos de uso de negocio completos:
+login/onboarding, menú por rol, usuarios, categorías, proveedores, clientes,
+productos, compras (pendiente → recibida → devuelta/cancelada), pedidos (con
+consumo FIFO), stock/alertas e informes con exportación CSV/PDF.
 
 ### Convención de idiomas
 
