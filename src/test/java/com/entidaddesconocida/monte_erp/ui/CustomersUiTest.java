@@ -75,15 +75,19 @@ class CustomersUiTest extends AbstractUiTest {
 
         ui.clickButton("Nuevo cliente");
         ui.type("nameField", "QA Cliente Invalido");
+        // The phone mask never lets a letter reach the field.
         ui.type("phoneField", "telefono-invalido");
-        ui.clickButton("Guardar");
-        ui.assertLabel("errorLabel",
-                "El teléfono solo puede contener números y los signos +, -, ( ), punto o espacios.");
-
+        ui.assertTrue("La máscara debe descartar las letras del teléfono",
+                ui.textOf("phoneField").isEmpty());
         ui.type("phoneField", "+34 600 555 666");
         ui.type("emailField", "sin-arroba");
         ui.clickButton("Guardar");
         ui.assertLabel("errorLabel", "Introduce un correo electrónico válido.");
+
+        // The email mask blocks spaces before the ViewModel validates the shape.
+        ui.type("emailField", "qa @cliente.test");
+        ui.assertTrue("La máscara debe descartar los espacios del correo",
+                !ui.textOf("emailField").contains(" "));
     }
 
     @Test

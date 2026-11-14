@@ -14,7 +14,6 @@ import javafx.collections.transformation.FilteredList;
 
 import java.sql.SQLException;
 import java.util.List;
-import java.util.regex.Pattern;
 
 /**
  * ViewModel of the supplier management screen (RF-05 / CU-05).
@@ -48,12 +47,6 @@ public class SuppliersViewModel extends FilterableCrudViewModel<Supplier> {
     private static final int MAX_PHONE_LENGTH = 20;
     private static final int MAX_EMAIL_LENGTH = 100;
     private static final int MAX_ADDRESS_LENGTH = 255;
-
-    /** Pragmatic email shape: text@text.text, no spaces. Not a full RFC validator. */
-    private static final Pattern EMAIL_PATTERN = Pattern.compile("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$");
-
-    /** Lenient phone shape: digits plus the usual separators, never letters. */
-    private static final Pattern PHONE_PATTERN = Pattern.compile("^[0-9+()\\-\\s.]*$");
 
     private final SupplierRepository supplierRepository;
 
@@ -336,7 +329,7 @@ public class SuppliersViewModel extends FilterableCrudViewModel<Supplier> {
         if (value.length() > MAX_PHONE_LENGTH) {
             return "El teléfono no puede superar los " + MAX_PHONE_LENGTH + " caracteres.";
         }
-        if (!value.isEmpty() && !PHONE_PATTERN.matcher(value).matches()) {
+        if (!value.isEmpty() && !ContactValidation.isValidPhone(value)) {
             return "El teléfono solo puede contener números y los signos +, -, ( ), punto o espacios.";
         }
         return "";
@@ -347,7 +340,7 @@ public class SuppliersViewModel extends FilterableCrudViewModel<Supplier> {
         if (value.length() > MAX_EMAIL_LENGTH) {
             return "El correo no puede superar los " + MAX_EMAIL_LENGTH + " caracteres.";
         }
-        if (!value.isEmpty() && !EMAIL_PATTERN.matcher(value).matches()) {
+        if (!value.isEmpty() && !ContactValidation.isValidEmail(value)) {
             return "Introduce un correo electrónico válido.";
         }
         return "";

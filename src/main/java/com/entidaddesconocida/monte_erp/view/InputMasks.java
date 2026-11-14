@@ -5,14 +5,14 @@ import javafx.scene.control.TextFormatter;
 import java.util.function.IntSupplier;
 
 /**
- * Input masks for the numeric text fields (quantity and money).
+ * Input masks for the typed form fields (quantity, money, phone and email).
  *
  * <p>They are a View concern, not a validation rule: they stop the user from
- * typing characters that could never form a valid number, so the form does not
+ * typing characters that could never form a valid value, so the form does not
  * need a round trip to the database to reject {@code "abc"} or {@code "10.999"}.
- * The authoritative rules (required, positive, range) still live in the
- * ViewModels as per-field error properties; this class only constrains what can
- * be typed.</p>
+ * The authoritative rules (required, positive, range, email shape) still live in
+ * the ViewModels as per-field error properties; this class only constrains what
+ * can be typed.</p>
  *
  * <p>The predicates are pure and public so they can be tested with plain JUnit
  * and no JavaFX toolkit; the {@link TextFormatter} factories are the only UI
@@ -90,6 +90,50 @@ public final class InputMasks {
         return new TextFormatter<>(change ->
                 (!change.isContentChange()
                         || acceptsPartialDecimal(change.getControlNewText(), maxIntegerDigits, 2))
+                        ? change : null);
+    }
+
+    /**
+     * {@code true} while {@code text} can still become a phone number: digits
+     * and the usual separators ({@code + - ( ) .} and spaces), up to
+     * {@code maxLength} characters. Letters cannot be typed, so the field never
+     * holds text the ViewModel would reject.
+     */
+    public static boolean acceptsPartialPhone(String text, int maxLength) {
+        return text.length() <= maxLength && text.matches("[0-9+()\\-\\s.]*");
+    }
+
+    /**
+     * {@code true} while {@code text} can still become an email address: the
+     * characters accepted by the pragmatic email rule, at most one {@code @}
+     * and up to {@code maxLength} characters. The rest of the format (domain,
+     * TLD) is checked by the ViewModel on save, because a half-typed address is
+     * still in progress.
+     */
+    public static boolean acceptsPartialEmail(String text, int maxLength) {
+        if (text.length() > maxLength || !text.matches("[A-Za-z0-9._%+\\-@]*")) {
+            return false;
+        }
+        int at = text.indexOf('@');
+        return at < 0 || at == text.lastIndexOf('@');
+    }
+
+    /** Phone keyboard: digits and separators only, capped at {@code maxLength}. */
+    public static TextFormatter<String> phone(int maxLength) {
+        return new TextFormatter<>(change ->
+                (!change.isContentChange()
+                        || acceptsPartialPhone(change.getControlNewText(), maxLength))
+                        ? change : null);
+    }
+
+    /**
+     * Email keyboard: letters, digits, the common local-part symbols and one
+     * {@code @}, capped at {@code maxLength}. Spaces are blocked at the source.
+     */
+    public static TextFormatter<String> email(int maxLength) {
+        return new TextFormatter<>(change ->
+                (!change.isContentChange()
+                        || acceptsPartialEmail(change.getControlNewText(), maxLength))
                         ? change : null);
     }
 }

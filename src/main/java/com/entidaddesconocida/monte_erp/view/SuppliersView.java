@@ -28,6 +28,11 @@ import javafx.scene.control.TextField;
  */
 public class SuppliersView extends CrudView<Supplier> implements FxmlView<SuppliersViewModel> {
 
+    /** Same limits as the ViewModel (and the VARCHAR columns): the mask stops
+     * the user from typing more than the field can store. */
+    private static final int MAX_PHONE_LENGTH = 20;
+    private static final int MAX_EMAIL_LENGTH = 100;
+
     @FXML
     private TableView<Supplier> suppliersTable;
 
@@ -111,7 +116,11 @@ public class SuppliersView extends CrudView<Supplier> implements FxmlView<Suppli
 
         nameField.textProperty().bindBidirectional(viewModel.nameProperty());
         phoneField.textProperty().bindBidirectional(viewModel.phoneProperty());
+        // Local input mask: letters never reach the phone field.
+        phoneField.setTextFormatter(InputMasks.phone(MAX_PHONE_LENGTH));
         emailField.textProperty().bindBidirectional(viewModel.emailProperty());
+        // Local input mask: spaces and a second @ never reach the email field.
+        emailField.setTextFormatter(InputMasks.email(MAX_EMAIL_LENGTH));
         addressField.textProperty().bindBidirectional(viewModel.addressProperty());
 
         countLabel.textProperty().bind(viewModel.supplierCountProperty());

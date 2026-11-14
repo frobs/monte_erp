@@ -9,6 +9,7 @@ import org.junit.jupiter.api.Test;
 
 import java.sql.SQLException;
 import java.sql.SQLIntegrityConstraintViolationException;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -159,6 +160,52 @@ class CustomersViewModelTest {
         viewModel.save();
 
         assertEquals("Introduce un correo electrónico válido.", viewModel.emailErrorProperty().get());
+    }
+
+    @Test
+    @DisplayName("Correos mal formados (sin dominio, puntos repetidos, espacios…): error de campo")
+    void malformedEmailFormatsShowFieldError() {
+        List<String> invalid = List.of(
+                "sin@arroba",
+                "a@b",
+                "a@example",
+                "a@example.",
+                "a@example..com",
+                "a@.com",
+                "@example.com",
+                "a@@example.com",
+                "a @example.com",
+                "a@exa mple.com",
+                ".a@example.com",
+                "a.@example.com",
+                "a..b@example.com",
+                "a@-example.com",
+                "a@example-.com",
+                "a@example.c",
+                "a@example.123");
+
+        for (String email : invalid) {
+            viewModel.nameProperty().set("Globex");
+            viewModel.emailProperty().set(email);
+
+            viewModel.save();
+
+            assertEquals("Introduce un correo electrónico válido.",
+                    viewModel.emailErrorProperty().get(), "Correo: " + email);
+        }
+    }
+
+    @Test
+    @DisplayName("Correo con subdominio, etiqueta + y guiones: se guarda")
+    void acceptsComplexValidEmail() throws Exception {
+        viewModel.nameProperty().set("Globex");
+        viewModel.emailProperty().set("first.last+tag@sub.domain-name.co.uk");
+
+        viewModel.save();
+
+        assertEquals("", viewModel.emailErrorProperty().get());
+        assertEquals("first.last+tag@sub.domain-name.co.uk",
+                fakeRepository.findByName("Globex").getEmail());
     }
 
     @Test

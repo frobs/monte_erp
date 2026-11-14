@@ -61,4 +61,34 @@ class InputMasksTest {
         assertFalse(InputMasks.acceptsPartialDecimal("-1", 8, 2));
         assertFalse(InputMasks.acceptsPartialDecimal("abc", 8, 2));
     }
+
+    @Test
+    @DisplayName("El teléfono solo admite dígitos y separadores, hasta el límite de longitud")
+    void phoneMaskAcceptsOnlyDigitsAndSeparators() {
+        assertTrue(InputMasks.acceptsPartialPhone("", 20));
+        assertTrue(InputMasks.acceptsPartialPhone("600333444", 20));
+        assertTrue(InputMasks.acceptsPartialPhone("+34 600 333 444", 20));
+        assertTrue(InputMasks.acceptsPartialPhone("(+34) 600-333.444", 20));
+
+        assertFalse(InputMasks.acceptsPartialPhone("600333444A", 20));
+        assertFalse(InputMasks.acceptsPartialPhone("llámame", 20));
+        assertFalse(InputMasks.acceptsPartialPhone("600_333_444", 20));
+        assertFalse(InputMasks.acceptsPartialPhone("600/333/444", 20));
+        assertFalse(InputMasks.acceptsPartialPhone("1".repeat(21), 20));
+    }
+
+    @Test
+    @DisplayName("El correo bloquea espacios, acentos y un segundo @; respeta el límite de longitud")
+    void emailMaskAcceptsOnlyEmailCharactersAndOneAt() {
+        assertTrue(InputMasks.acceptsPartialEmail("", 100));
+        assertTrue(InputMasks.acceptsPartialEmail("qa", 100));
+        assertTrue(InputMasks.acceptsPartialEmail("qa@", 100));
+        assertTrue(InputMasks.acceptsPartialEmail("first.last+tag@sub.domain.co.uk", 100));
+
+        assertFalse(InputMasks.acceptsPartialEmail("qa @cliente.test", 100));
+        assertFalse(InputMasks.acceptsPartialEmail("qa@cliente .test", 100));
+        assertFalse(InputMasks.acceptsPartialEmail("qa@@cliente.test", 100));
+        assertFalse(InputMasks.acceptsPartialEmail("qa@cliente.tést", 100));
+        assertFalse(InputMasks.acceptsPartialEmail("a".repeat(101) + "@example.com", 100));
+    }
 }
