@@ -199,7 +199,58 @@ public class SetupViewModel implements ViewModel {
             errorMessage.set(URL_CONTAINS_CREDENTIALS);
             return false;
         }
+        if (!hasValidPort(value.trim())) {
+            errorMessage.set(URL_INVALID);
+            return false;
+        }
         return true;
+    }
+
+    /**
+     * The URL may omit the port (MySQL defaults to 3306), but when it is typed
+     * it must be a whole number in the TCP range: {@code :-3306},
+     * {@code :abc} or {@code :70000} are rejected before trying to connect.
+     */
+    private static boolean hasValidPort(String url) {
+        String authority = url.substring("jdbc:mysql://".length());
+        int slash = authority.indexOf('/');
+        if (slash >= 0) {
+            authority = authority.substring(0, slash);
+        }
+        int at = authority.lastIndexOf('@');
+        if (at >= 0) {
+            authority = authority.substring(at + 1);
+        }
+        int portSeparator;
+        if (authority.startsWith("[")) {
+            // Bracketed IPv6 host: the port, when present, comes after ']'.
+            int close = authority.indexOf(']');
+            if (close < 0) {
+                return false;
+            }
+            if (close == authority.length() - 1) {
+                return true;
+            }
+            if (authority.charAt(close + 1) != ':') {
+                return false;
+            }
+            portSeparator = close + 1;
+        } else {
+            portSeparator = authority.lastIndexOf(':');
+            if (portSeparator < 0) {
+                return true;
+            }
+        }
+        String port = authority.substring(portSeparator + 1);
+        if (port.isEmpty() || !port.matches("\\d+")) {
+            return false;
+        }
+        try {
+            int value = Integer.parseInt(port);
+            return value >= 1 && value <= 65535;
+        } catch (NumberFormatException e) {
+            return false;
+        }
     }
 
     private static boolean same(String left, String right) {

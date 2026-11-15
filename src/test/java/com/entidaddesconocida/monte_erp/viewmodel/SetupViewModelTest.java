@@ -6,6 +6,7 @@ import com.entidaddesconocida.monte_erp.viewmodel.support.FakeSetupService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -175,6 +176,63 @@ class SetupViewModelTest {
 
         assertTrue(vm.errorMessageProperty().get().startsWith("La URL no es válida."));
         assertNull(service.lastSaved());
+    }
+
+    @Test
+    @DisplayName("URL con puerto no numérico, negativo, cero o fuera de rango: error local")
+    void invalidPortIsRejectedBeforeConnecting() {
+        List<String> invalidUrls = List.of(
+                "jdbc:mysql://localhost:abc/monte_erp",
+                "jdbc:mysql://localhost:-3306/monte_erp",
+                "jdbc:mysql://localhost:0/monte_erp",
+                "jdbc:mysql://localhost:70000/monte_erp",
+                "jdbc:mysql://localhost:3306.5/monte_erp",
+                "jdbc:mysql://localhost:/monte_erp",
+                "jdbc:mysql://[::1]:-1/monte_erp");
+
+        for (String url : invalidUrls) {
+            FakeSetupService service = new FakeSetupService();
+            SetupViewModel vm = editViewModel(service);
+            vm.urlProperty().set(url);
+            vm.dbUserProperty().set(VALID.user());
+            vm.dbPasswordProperty().set(VALID.password());
+
+            vm.testConnection();
+
+            assertTrue(vm.errorMessageProperty().get().startsWith("La URL no es válida."),
+                    "URL: " + url);
+            assertNull(service.lastTested(), "URL: " + url);
+        }
+    }
+
+    @Test
+    @DisplayName("URL sin puerto: se acepta y MySQL usa el puerto por defecto")
+    void urlWithoutPortIsAccepted() {
+        FakeSetupService service = new FakeSetupService();
+        SetupViewModel vm = editViewModel(service);
+        vm.urlProperty().set("jdbc:mysql://localhost/monte_erp");
+        vm.dbUserProperty().set(VALID.user());
+        vm.dbPasswordProperty().set(VALID.password());
+
+        vm.testConnection();
+
+        assertEquals("Conexión correcta.", vm.statusMessageProperty().get());
+        assertEquals("", vm.errorMessageProperty().get());
+    }
+
+    @Test
+    @DisplayName("URL con IPv6 entre corchetes y puerto: se acepta")
+    void bracketedIpv6UrlIsAccepted() {
+        FakeSetupService service = new FakeSetupService();
+        SetupViewModel vm = editViewModel(service);
+        vm.urlProperty().set("jdbc:mysql://[::1]:3306/monte_erp");
+        vm.dbUserProperty().set(VALID.user());
+        vm.dbPasswordProperty().set(VALID.password());
+
+        vm.testConnection();
+
+        assertEquals("Conexión correcta.", vm.statusMessageProperty().get());
+        assertEquals("", vm.errorMessageProperty().get());
     }
 
     @Test
