@@ -1,6 +1,6 @@
 package com.entidaddesconocida.monte_erp.viewmodel;
 
-import com.entidaddesconocida.monte_erp.domain.model.Purchase;
+import com.entidaddesconocida.monte_erp.domain.model.PurchaseStatus;
 import com.entidaddesconocida.monte_erp.domain.model.SalesReportRow;
 import com.entidaddesconocida.monte_erp.domain.model.Stock;
 
@@ -55,8 +55,8 @@ public final class ReportLabels {
         if (lot == null || lot.getPurchase() == null) {
             return "";
         }
-        String status = lot.getPurchase().getStatus();
-        return status == null ? "" : Purchase.labelFor(status);
+        PurchaseStatus status = lot.getPurchase().getStatus();
+        return status == null ? "" : status.label();
     }
 
     /**
@@ -68,11 +68,11 @@ public final class ReportLabels {
         if (lot == null || lot.getPurchase() == null) {
             return "";
         }
-        String status = lot.getPurchase().getStatus();
-        if (Purchase.STATUS_RETURNED.equals(status)) {
+        PurchaseStatus status = lot.getPurchase().getStatus();
+        if (status == PurchaseStatus.RETURNED) {
             return REASON_RETURNED;
         }
-        if (Purchase.STATUS_CANCELLED.equals(status)) {
+        if (status == PurchaseStatus.CANCELLED) {
             return REASON_CANCELLED;
         }
         return "";

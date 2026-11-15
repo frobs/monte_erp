@@ -1,5 +1,6 @@
 package com.entidaddesconocida.monte_erp.viewmodel;
 
+import com.entidaddesconocida.monte_erp.domain.model.PurchaseStatus;
 import com.entidaddesconocida.monte_erp.domain.model.Product;
 import com.entidaddesconocida.monte_erp.domain.model.Purchase;
 import com.entidaddesconocida.monte_erp.domain.model.SalesReportRow;
@@ -21,7 +22,7 @@ class ReportLabelsTest {
 
     private static final LocalDateTime ENTRY = LocalDateTime.of(2025, 1, 15, 10, 30);
 
-    private static Stock lot(String purchaseStatus, int available) {
+    private static Stock lot(PurchaseStatus purchaseStatus, int available) {
         Product product = new Product("Teclado", "SKU-1", null, new BigDecimal("10.00"), 0, null, true);
         product.setId(1);
         Purchase purchase = purchaseStatus == null ? null
@@ -32,10 +33,10 @@ class ReportLabelsTest {
     @Test
     @DisplayName("El estado de la compra se traduce al español")
     void purchaseStatusIsTranslated() {
-        assertEquals("Pendiente", ReportLabels.purchaseStatus(lot(Purchase.STATUS_PENDING, 0)));
-        assertEquals("Recibida", ReportLabels.purchaseStatus(lot(Purchase.STATUS_RECEIVED, 4)));
-        assertEquals("Cancelada", ReportLabels.purchaseStatus(lot(Purchase.STATUS_CANCELLED, 0)));
-        assertEquals("Devuelta", ReportLabels.purchaseStatus(lot(Purchase.STATUS_RETURNED, 0)));
+        assertEquals("Pendiente", ReportLabels.purchaseStatus(lot(PurchaseStatus.PENDING, 0)));
+        assertEquals("Recibida", ReportLabels.purchaseStatus(lot(PurchaseStatus.RECEIVED, 4)));
+        assertEquals("Cancelada", ReportLabels.purchaseStatus(lot(PurchaseStatus.CANCELLED, 0)));
+        assertEquals("Devuelta", ReportLabels.purchaseStatus(lot(PurchaseStatus.RETURNED, 0)));
     }
 
     @Test
@@ -51,17 +52,17 @@ class ReportLabelsTest {
     @DisplayName("El motivo solo se rellena para devueltas o canceladas")
     void reasonOnlyExplainsReturnedOrCancelled() {
         assertEquals(ReportLabels.REASON_RETURNED,
-                ReportLabels.availabilityReason(lot(Purchase.STATUS_RETURNED, 0)));
+                ReportLabels.availabilityReason(lot(PurchaseStatus.RETURNED, 0)));
         assertEquals(ReportLabels.REASON_CANCELLED,
-                ReportLabels.availabilityReason(lot(Purchase.STATUS_CANCELLED, 0)));
+                ReportLabels.availabilityReason(lot(PurchaseStatus.CANCELLED, 0)));
     }
 
     @Test
     @DisplayName("Recibidas (con o sin unidades) y pendientes dejan el motivo vacío")
     void otherStatusesHaveNoReason() {
-        assertEquals("", ReportLabels.availabilityReason(lot(Purchase.STATUS_RECEIVED, 4)));
-        assertEquals("", ReportLabels.availabilityReason(lot(Purchase.STATUS_RECEIVED, 0)));
-        assertEquals("", ReportLabels.availabilityReason(lot(Purchase.STATUS_PENDING, 0)));
+        assertEquals("", ReportLabels.availabilityReason(lot(PurchaseStatus.RECEIVED, 4)));
+        assertEquals("", ReportLabels.availabilityReason(lot(PurchaseStatus.RECEIVED, 0)));
+        assertEquals("", ReportLabels.availabilityReason(lot(PurchaseStatus.PENDING, 0)));
     }
 
     private static SalesReportRow salesRow(Product product, int unitsSold, String revenue,

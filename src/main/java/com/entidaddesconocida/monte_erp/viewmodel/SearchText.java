@@ -2,6 +2,7 @@ package com.entidaddesconocida.monte_erp.viewmodel;
 
 import java.text.Normalizer;
 import java.util.Locale;
+import java.util.regex.Pattern;
 
 /**
  * Pure helper that normalizes search terms the same way MySQL does with the
@@ -21,6 +22,9 @@ import java.util.Locale;
  */
 public final class SearchText {
 
+    /** Combining marks (accents); compiled once: it runs per keystroke and per field. */
+    private static final Pattern COMBINING_MARKS = Pattern.compile("\\p{M}+");
+
     private SearchText() {
         // Utility class: never instantiated.
     }
@@ -35,8 +39,8 @@ public final class SearchText {
         if (value == null) {
             return "";
         }
-        return Normalizer.normalize(value, Normalizer.Form.NFD)
-                .replaceAll("\\p{M}", "")
+        return COMBINING_MARKS.matcher(Normalizer.normalize(value, Normalizer.Form.NFD))
+                .replaceAll("")
                 .toLowerCase(Locale.ROOT);
     }
 
