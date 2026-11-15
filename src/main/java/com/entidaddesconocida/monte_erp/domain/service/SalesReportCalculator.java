@@ -1,7 +1,7 @@
 package com.entidaddesconocida.monte_erp.domain.service;
 
+import com.entidaddesconocida.monte_erp.domain.model.OrderStatus;
 import com.entidaddesconocida.monte_erp.domain.model.Product;
-import com.entidaddesconocida.monte_erp.domain.model.SalesOrder;
 import com.entidaddesconocida.monte_erp.domain.model.SalesReportLine;
 import com.entidaddesconocida.monte_erp.domain.model.SalesReportRow;
 import com.entidaddesconocida.monte_erp.domain.model.SalesReportSummary;
@@ -57,7 +57,7 @@ public final class SalesReportCalculator {
             Product product = line.getProduct();
             Accumulator accumulator = byProduct.computeIfAbsent(product.getId(),
                     key -> new Accumulator(product));
-            if (SalesOrder.STATUS_CANCELLED.equals(line.getStatus())) {
+            if (line.getStatus() == OrderStatus.CANCELLED) {
                 accumulator.cancelledUnits += line.getQuantity();
                 accumulator.cancelledRevenue = accumulator.cancelledRevenue.add(line.subtotal());
                 cancelledOrders.add(line.getOrderId());

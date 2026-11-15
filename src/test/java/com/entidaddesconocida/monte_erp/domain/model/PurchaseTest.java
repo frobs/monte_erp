@@ -35,7 +35,7 @@ class PurchaseTest {
     }
 
     private static User user() {
-        return new User("Bea", "bea", "hash", User.ROLE_EMPLOYEE, true);
+        return new User("Bea", "bea", "hash", Role.EMPLOYEE, true);
     }
 
     @Test
@@ -63,7 +63,7 @@ class PurchaseTest {
         Supplier supplier = supplier();
         Purchase purchase = new Purchase(supplier, author, List.of(lot(1, 2, "10.00")));
 
-        assertEquals(Purchase.STATUS_PENDING, purchase.getStatus());
+        assertEquals(PurchaseStatus.PENDING, purchase.getStatus());
         assertEquals("Pendiente", purchase.getStatusLabel());
         assertSame(author, purchase.getUser());
         assertSame(supplier, purchase.getSupplier());
@@ -84,17 +84,23 @@ class PurchaseTest {
     }
 
     @Test
-    @DisplayName("getStatusLabel y labelFor traducen los estados y dejan el crudo si es desconocido")
+    @DisplayName("getStatusLabel traduce los estados y el enum expone su valor de base de datos")
     void statusLabelsAreTranslated() {
-        assertEquals("Pendiente", Purchase.labelFor(Purchase.STATUS_PENDING));
-        assertEquals("Recibida", Purchase.labelFor(Purchase.STATUS_RECEIVED));
-        assertEquals("Cancelada", Purchase.labelFor(Purchase.STATUS_CANCELLED));
-        assertEquals("Devuelta", Purchase.labelFor(Purchase.STATUS_RETURNED));
-        assertEquals("desconocido", Purchase.labelFor("desconocido"));
-        assertEquals("null", Purchase.labelFor(null));
+        assertEquals("Pendiente", statusLabelOf(PurchaseStatus.PENDING));
+        assertEquals("Recibida", statusLabelOf(PurchaseStatus.RECEIVED));
+        assertEquals("Cancelada", statusLabelOf(PurchaseStatus.CANCELLED));
+        assertEquals("Devuelta", statusLabelOf(PurchaseStatus.RETURNED));
+        assertEquals("pending", PurchaseStatus.PENDING.dbValue());
+        assertEquals("received", PurchaseStatus.RECEIVED.dbValue());
+        assertEquals("cancelled", PurchaseStatus.CANCELLED.dbValue());
+        assertEquals("returned", PurchaseStatus.RETURNED.dbValue());
     }
 
-    private static Purchase purchaseWithStatus(String status) {
+    private static String statusLabelOf(PurchaseStatus status) {
+        return purchaseWithStatus(status).getStatusLabel();
+    }
+
+    private static Purchase purchaseWithStatus(PurchaseStatus status) {
         return new Purchase(1, LocalDateTime.now(), status, BigDecimal.ZERO,
                 supplier(), user(), List.of());
     }
@@ -102,24 +108,24 @@ class PurchaseTest {
     @Test
     @DisplayName("allowedTransitions: pendiente puede recibirse o cancelarse")
     void pendingTransitions() {
-        assertEquals(List.of(Purchase.STATUS_RECEIVED, Purchase.STATUS_CANCELLED),
-                purchaseWithStatus(Purchase.STATUS_PENDING).allowedTransitions());
+        assertEquals(List.of(PurchaseStatus.RECEIVED, PurchaseStatus.CANCELLED),
+                purchaseWithStatus(PurchaseStatus.PENDING).allowedTransitions());
     }
 
     @Test
     @DisplayName("allowedTransitions: una compra recibida solo puede devolverse, nunca cancelarse")
     void receivedTransitionsCannotCancel() {
-        Purchase purchase = purchaseWithStatus(Purchase.STATUS_RECEIVED);
+        Purchase purchase = purchaseWithStatus(PurchaseStatus.RECEIVED);
 
-        assertEquals(List.of(Purchase.STATUS_RETURNED), purchase.allowedTransitions());
-        assertFalse(purchase.canTransitionTo(Purchase.STATUS_CANCELLED));
-        assertTrue(purchase.canTransitionTo(Purchase.STATUS_RETURNED));
+        assertEquals(List.of(PurchaseStatus.RETURNED), purchase.allowedTransitions());
+        assertFalse(purchase.canTransitionTo(PurchaseStatus.CANCELLED));
+        assertTrue(purchase.canTransitionTo(PurchaseStatus.RETURNED));
     }
 
     @Test
     @DisplayName("allowedTransitions vacío para los estados terminales")
     void terminalTransitionsAreEmpty() {
-        for (String status : List.of(Purchase.STATUS_CANCELLED, Purchase.STATUS_RETURNED)) {
+        for (PurchaseStatus status : List.of(PurchaseStatus.CANCELLED, PurchaseStatus.RETURNED)) {
             Purchase purchase = purchaseWithStatus(status);
             assertEquals(List.of(), purchase.allowedTransitions(), "estado: " + status);
             assertTrue(purchase.isTerminal(), "estado: " + status);
@@ -129,64 +135,63 @@ class PurchaseTest {
     @Test
     @DisplayName("isReturnedOrCancelled marca los estados que ya no son stock (RF-12)")
     void returnedOrCancelledAreNoLongerStock() {
-        assertFalse(purchaseWithStatus(Purchase.STATUS_PENDING).isReturnedOrCancelled());
-        assertFalse(purchaseWithStatus(Purchase.STATUS_RECEIVED).isReturnedOrCancelled());
-        assertTrue(purchaseWithStatus(Purchase.STATUS_RETURNED).isReturnedOrCancelled());
-        assertTrue(purchaseWithStatus(Purchase.STATUS_CANCELLED).isReturnedOrCancelled());
+        assertFalse(purchaseWithStatus(PurchaseStatus.PENDING).isReturnedOrCancelled());
+        assertFalse(purchaseWithStatus(PurchaseStatus.RECEIVED).isReturnedOrCancelled());
+        assertTrue(purchaseWithStatus(PurchaseStatus.RETURNED).isReturnedOrCancelled());
+        assertTrue(purchaseWithStatus(PurchaseStatus.CANCELLED).isReturnedOrCancelled());
     }
 
     @Test
     @DisplayName("canTransitionTo rechaza repetición, retroceso, destino desconocido y null")
     void canTransitionToRejectsInvalidTargets() {
-        Purchase pending = purchaseWithStatus(Purchase.STATUS_PENDING);
-        Purchase received = purchaseWithStatus(Purchase.STATUS_RECEIVED);
+        Purchase pending = purchaseWithStatus(PurchaseStatus.PENDING);
+        Purchase received = purchaseWithStatus(PurchaseStatus.RECEIVED);
 
-        assertFalse(pending.canTransitionTo(Purchase.STATUS_PENDING));
-        assertFalse(pending.canTransitionTo(Purchase.STATUS_RETURNED));
-        assertFalse(received.canTransitionTo(Purchase.STATUS_PENDING));
-        assertFalse(received.canTransitionTo("desconocido"));
+        assertFalse(pending.canTransitionTo(PurchaseStatus.PENDING));
+        assertFalse(pending.canTransitionTo(PurchaseStatus.RETURNED));
+        assertFalse(received.canTransitionTo(PurchaseStatus.PENDING));
         assertFalse(received.canTransitionTo(null));
     }
 
     @Test
     @DisplayName("changeStatus mueve la compra por el pipeline válido")
     void changeStatusFollowsThePipeline() {
-        Purchase purchase = purchaseWithStatus(Purchase.STATUS_PENDING);
+        Purchase purchase = purchaseWithStatus(PurchaseStatus.PENDING);
 
-        purchase.changeStatus(Purchase.STATUS_RECEIVED);
-        assertEquals(Purchase.STATUS_RECEIVED, purchase.getStatus());
+        purchase.changeStatus(PurchaseStatus.RECEIVED);
+        assertEquals(PurchaseStatus.RECEIVED, purchase.getStatus());
 
-        purchase.changeStatus(Purchase.STATUS_RETURNED);
-        assertEquals(Purchase.STATUS_RETURNED, purchase.getStatus());
+        purchase.changeStatus(PurchaseStatus.RETURNED);
+        assertEquals(PurchaseStatus.RETURNED, purchase.getStatus());
     }
 
     @Test
     @DisplayName("changeStatus rechaza cancelar una compra recibida con un mensaje explícito")
     void changeStatusRejectsCancellingAReceivedPurchase() {
-        Purchase purchase = purchaseWithStatus(Purchase.STATUS_RECEIVED);
+        Purchase purchase = purchaseWithStatus(PurchaseStatus.RECEIVED);
 
         IllegalStateException error = assertThrows(IllegalStateException.class,
-                () -> purchase.changeStatus(Purchase.STATUS_CANCELLED));
+                () -> purchase.changeStatus(PurchaseStatus.CANCELLED));
 
         assertEquals("Transición de estado no permitida: \"received\" → \"cancelled\".",
                 error.getMessage());
-        assertEquals(Purchase.STATUS_RECEIVED, purchase.getStatus());
+        assertEquals(PurchaseStatus.RECEIVED, purchase.getStatus());
     }
 
     @Test
     @DisplayName("Una compra terminal no puede volver a cambiar de estado")
     void terminalPurchaseCannotChangeAgain() {
-        Purchase purchase = purchaseWithStatus(Purchase.STATUS_RETURNED);
+        Purchase purchase = purchaseWithStatus(PurchaseStatus.RETURNED);
 
         assertThrows(IllegalStateException.class,
-                () -> purchase.changeStatus(Purchase.STATUS_RECEIVED));
-        assertEquals(Purchase.STATUS_RETURNED, purchase.getStatus());
+                () -> purchase.changeStatus(PurchaseStatus.RECEIVED));
+        assertEquals(PurchaseStatus.RETURNED, purchase.getStatus());
     }
 
     @Test
     @DisplayName("getLots nunca es null (ni con null en el constructor de mapeo)")
     void getLotsIsNeverNull() {
-        Purchase purchase = new Purchase(1, LocalDateTime.now(), Purchase.STATUS_RECEIVED,
+        Purchase purchase = new Purchase(1, LocalDateTime.now(), PurchaseStatus.RECEIVED,
                 BigDecimal.ZERO, supplier(), user(), null);
 
         assertNotNull(purchase.getLots());

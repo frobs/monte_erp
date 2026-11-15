@@ -1,7 +1,7 @@
 package com.entidaddesconocida.monte_erp.domain.service;
 
+import com.entidaddesconocida.monte_erp.domain.model.OrderStatus;
 import com.entidaddesconocida.monte_erp.domain.model.Product;
-import com.entidaddesconocida.monte_erp.domain.model.SalesOrder;
 import com.entidaddesconocida.monte_erp.domain.model.SalesReportLine;
 import com.entidaddesconocida.monte_erp.domain.model.SalesReportRow;
 import com.entidaddesconocida.monte_erp.domain.model.SalesReportSummary;
@@ -30,7 +30,8 @@ class SalesReportCalculatorTest {
         return product;
     }
 
-    private static SalesReportLine line(int orderId, String status, Product product, int quantity,
+    private static SalesReportLine line(int orderId, OrderStatus status, Product product,
+                                        int quantity,
                                         String price) {
         return new SalesReportLine(orderId, LocalDateTime.of(2025, 1, 15, 10, 0), status,
                 quantity, new BigDecimal(price), product);
@@ -40,8 +41,8 @@ class SalesReportCalculatorTest {
     @DisplayName("Un pedido cancelado no suma facturación ni unidades, pero se marca en la fila (D3)")
     void cancelledOrdersAreExcludedFromTheTotalsButListed() {
         SalesReportSummary summary = SalesReportCalculator.summarize(List.of(
-                line(1, SalesOrder.STATUS_PENDING, product(1, "Teclado"), 2, "10.00"),
-                line(2, SalesOrder.STATUS_CANCELLED, product(1, "Teclado"), 50, "10.00")));
+                line(1, OrderStatus.PENDING, product(1, "Teclado"), 2, "10.00"),
+                line(2, OrderStatus.CANCELLED, product(1, "Teclado"), 50, "10.00")));
 
         assertEquals(1, summary.rows().size());
         SalesReportRow row = summary.rows().get(0);
@@ -61,8 +62,8 @@ class SalesReportCalculatorTest {
     @DisplayName("Dos líneas del mismo producto en pedidos distintos se agregan en una fila")
     void linesOfTheSameProductAreAggregated() {
         SalesReportSummary summary = SalesReportCalculator.summarize(List.of(
-                line(1, SalesOrder.STATUS_PENDING, product(1, "Teclado"), 2, "10.00"),
-                line(2, SalesOrder.STATUS_DELIVERED, product(1, "Teclado"), 3, "10.00")));
+                line(1, OrderStatus.PENDING, product(1, "Teclado"), 2, "10.00"),
+                line(2, OrderStatus.DELIVERED, product(1, "Teclado"), 3, "10.00")));
 
         assertEquals(1, summary.rows().size());
         SalesReportRow row = summary.rows().get(0);
@@ -77,8 +78,8 @@ class SalesReportCalculatorTest {
     @DisplayName("Los totales son la suma exacta de las filas (BigDecimal, 0.10 × 3 = 0.30)")
     void totalsAreExactBigDecimals() {
         SalesReportSummary summary = SalesReportCalculator.summarize(List.of(
-                line(1, SalesOrder.STATUS_PENDING, product(1, "A"), 3, "0.10"),
-                line(2, SalesOrder.STATUS_SHIPPED, product(2, "B"), 1, "0.20")));
+                line(1, OrderStatus.PENDING, product(1, "A"), 3, "0.10"),
+                line(2, OrderStatus.SHIPPED, product(2, "B"), 1, "0.20")));
 
         assertEquals(0, new BigDecimal("0.30").compareTo(summary.rows().get(0).getRevenue()));
         assertEquals(0, new BigDecimal("0.50").compareTo(summary.totalRevenue()));
@@ -89,9 +90,9 @@ class SalesReportCalculatorTest {
     @DisplayName("orderCount cuenta pedidos distintos, no líneas")
     void orderCountCountsDistinctOrders() {
         SalesReportSummary summary = SalesReportCalculator.summarize(List.of(
-                line(1, SalesOrder.STATUS_PENDING, product(1, "A"), 1, "1.00"),
-                line(1, SalesOrder.STATUS_PENDING, product(2, "B"), 1, "1.00"),
-                line(1, SalesOrder.STATUS_PENDING, product(3, "C"), 1, "1.00")));
+                line(1, OrderStatus.PENDING, product(1, "A"), 1, "1.00"),
+                line(1, OrderStatus.PENDING, product(2, "B"), 1, "1.00"),
+                line(1, OrderStatus.PENDING, product(3, "C"), 1, "1.00")));
 
         assertEquals(1, summary.orderCount());
         assertEquals(3, summary.rows().size());
@@ -101,8 +102,8 @@ class SalesReportCalculatorTest {
     @DisplayName("Las filas se ordenan por importe descendente")
     void rowsAreOrderedByRevenueDescending() {
         SalesReportSummary summary = SalesReportCalculator.summarize(List.of(
-                line(1, SalesOrder.STATUS_PENDING, product(1, "Barato"), 1, "1.00"),
-                line(2, SalesOrder.STATUS_PENDING, product(2, "Caro"), 1, "99.00")));
+                line(1, OrderStatus.PENDING, product(1, "Barato"), 1, "1.00"),
+                line(2, OrderStatus.PENDING, product(2, "Caro"), 1, "99.00")));
 
         assertEquals("Caro", summary.rows().get(0).getProduct().getName());
         assertEquals("Barato", summary.rows().get(1).getProduct().getName());
@@ -123,8 +124,8 @@ class SalesReportCalculatorTest {
     @DisplayName("Un producto solo con pedidos cancelados aparece marcado y no cuenta")
     void allCancelledProductIsListedButDoesNotCount() {
         SalesReportSummary summary = SalesReportCalculator.summarize(List.of(
-                line(1, SalesOrder.STATUS_CANCELLED, product(1, "A"), 5, "10.00"),
-                line(2, SalesOrder.STATUS_CANCELLED, product(1, "A"), 1, "10.00")));
+                line(1, OrderStatus.CANCELLED, product(1, "A"), 5, "10.00"),
+                line(2, OrderStatus.CANCELLED, product(1, "A"), 1, "10.00")));
 
         assertEquals(1, summary.rows().size());
         SalesReportRow row = summary.rows().get(0);
@@ -142,8 +143,8 @@ class SalesReportCalculatorTest {
     @DisplayName("Los pedidos cancelados de un producto no se mezclan con los vendidos")
     void cancelledOrdersOfOneProductDoNotLeakIntoAnother() {
         SalesReportSummary summary = SalesReportCalculator.summarize(List.of(
-                line(1, SalesOrder.STATUS_PENDING, product(1, "A"), 2, "1.00"),
-                line(2, SalesOrder.STATUS_CANCELLED, product(2, "B"), 7, "1.00")));
+                line(1, OrderStatus.PENDING, product(1, "A"), 2, "1.00"),
+                line(2, OrderStatus.CANCELLED, product(2, "B"), 7, "1.00")));
 
         assertEquals(2, summary.rows().size());
         SalesReportRow sold = summary.rows().stream()
@@ -162,7 +163,7 @@ class SalesReportCalculatorTest {
     @DisplayName("El resumen inmutable no expone la lista mutable del acumulador")
     void summaryRowsAreImmutable() {
         SalesReportSummary summary = SalesReportCalculator.summarize(List.of(
-                line(1, SalesOrder.STATUS_PENDING, product(1, "A"), 1, "1.00")));
+                line(1, OrderStatus.PENDING, product(1, "A"), 1, "1.00")));
 
         assertThrows(UnsupportedOperationException.class,
                 () -> summary.rows().add(new SalesReportRow(product(2, "B"), 1, BigDecimal.ONE)));

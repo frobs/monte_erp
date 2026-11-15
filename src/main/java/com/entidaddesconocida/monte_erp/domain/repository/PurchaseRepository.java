@@ -2,6 +2,7 @@ package com.entidaddesconocida.monte_erp.domain.repository;
 
 import com.entidaddesconocida.monte_erp.domain.model.ProductSupplier;
 import com.entidaddesconocida.monte_erp.domain.model.Purchase;
+import com.entidaddesconocida.monte_erp.domain.model.PurchaseStatus;
 import com.entidaddesconocida.monte_erp.domain.model.PurchaseFilter;
 import com.entidaddesconocida.monte_erp.domain.model.Stock;
 import com.entidaddesconocida.monte_erp.domain.service.PurchaseStockConsumedException;
@@ -14,7 +15,7 @@ import java.util.List;
  *
  * <p>The purchase screen is not a CRUD: a purchase is created and then read as
  * history, never edited or deleted. The only mutation is the status change
- * ({@link #changeStatus(int, String, String)}), which follows the domain state
+ * ({@link #changeStatus(int, PurchaseStatus, PurchaseStatus)}), which follows the domain state
  * machine: {@code pending → received/cancelled} and {@code received → returned}.</p>
  *
  * <p>The insert must be <strong>atomic</strong>: the purchase header and every
@@ -66,7 +67,7 @@ public interface PurchaseRepository {
      * {@code pending} purchase does not need to touch the stock, because its lots
      * were never available.</p>
      */
-    int changeStatus(int id, String currentStatus, String newStatus)
+    int changeStatus(int id, PurchaseStatus currentStatus, PurchaseStatus newStatus)
             throws SQLException, PurchaseStockConsumedException;
 
     /**

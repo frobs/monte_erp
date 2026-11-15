@@ -1,5 +1,6 @@
 package com.entidaddesconocida.monte_erp.domain.service;
 
+import com.entidaddesconocida.monte_erp.domain.model.PurchaseStatus;
 import com.entidaddesconocida.monte_erp.domain.model.Product;
 import com.entidaddesconocida.monte_erp.domain.model.Purchase;
 import com.entidaddesconocida.monte_erp.domain.model.Stock;
@@ -33,7 +34,7 @@ class StockReportCalculatorTest {
     }
 
     private static Stock lotOfPurchase(int id, int initial, int available, String price,
-                                       String purchaseStatus) {
+                                       PurchaseStatus purchaseStatus) {
         Purchase purchase = new Purchase(7, ENTRY, purchaseStatus, BigDecimal.ZERO, null, null,
                 List.of());
         return new Stock(id, initial, available, new BigDecimal(price), ENTRY, product(), purchase);
@@ -91,9 +92,9 @@ class StockReportCalculatorTest {
     @DisplayName("Los lotes de compras devueltas o canceladas no cuentan en los totales (RF-12)")
     void returnedOrCancelledLotsAreExcludedFromTheTotals() {
         List<Stock> lots = List.of(
-                lotOfPurchase(1, 10, 4, "1.50", Purchase.STATUS_RECEIVED),
-                lotOfPurchase(2, 5, 0, "9.00", Purchase.STATUS_RETURNED),
-                lotOfPurchase(3, 2, 0, "9.00", Purchase.STATUS_CANCELLED));
+                lotOfPurchase(1, 10, 4, "1.50", PurchaseStatus.RECEIVED),
+                lotOfPurchase(2, 5, 0, "9.00", PurchaseStatus.RETURNED),
+                lotOfPurchase(3, 2, 0, "9.00", PurchaseStatus.CANCELLED));
 
         StockReportSummary summary = StockReportCalculator.summarize(lots);
 
@@ -108,7 +109,7 @@ class StockReportCalculatorTest {
     @DisplayName("Un lote pendiente de recibir sí cuenta (no es una devolución)")
     void pendingLotIsNotExcluded() {
         List<Stock> lots = List.of(
-                lotOfPurchase(1, 5, 0, "2.00", Purchase.STATUS_PENDING));
+                lotOfPurchase(1, 5, 0, "2.00", PurchaseStatus.PENDING));
 
         StockReportSummary summary = StockReportCalculator.summarize(lots);
 
@@ -121,8 +122,8 @@ class StockReportCalculatorTest {
     @DisplayName("Si todo está excluido el resumen queda a cero, no revienta")
     void allLotsExcludedYieldsEmptySummary() {
         List<Stock> lots = List.of(
-                lotOfPurchase(1, 5, 0, "2.00", Purchase.STATUS_RETURNED),
-                lotOfPurchase(2, 3, 0, "2.00", Purchase.STATUS_CANCELLED));
+                lotOfPurchase(1, 5, 0, "2.00", PurchaseStatus.RETURNED),
+                lotOfPurchase(2, 3, 0, "2.00", PurchaseStatus.CANCELLED));
 
         StockReportSummary summary = StockReportCalculator.summarize(lots);
 

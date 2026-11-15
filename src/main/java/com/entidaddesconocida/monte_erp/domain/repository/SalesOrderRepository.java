@@ -1,6 +1,7 @@
 package com.entidaddesconocida.monte_erp.domain.repository;
 
 import com.entidaddesconocida.monte_erp.domain.model.ReportPeriod;
+import com.entidaddesconocida.monte_erp.domain.model.OrderStatus;
 import com.entidaddesconocida.monte_erp.domain.model.SalesOrder;
 import com.entidaddesconocida.monte_erp.domain.model.SalesOrderFilter;
 import com.entidaddesconocida.monte_erp.domain.model.SalesOrderLine;
@@ -76,7 +77,7 @@ public interface SalesOrderRepository {
      * order is given back and its issues are deleted in the same transaction, but
      * only after the guard matched (0 rows means no stock is touched).</p>
      */
-    int changeStatus(int id, String currentStatus, String newStatus) throws SQLException;
+    int changeStatus(int id, OrderStatus currentStatus, OrderStatus newStatus) throws SQLException;
 
     /**
      * Flat projection of the order lines inside the given period, used as the raw

@@ -9,18 +9,6 @@ package com.entidaddesconocida.monte_erp.domain.model;
  */
 public class User {
 
-    /** Role with administration permissions. */
-    public static final String ROLE_ADMIN = "admin";
-
-    /** Employee role (basic permissions). */
-    public static final String ROLE_EMPLOYEE = "employee";
-
-    /** User facing label of {@link #ROLE_ADMIN} (single source of truth). */
-    public static final String ROLE_ADMIN_LABEL = "Administrador";
-
-    /** User facing label of {@link #ROLE_EMPLOYEE} (single source of truth). */
-    public static final String ROLE_EMPLOYEE_LABEL = "Empleado";
-
     /** User facing label of an active account. */
     public static final String ACTIVE_LABEL = "Activo";
 
@@ -31,13 +19,13 @@ public class User {
     private String name;
     private String username;
     private String passwordHash;
-    private String role;
+    private Role role;
     private boolean active;
 
     public User() {
     }
 
-    public User(String name, String username, String passwordHash, String role, boolean active) {
+    public User(String name, String username, String passwordHash, Role role, boolean active) {
         this.name = name;
         this.username = username;
         this.passwordHash = passwordHash;
@@ -77,11 +65,11 @@ public class User {
         this.passwordHash = passwordHash;
     }
 
-    public String getRole() {
+    public Role getRole() {
         return role;
     }
 
-    public void setRole(String role) {
+    public void setRole(Role role) {
         this.role = role;
     }
 
@@ -95,12 +83,12 @@ public class User {
 
     /** {@code true} when the user holds the administrator role. */
     public boolean isAdmin() {
-        return ROLE_ADMIN.equals(role);
+        return role == Role.ADMIN;
     }
 
     /** Human readable role label, for the user interface (Spanish, as every other user facing text). */
     public String getRoleLabel() {
-        return isAdmin() ? ROLE_ADMIN_LABEL : ROLE_EMPLOYEE_LABEL;
+        return isAdmin() ? Role.ADMIN.label() : Role.EMPLOYEE.label();
     }
 
     /** Human readable account status label, for the user interface. */
@@ -110,6 +98,8 @@ public class User {
 
     @Override
     public String toString() {
-        return "User{id=" + id + ", username='" + username + "', role='" + role + "', active=" + active + '}';
+        String roleValue = role == null ? "null" : role.dbValue();
+        return "User{id=" + id + ", username='" + username + "', role='" + roleValue
+                + "', active=" + active + '}';
     }
 }

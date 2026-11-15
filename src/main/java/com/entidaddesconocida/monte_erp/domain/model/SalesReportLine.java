@@ -19,7 +19,7 @@ public final class SalesReportLine {
 
     private final int orderId;
     private final LocalDateTime orderDate;
-    private final String status;
+    private final OrderStatus status;
     private final int quantity;
     private final BigDecimal unitPrice;
     private final Product product;
@@ -30,7 +30,7 @@ public final class SalesReportLine {
      *                                  is negative; the read model mirrors the
      *                                  invariants of {@link SalesOrderLine}
      */
-    public SalesReportLine(int orderId, LocalDateTime orderDate, String status, int quantity,
+    public SalesReportLine(int orderId, LocalDateTime orderDate, OrderStatus status, int quantity,
                            BigDecimal unitPrice, Product product) {
         if (orderDate == null) {
             throw new IllegalArgumentException("La fecha del pedido es obligatoria");
@@ -65,7 +65,7 @@ public final class SalesReportLine {
         return orderDate;
     }
 
-    public String getStatus() {
+    public OrderStatus getStatus() {
         return status;
     }
 

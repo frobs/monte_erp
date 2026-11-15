@@ -34,7 +34,7 @@ class SalesOrderTest {
     }
 
     private static User user() {
-        return new User("Bea", "bea", "hash", User.ROLE_EMPLOYEE, true);
+        return new User("Bea", "bea", "hash", Role.EMPLOYEE, true);
     }
 
     @Test
@@ -62,7 +62,7 @@ class SalesOrderTest {
         SalesOrder order = new SalesOrder(customer(), author, List.of(
                 line(2, "10.00", product(1, "Teclado", "10.00"))));
 
-        assertEquals(SalesOrder.STATUS_PENDING, order.getStatus());
+        assertEquals(OrderStatus.PENDING, order.getStatus());
         assertEquals("Pendiente", order.getStatusLabel());
         assertSame(author, order.getUser());
         assertNotNull(order.getOrderDate());
@@ -72,17 +72,25 @@ class SalesOrderTest {
     @Test
     @DisplayName("getStatusLabel traduce los cuatro estados")
     void statusLabelsAreTranslated() {
-        assertEquals("Pendiente", SalesOrder.labelFor(SalesOrder.STATUS_PENDING));
-        assertEquals("Enviado", SalesOrder.labelFor(SalesOrder.STATUS_SHIPPED));
-        assertEquals("Entregado", SalesOrder.labelFor(SalesOrder.STATUS_DELIVERED));
-        assertEquals("Cancelado", SalesOrder.labelFor(SalesOrder.STATUS_CANCELLED));
+        assertEquals("Pendiente", statusLabelOf(OrderStatus.PENDING));
+        assertEquals("Enviado", statusLabelOf(OrderStatus.SHIPPED));
+        assertEquals("Entregado", statusLabelOf(OrderStatus.DELIVERED));
+        assertEquals("Cancelado", statusLabelOf(OrderStatus.CANCELLED));
     }
 
     @Test
-    @DisplayName("getStatusLabel devuelve el valor crudo para un estado desconocido o null")
-    void unknownStatusLabelsFallBackToTheRawValue() {
-        assertEquals("desconocido", SalesOrder.labelFor("desconocido"));
-        assertEquals("null", SalesOrder.labelFor(null));
+    @DisplayName("El enum expone el valor almacenado en la base de datos")
+    void statusesExposeTheirDatabaseValue() {
+        assertEquals("pending", OrderStatus.PENDING.dbValue());
+        assertEquals("shipped", OrderStatus.SHIPPED.dbValue());
+        assertEquals("delivered", OrderStatus.DELIVERED.dbValue());
+        assertEquals("cancelled", OrderStatus.CANCELLED.dbValue());
+        assertEquals(OrderStatus.PENDING, OrderStatus.fromDb("pending"));
+        assertThrows(IllegalArgumentException.class, () -> OrderStatus.fromDb("desconocido"));
+    }
+
+    private static String statusLabelOf(OrderStatus status) {
+        return orderWithStatus(status).getStatusLabel();
     }
 
     // --- RF-08: status state machine ------------------------------------
@@ -90,114 +98,112 @@ class SalesOrderTest {
     @Test
     @DisplayName("RF-08: allowedTransitions sigue el pipeline y vacía los terminales")
     void allowedTransitionsFollowThePipeline() {
-        assertEquals(List.of(SalesOrder.STATUS_SHIPPED, SalesOrder.STATUS_CANCELLED),
-                orderWithStatus(SalesOrder.STATUS_PENDING).allowedTransitions());
-        assertEquals(List.of(SalesOrder.STATUS_DELIVERED, SalesOrder.STATUS_CANCELLED),
-                orderWithStatus(SalesOrder.STATUS_SHIPPED).allowedTransitions());
-        assertEquals(List.of(), orderWithStatus(SalesOrder.STATUS_DELIVERED).allowedTransitions());
-        assertEquals(List.of(), orderWithStatus(SalesOrder.STATUS_CANCELLED).allowedTransitions());
-        assertEquals(List.of(), orderWithStatus("desconocido").allowedTransitions());
+        assertEquals(List.of(OrderStatus.SHIPPED, OrderStatus.CANCELLED),
+                orderWithStatus(OrderStatus.PENDING).allowedTransitions());
+        assertEquals(List.of(OrderStatus.DELIVERED, OrderStatus.CANCELLED),
+                orderWithStatus(OrderStatus.SHIPPED).allowedTransitions());
+        assertEquals(List.of(), orderWithStatus(OrderStatus.DELIVERED).allowedTransitions());
+        assertEquals(List.of(), orderWithStatus(OrderStatus.CANCELLED).allowedTransitions());
         assertEquals(List.of(), orderWithStatus(null).allowedTransitions());
     }
 
     @Test
     @DisplayName("RF-08: allowedTransitions es inmutable")
     void allowedTransitionsIsImmutable() {
-        List<String> transitions = orderWithStatus(SalesOrder.STATUS_PENDING).allowedTransitions();
+        List<OrderStatus> transitions = orderWithStatus(OrderStatus.PENDING).allowedTransitions();
 
         assertThrows(UnsupportedOperationException.class,
-                () -> transitions.add(SalesOrder.STATUS_DELIVERED));
+                () -> transitions.add(OrderStatus.DELIVERED));
     }
 
     @Test
     @DisplayName("RF-08: canTransitionTo acepta el pipeline y rechaza retrocesos, terminales, repetición y null")
     void canTransitionToOnlyAllowsThePipeline() {
-        SalesOrder pending = orderWithStatus(SalesOrder.STATUS_PENDING);
-        assertTrue(pending.canTransitionTo(SalesOrder.STATUS_SHIPPED));
-        assertTrue(pending.canTransitionTo(SalesOrder.STATUS_CANCELLED));
-        assertFalse(pending.canTransitionTo(SalesOrder.STATUS_DELIVERED));
-        assertFalse(pending.canTransitionTo(SalesOrder.STATUS_PENDING));
+        SalesOrder pending = orderWithStatus(OrderStatus.PENDING);
+        assertTrue(pending.canTransitionTo(OrderStatus.SHIPPED));
+        assertTrue(pending.canTransitionTo(OrderStatus.CANCELLED));
+        assertFalse(pending.canTransitionTo(OrderStatus.DELIVERED));
+        assertFalse(pending.canTransitionTo(OrderStatus.PENDING));
         assertFalse(pending.canTransitionTo(null));
-        assertFalse(pending.canTransitionTo("desconocido"));
 
-        SalesOrder shipped = orderWithStatus(SalesOrder.STATUS_SHIPPED);
-        assertTrue(shipped.canTransitionTo(SalesOrder.STATUS_DELIVERED));
-        assertTrue(shipped.canTransitionTo(SalesOrder.STATUS_CANCELLED));
-        assertFalse(shipped.canTransitionTo(SalesOrder.STATUS_PENDING));
+        SalesOrder shipped = orderWithStatus(OrderStatus.SHIPPED);
+        assertTrue(shipped.canTransitionTo(OrderStatus.DELIVERED));
+        assertTrue(shipped.canTransitionTo(OrderStatus.CANCELLED));
+        assertFalse(shipped.canTransitionTo(OrderStatus.PENDING));
 
-        assertFalse(orderWithStatus(SalesOrder.STATUS_DELIVERED)
-                .canTransitionTo(SalesOrder.STATUS_CANCELLED));
-        assertFalse(orderWithStatus(SalesOrder.STATUS_CANCELLED)
-                .canTransitionTo(SalesOrder.STATUS_PENDING));
+        assertFalse(orderWithStatus(OrderStatus.DELIVERED)
+                .canTransitionTo(OrderStatus.CANCELLED));
+        assertFalse(orderWithStatus(OrderStatus.CANCELLED)
+                .canTransitionTo(OrderStatus.PENDING));
     }
 
     @Test
     @DisplayName("RF-08: changeStatus avanza el pipeline y actualiza la etiqueta")
     void changeStatusAdvancesThePipeline() {
-        SalesOrder order = orderWithStatus(SalesOrder.STATUS_PENDING);
+        SalesOrder order = orderWithStatus(OrderStatus.PENDING);
 
-        order.changeStatus(SalesOrder.STATUS_SHIPPED);
-        assertEquals(SalesOrder.STATUS_SHIPPED, order.getStatus());
+        order.changeStatus(OrderStatus.SHIPPED);
+        assertEquals(OrderStatus.SHIPPED, order.getStatus());
         assertEquals("Enviado", order.getStatusLabel());
 
-        order.changeStatus(SalesOrder.STATUS_DELIVERED);
-        assertEquals(SalesOrder.STATUS_DELIVERED, order.getStatus());
+        order.changeStatus(OrderStatus.DELIVERED);
+        assertEquals(OrderStatus.DELIVERED, order.getStatus());
         assertEquals("Entregado", order.getStatusLabel());
     }
 
     @Test
     @DisplayName("RF-08: changeStatus permite cancelar desde pending y desde shipped")
     void changeStatusAllowsEarlyCancellation() {
-        SalesOrder pending = orderWithStatus(SalesOrder.STATUS_PENDING);
-        pending.changeStatus(SalesOrder.STATUS_CANCELLED);
-        assertEquals(SalesOrder.STATUS_CANCELLED, pending.getStatus());
+        SalesOrder pending = orderWithStatus(OrderStatus.PENDING);
+        pending.changeStatus(OrderStatus.CANCELLED);
+        assertEquals(OrderStatus.CANCELLED, pending.getStatus());
         assertEquals("Cancelado", pending.getStatusLabel());
 
-        SalesOrder shipped = orderWithStatus(SalesOrder.STATUS_SHIPPED);
-        shipped.changeStatus(SalesOrder.STATUS_CANCELLED);
-        assertEquals(SalesOrder.STATUS_CANCELLED, shipped.getStatus());
+        SalesOrder shipped = orderWithStatus(OrderStatus.SHIPPED);
+        shipped.changeStatus(OrderStatus.CANCELLED);
+        assertEquals(OrderStatus.CANCELLED, shipped.getStatus());
     }
 
     @Test
     @DisplayName("RF-08: changeStatus rechaza retrocesos, terminales, repetición y desconocidos")
     void changeStatusRejectsForbiddenTransitions() {
         assertThrows(IllegalStateException.class, () ->
-                orderWithStatus(SalesOrder.STATUS_SHIPPED).changeStatus(SalesOrder.STATUS_PENDING));
+                orderWithStatus(OrderStatus.SHIPPED).changeStatus(OrderStatus.PENDING));
         assertThrows(IllegalStateException.class, () ->
-                orderWithStatus(SalesOrder.STATUS_DELIVERED).changeStatus(SalesOrder.STATUS_SHIPPED));
+                orderWithStatus(OrderStatus.DELIVERED).changeStatus(OrderStatus.SHIPPED));
         assertThrows(IllegalStateException.class, () ->
-                orderWithStatus(SalesOrder.STATUS_DELIVERED).changeStatus(SalesOrder.STATUS_CANCELLED));
+                orderWithStatus(OrderStatus.DELIVERED).changeStatus(OrderStatus.CANCELLED));
         assertThrows(IllegalStateException.class, () ->
-                orderWithStatus(SalesOrder.STATUS_CANCELLED).changeStatus(SalesOrder.STATUS_PENDING));
+                orderWithStatus(OrderStatus.CANCELLED).changeStatus(OrderStatus.PENDING));
         assertThrows(IllegalStateException.class, () ->
-                orderWithStatus(SalesOrder.STATUS_PENDING).changeStatus(SalesOrder.STATUS_PENDING));
+                orderWithStatus(OrderStatus.PENDING).changeStatus(OrderStatus.PENDING));
         assertThrows(IllegalStateException.class, () ->
-                orderWithStatus(SalesOrder.STATUS_PENDING).changeStatus(null));
+                orderWithStatus(OrderStatus.PENDING).changeStatus(null));
         assertThrows(IllegalStateException.class, () ->
-                orderWithStatus("desconocido").changeStatus(SalesOrder.STATUS_SHIPPED));
+                orderWithStatus(null).changeStatus(OrderStatus.SHIPPED));
     }
 
     @Test
     @DisplayName("RF-08: changeStatus no deja retroceder tras entregar")
     void changeStatusRejectsRegressionAfterDelivery() {
-        SalesOrder order = orderWithStatus(SalesOrder.STATUS_SHIPPED);
-        order.changeStatus(SalesOrder.STATUS_DELIVERED);
+        SalesOrder order = orderWithStatus(OrderStatus.SHIPPED);
+        order.changeStatus(OrderStatus.DELIVERED);
 
         assertThrows(IllegalStateException.class,
-                () -> order.changeStatus(SalesOrder.STATUS_SHIPPED));
-        assertEquals(SalesOrder.STATUS_DELIVERED, order.getStatus());
+                () -> order.changeStatus(OrderStatus.SHIPPED));
+        assertEquals(OrderStatus.DELIVERED, order.getStatus());
     }
 
     @Test
     @DisplayName("RF-08: isTerminal es verdadero solo para delivered y cancelled")
     void isTerminalOnlyForFinalStates() {
-        assertFalse(orderWithStatus(SalesOrder.STATUS_PENDING).isTerminal());
-        assertFalse(orderWithStatus(SalesOrder.STATUS_SHIPPED).isTerminal());
-        assertTrue(orderWithStatus(SalesOrder.STATUS_DELIVERED).isTerminal());
-        assertTrue(orderWithStatus(SalesOrder.STATUS_CANCELLED).isTerminal());
+        assertFalse(orderWithStatus(OrderStatus.PENDING).isTerminal());
+        assertFalse(orderWithStatus(OrderStatus.SHIPPED).isTerminal());
+        assertTrue(orderWithStatus(OrderStatus.DELIVERED).isTerminal());
+        assertTrue(orderWithStatus(OrderStatus.CANCELLED).isTerminal());
     }
 
-    private static SalesOrder orderWithStatus(String status) {
+    private static SalesOrder orderWithStatus(OrderStatus status) {
         return new SalesOrder(1, LocalDateTime.now(), status, BigDecimal.ZERO,
                 customer(), user(), List.of());
     }

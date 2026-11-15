@@ -16,26 +16,26 @@ class UserTest {
     @Test
     @DisplayName("isAdmin y getRoleLabel distinguen administrador y empleado")
     void roleLabelsFollowTheRole() {
-        User admin = new User("Ana", "ana", "hash", User.ROLE_ADMIN, true);
-        User employee = new User("Bea", "bea", "hash", User.ROLE_EMPLOYEE, true);
+        User admin = new User("Ana", "ana", "hash", Role.ADMIN, true);
+        User employee = new User("Bea", "bea", "hash", Role.EMPLOYEE, true);
         User unknown = new User("Cris", "cris", "hash", null, true);
 
         assertTrue(admin.isAdmin());
-        assertEquals(User.ROLE_ADMIN_LABEL, admin.getRoleLabel());
+        assertEquals(Role.ADMIN.label(), admin.getRoleLabel());
 
         assertFalse(employee.isAdmin());
-        assertEquals(User.ROLE_EMPLOYEE_LABEL, employee.getRoleLabel());
+        assertEquals(Role.EMPLOYEE.label(), employee.getRoleLabel());
 
         // Any role that is not admin is presented as employee.
         assertFalse(unknown.isAdmin());
-        assertEquals(User.ROLE_EMPLOYEE_LABEL, unknown.getRoleLabel());
+        assertEquals(Role.EMPLOYEE.label(), unknown.getRoleLabel());
     }
 
     @Test
     @DisplayName("getStatusLabel distingue activo e inactivo")
     void statusLabelsFollowTheFlag() {
-        assertEquals(User.ACTIVE_LABEL, new User("Ana", "ana", "hash", User.ROLE_ADMIN, true).getStatusLabel());
-        assertEquals(User.INACTIVE_LABEL, new User("Bea", "bea", "hash", User.ROLE_EMPLOYEE, false).getStatusLabel());
+        assertEquals(User.ACTIVE_LABEL, new User("Ana", "ana", "hash", Role.ADMIN, true).getStatusLabel());
+        assertEquals(User.INACTIVE_LABEL, new User("Bea", "bea", "hash", Role.EMPLOYEE, false).getStatusLabel());
     }
 
     @Test
@@ -46,14 +46,14 @@ class UserTest {
         user.setName("Ana");
         user.setUsername("ana");
         user.setPasswordHash("hash");
-        user.setRole(User.ROLE_ADMIN);
+        user.setRole(Role.ADMIN);
         user.setActive(true);
 
         assertEquals(9, user.getId());
         assertEquals("Ana", user.getName());
         assertEquals("ana", user.getUsername());
         assertEquals("hash", user.getPasswordHash());
-        assertEquals(User.ROLE_ADMIN, user.getRole());
+        assertEquals(Role.ADMIN, user.getRole());
         assertTrue(user.isActive());
 
         user.setActive(false);
@@ -63,7 +63,7 @@ class UserTest {
     @Test
     @DisplayName("toString resume id, usuario, rol y estado")
     void toStringSummarizesTheUser() {
-        User user = new User("Ana", "ana", "hash", User.ROLE_ADMIN, true);
+        User user = new User("Ana", "ana", "hash", Role.ADMIN, true);
         user.setId(4);
 
         String text = user.toString();

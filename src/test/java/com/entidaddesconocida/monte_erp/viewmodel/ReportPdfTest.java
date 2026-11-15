@@ -1,5 +1,6 @@
 package com.entidaddesconocida.monte_erp.viewmodel;
 
+import com.entidaddesconocida.monte_erp.domain.model.PurchaseStatus;
 import com.entidaddesconocida.monte_erp.domain.model.Product;
 import com.entidaddesconocida.monte_erp.domain.model.Purchase;
 import com.entidaddesconocida.monte_erp.domain.model.ReportPeriod;
@@ -49,7 +50,7 @@ class ReportPdfTest {
     }
 
     private static Stock lot(int id, int initial, int available, String price,
-                             String purchaseStatus) {
+                             PurchaseStatus purchaseStatus) {
         Purchase purchase = new Purchase(5, ENTRY, purchaseStatus, BigDecimal.ZERO, null, null,
                 List.of());
         return new Stock(id, initial, available, new BigDecimal(price), ENTRY, product(), purchase);
@@ -67,7 +68,7 @@ class ReportPdfTest {
     @Test
     @DisplayName("El PDF de stock lleva título, período, cabeceras y totales")
     void stockReportHasTitlePeriodHeadersAndTotals() {
-        Stock received = lot(1, 10, 7, "1.50", Purchase.STATUS_RECEIVED);
+        Stock received = lot(1, 10, 7, "1.50", PurchaseStatus.RECEIVED);
 
         byte[] pdf = ReportPdf.stockReport(List.of(received),
                 StockReportCalculator.summarize(List.of(received)), ReportPeriod.all());
@@ -100,9 +101,9 @@ class ReportPdfTest {
     @DisplayName("Las compras devueltas o canceladas salen con su motivo y no suman")
     void returnedAndCancelledLotsAreMarkedAndExcluded() {
         List<Stock> lots = List.of(
-                lot(1, 10, 7, "1.50", Purchase.STATUS_RECEIVED),
-                lot(2, 5, 0, "9.00", Purchase.STATUS_RETURNED),
-                lot(3, 2, 0, "9.00", Purchase.STATUS_CANCELLED));
+                lot(1, 10, 7, "1.50", PurchaseStatus.RECEIVED),
+                lot(2, 5, 0, "9.00", PurchaseStatus.RETURNED),
+                lot(3, 2, 0, "9.00", PurchaseStatus.CANCELLED));
 
         String text = text(ReportPdf.stockReport(lots,
                 StockReportCalculator.summarize(lots), ReportPeriod.all()));

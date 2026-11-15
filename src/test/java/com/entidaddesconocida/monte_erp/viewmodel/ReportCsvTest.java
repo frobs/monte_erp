@@ -1,5 +1,6 @@
 package com.entidaddesconocida.monte_erp.viewmodel;
 
+import com.entidaddesconocida.monte_erp.domain.model.PurchaseStatus;
 import com.entidaddesconocida.monte_erp.domain.model.Product;
 import com.entidaddesconocida.monte_erp.domain.model.Purchase;
 import com.entidaddesconocida.monte_erp.domain.model.SalesReportRow;
@@ -34,11 +35,11 @@ class ReportCsvTest {
 
     private static Stock lot(int id, String name, String sku, int initial, int available,
                              String price) {
-        return lot(id, name, sku, initial, available, price, Purchase.STATUS_RECEIVED);
+        return lot(id, name, sku, initial, available, price, PurchaseStatus.RECEIVED);
     }
 
     private static Stock lot(int id, String name, String sku, int initial, int available,
-                             String price, String purchaseStatus) {
+                             String price, PurchaseStatus purchaseStatus) {
         Product product = product(name, sku);
         product.setId(1);
         Purchase purchase = new Purchase(5, null, purchaseStatus, null, null, null, null);
@@ -68,7 +69,7 @@ class ReportCsvTest {
     @Test
     @DisplayName("Una compra devuelta se marca y no suma en los totales del CSV")
     void returnedPurchaseIsMarkedAndExcludedFromTheTotals() {
-        Stock returned = lot(1, "Teclado", "SKU-1", 10, 0, "1.50", Purchase.STATUS_RETURNED);
+        Stock returned = lot(1, "Teclado", "SKU-1", 10, 0, "1.50", PurchaseStatus.RETURNED);
 
         String csv = ReportCsv.stockReport(List.of(returned),
                 StockReportCalculator.summarize(List.of(returned)));
@@ -85,7 +86,7 @@ class ReportCsvTest {
     @Test
     @DisplayName("Una compra cancelada se marca como cancelada en el CSV")
     void cancelledPurchaseIsMarked() {
-        Stock cancelled = lot(1, "Teclado", "SKU-1", 4, 0, "2.00", Purchase.STATUS_CANCELLED);
+        Stock cancelled = lot(1, "Teclado", "SKU-1", 4, 0, "2.00", PurchaseStatus.CANCELLED);
 
         String csv = ReportCsv.stockReport(List.of(cancelled),
                 StockReportCalculator.summarize(List.of(cancelled)));

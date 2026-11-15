@@ -22,7 +22,7 @@ class SalesReportLineTest {
 
     private static SalesReportLine line(int quantity, String price) {
         return new SalesReportLine(7, LocalDateTime.of(2025, 1, 15, 10, 0),
-                SalesOrder.STATUS_PENDING, quantity, new BigDecimal(price), product());
+                OrderStatus.PENDING, quantity, new BigDecimal(price), product());
     }
 
     @Test
@@ -42,12 +42,12 @@ class SalesReportLineTest {
         assertThrows(IllegalArgumentException.class, () -> line(-1, "1.00"));
         assertThrows(IllegalArgumentException.class, () -> line(1, "-0.01"));
         assertThrows(IllegalArgumentException.class, () -> new SalesReportLine(1, null,
-                SalesOrder.STATUS_PENDING, 1, BigDecimal.ONE, product()));
+                OrderStatus.PENDING, 1, BigDecimal.ONE, product()));
         assertThrows(IllegalArgumentException.class, () -> new SalesReportLine(1,
                 LocalDateTime.now(), null, 1, BigDecimal.ONE, product()));
         assertThrows(IllegalArgumentException.class, () -> new SalesReportLine(1,
-                LocalDateTime.now(), SalesOrder.STATUS_PENDING, 1, null, product()));
+                LocalDateTime.now(), OrderStatus.PENDING, 1, null, product()));
         assertThrows(IllegalArgumentException.class, () -> new SalesReportLine(1,
-                LocalDateTime.now(), SalesOrder.STATUS_PENDING, 1, BigDecimal.ONE, null));
+                LocalDateTime.now(), OrderStatus.PENDING, 1, BigDecimal.ONE, null));
     }
 }

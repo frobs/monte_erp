@@ -118,7 +118,7 @@ class StockTest {
         assertThrows(IllegalArgumentException.class, () -> lot.restore(0));
     }
 
-    private static Stock lotWithPurchaseStatus(String status) {
+    private static Stock lotWithPurchaseStatus(PurchaseStatus status) {
         Purchase purchase = new Purchase(7, LocalDateTime.now(), status, BigDecimal.ZERO,
                 null, null, List.of());
         return new Stock(1, 5, 5, new BigDecimal("1.00"), LocalDateTime.now(), product(), purchase);
@@ -127,10 +127,10 @@ class StockTest {
     @Test
     @DisplayName("countsInStockReport descarta solo las compras devueltas o canceladas (RF-12)")
     void onlyReturnedOrCancelledLotsAreExcludedFromTheReport() {
-        assertTrue(lotWithPurchaseStatus(Purchase.STATUS_RECEIVED).countsInStockReport());
-        assertTrue(lotWithPurchaseStatus(Purchase.STATUS_PENDING).countsInStockReport());
-        assertFalse(lotWithPurchaseStatus(Purchase.STATUS_RETURNED).countsInStockReport());
-        assertFalse(lotWithPurchaseStatus(Purchase.STATUS_CANCELLED).countsInStockReport());
+        assertTrue(lotWithPurchaseStatus(PurchaseStatus.RECEIVED).countsInStockReport());
+        assertTrue(lotWithPurchaseStatus(PurchaseStatus.PENDING).countsInStockReport());
+        assertFalse(lotWithPurchaseStatus(PurchaseStatus.RETURNED).countsInStockReport());
+        assertFalse(lotWithPurchaseStatus(PurchaseStatus.CANCELLED).countsInStockReport());
     }
 
     @Test
