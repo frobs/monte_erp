@@ -1,6 +1,7 @@
 package com.entidaddesconocida.monte_erp.infrastructure;
 
 import com.entidaddesconocida.monte_erp.domain.model.Customer;
+import com.entidaddesconocida.monte_erp.domain.model.OrderStatus;
 import com.entidaddesconocida.monte_erp.domain.model.Product;
 import com.entidaddesconocida.monte_erp.domain.model.Purchase;
 import com.entidaddesconocida.monte_erp.domain.model.ReportPeriod;
@@ -151,37 +152,26 @@ public class MySqlSalesOrderRepository implements SalesOrderRepository {
 
     @Override
     public int insert(SalesOrder order) throws SQLException, InsufficientStockException {
-        Connection connection = DatabaseConnection.getConnection();
-        boolean previousAutoCommit = connection.getAutoCommit();
-        connection.setAutoCommit(false);
-        try {
+        int id = DatabaseConnection.withTransaction(connection -> {
             requireActive(connection, SELECT_ACTIVE_CUSTOMER_FOR_UPDATE,
                     order.getCustomer().getId(), "cliente");
-            int id = insertOrder(connection, order);
-            order.setId(id);
+            int orderId = insertOrder(connection, order);
             for (SalesOrderLine line : order.getLines()) {
-                insertLineAndConsumeStock(connection, id, line);
+                insertLineAndConsumeStock(connection, orderId, line);
             }
-            connection.commit();
-            return id;
-        } catch (SQLException | InsufficientStockException | RuntimeException e) {
-            try {
-                connection.rollback();
-            } catch (SQLException rollbackFailure) {
-                e.addSuppressed(rollbackFailure);
-            }
-            throw e;
-        } finally {
-            // The connection is shared (singleton): leave it as it was found.
-            connection.setAutoCommit(previousAutoCommit);
-        }
+            return orderId;
+        });
+        // Only after the commit: a rolled-back order must not keep an id.
+        order.setId(id);
+        return id;
     }
 
     @Override
     public List<SalesOrder> findAll(SalesOrderFilter filter) throws SQLException {
         List<SalesOrder> orders = new ArrayList<>();
-        try (PreparedStatement ps = DatabaseConnection.getConnection()
-                .prepareStatement(SELECT_ORDERS)) {
+        try (Connection connection = DatabaseConnection.open();
+             PreparedStatement ps = connection
+                     .prepareStatement(SELECT_ORDERS)) {
             // Both placeholders of each guard receive the same value, so a null
             // criterion disables its comparison instead of filtering by NULL.
             bindDate(ps, 1, filter.period().from());
@@ -190,8 +180,8 @@ public class MySqlSalesOrderRepository implements SalesOrderRepository {
             bindDate(ps, 4, filter.period().to());
             bindInt(ps, 5, filter.customerId());
             bindInt(ps, 6, filter.customerId());
-            bindString(ps, 7, filter.status());
-            bindString(ps, 8, filter.status());
+            bindStatus(ps, 7, filter.status());
+            bindStatus(ps, 8, filter.status());
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
                     orders.add(mapOrder(rs));
@@ -204,7 +194,8 @@ public class MySqlSalesOrderRepository implements SalesOrderRepository {
     @Override
     public List<SalesOrderLine> findLines(int salesOrderId) throws SQLException {
         List<SalesOrderLine> lines = new ArrayList<>();
-        try (PreparedStatement ps = DatabaseConnection.getConnection().prepareStatement(SELECT_LINES)) {
+        try (Connection connection = DatabaseConnection.open();
+             PreparedStatement ps = connection.prepareStatement(SELECT_LINES)) {
             ps.setInt(1, salesOrderId);
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
@@ -218,7 +209,8 @@ public class MySqlSalesOrderRepository implements SalesOrderRepository {
     @Override
     public List<StockIssue> findIssues(int salesOrderId) throws SQLException {
         List<StockIssue> issues = new ArrayList<>();
-        try (PreparedStatement ps = DatabaseConnection.getConnection().prepareStatement(SELECT_ISSUES)) {
+        try (Connection connection = DatabaseConnection.open();
+             PreparedStatement ps = connection.prepareStatement(SELECT_ISSUES)) {
             ps.setInt(1, salesOrderId);
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
@@ -232,8 +224,9 @@ public class MySqlSalesOrderRepository implements SalesOrderRepository {
     @Override
     public List<SalesReportLine> findReportLines(ReportPeriod period) throws SQLException {
         List<SalesReportLine> lines = new ArrayList<>();
-        try (PreparedStatement ps = DatabaseConnection.getConnection()
-                .prepareStatement(SELECT_REPORT_LINES)) {
+        try (Connection connection = DatabaseConnection.open();
+             PreparedStatement ps = connection
+                     .prepareStatement(SELECT_REPORT_LINES)) {
             bindDate(ps, 1, period.from());
             bindDate(ps, 2, period.from());
             bindDate(ps, 3, period.to());
@@ -266,24 +259,26 @@ public class MySqlSalesOrderRepository implements SalesOrderRepository {
         }
     }
 
-    /** Binds an optional string (the status), using SQL NULL when absent. */
-    private static void bindString(PreparedStatement ps, int index, String value)
+    /** Binds an optional status (its database value), using SQL NULL when absent. */
+    private static void bindStatus(PreparedStatement ps, int index, OrderStatus value)
             throws SQLException {
         if (value == null) {
             ps.setNull(index, Types.VARCHAR);
         } else {
-            ps.setString(index, value);
+            ps.setString(index, value.dbValue());
         }
     }
 
     @Override
-    public int changeStatus(int id, String currentStatus, String newStatus) throws SQLException {
+    public int changeStatus(int id, OrderStatus currentStatus, OrderStatus newStatus)
+            throws SQLException {
         // No business logic: the transition was already validated by the domain.
-        if (!SalesOrder.STATUS_CANCELLED.equals(newStatus)) {
-            try (PreparedStatement ps = DatabaseConnection.getConnection().prepareStatement(UPDATE_STATUS)) {
-                ps.setString(1, newStatus);
+        if (newStatus != OrderStatus.CANCELLED) {
+            try (Connection connection = DatabaseConnection.open();
+                 PreparedStatement ps = connection.prepareStatement(UPDATE_STATUS)) {
+                ps.setString(1, newStatus.dbValue());
                 ps.setInt(2, id);
-                ps.setString(3, currentStatus);
+                ps.setString(3, currentStatus.dbValue());
                 return ps.executeUpdate();
             }
         }
@@ -295,35 +290,22 @@ public class MySqlSalesOrderRepository implements SalesOrderRepository {
      * back and delete the issues. A 0-row guard means someone else moved the
      * order, so nothing is touched.
      */
-    private int cancelAndRestoreStock(int id, String currentStatus) throws SQLException {
-        Connection connection = DatabaseConnection.getConnection();
-        boolean previousAutoCommit = connection.getAutoCommit();
-        connection.setAutoCommit(false);
-        try {
-            int updated = updateStatus(connection, id, currentStatus, SalesOrder.STATUS_CANCELLED);
+    private int cancelAndRestoreStock(int id, OrderStatus currentStatus) throws SQLException {
+        return DatabaseConnection.withTransaction(connection -> {
+            int updated = updateStatus(connection, id, currentStatus, OrderStatus.CANCELLED);
             if (updated == 0) {
-                connection.rollback();
+                // Someone else moved the order: nothing to give back.
                 return 0;
             }
             restoreStock(connection, id);
             deleteIssues(connection, id);
-            connection.commit();
             return updated;
-        } catch (SQLException e) {
-            try {
-                connection.rollback();
-            } catch (SQLException rollbackFailure) {
-                e.addSuppressed(rollbackFailure);
-            }
-            throw e;
-        } finally {
-            connection.setAutoCommit(previousAutoCommit);
-        }
+        });
     }
 
     private int insertOrder(Connection connection, SalesOrder order) throws SQLException {
         try (PreparedStatement ps = connection.prepareStatement(INSERT_ORDER, Statement.RETURN_GENERATED_KEYS)) {
-            ps.setString(1, order.getStatus());
+            ps.setString(1, order.getStatus().dbValue());
             ps.setBigDecimal(2, order.getTotal());
             ps.setInt(3, order.getCustomer().getId());
             ps.setInt(4, order.getUser().getId());
@@ -412,12 +394,12 @@ public class MySqlSalesOrderRepository implements SalesOrderRepository {
         }
     }
 
-    private int updateStatus(Connection connection, int id, String currentStatus, String newStatus)
-            throws SQLException {
+    private int updateStatus(Connection connection, int id, OrderStatus currentStatus,
+                             OrderStatus newStatus) throws SQLException {
         try (PreparedStatement ps = connection.prepareStatement(UPDATE_STATUS)) {
-            ps.setString(1, newStatus);
+            ps.setString(1, newStatus.dbValue());
             ps.setInt(2, id);
-            ps.setString(3, currentStatus);
+            ps.setString(3, currentStatus.dbValue());
             return ps.executeUpdate();
         }
     }
@@ -455,7 +437,7 @@ public class MySqlSalesOrderRepository implements SalesOrderRepository {
                 null, null, null);
         return new SalesOrder(rs.getInt("id"),
                 rs.getTimestamp("order_date").toLocalDateTime(),
-                rs.getString("status"),
+                OrderStatus.fromDb(rs.getString("status")),
                 rs.getBigDecimal("total"),
                 customer,
                 null,
@@ -471,7 +453,8 @@ public class MySqlSalesOrderRepository implements SalesOrderRepository {
     private SalesReportLine mapReportLine(ResultSet rs) throws SQLException {
         Product product = lightProduct(rs, "product_id", "product_name", "product_sku");
         return new SalesReportLine(rs.getInt("order_id"),
-                rs.getTimestamp("order_date").toLocalDateTime(), rs.getString("status"),
+                rs.getTimestamp("order_date").toLocalDateTime(),
+                OrderStatus.fromDb(rs.getString("status")),
                 rs.getInt("quantity"), rs.getBigDecimal("unit_price"), product);
     }
 

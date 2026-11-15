@@ -6,6 +6,7 @@ import com.entidaddesconocida.monte_erp.domain.model.ProductFilter;
 import com.entidaddesconocida.monte_erp.domain.repository.ProductRepository;
 import com.entidaddesconocida.monte_erp.infrastructure.config.DatabaseConnection;
 
+import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -94,7 +95,8 @@ public class MySqlProductRepository implements ProductRepository {
     @Override
     public Product findBySku(String sku) throws SQLException {
         String sql = SELECT_ALL + " WHERE p.sku = ?";
-        try (PreparedStatement ps = DatabaseConnection.getConnection().prepareStatement(sql)) {
+        try (Connection connection = DatabaseConnection.open();
+             PreparedStatement ps = connection.prepareStatement(sql)) {
             ps.setString(1, sku);
             try (ResultSet rs = ps.executeQuery()) {
                 return rs.next() ? map(rs) : null;
@@ -104,8 +106,9 @@ public class MySqlProductRepository implements ProductRepository {
 
     @Override
     public int insert(Product product) throws SQLException {
-        try (PreparedStatement ps = DatabaseConnection.getConnection()
-                .prepareStatement(INSERT_PRODUCT, Statement.RETURN_GENERATED_KEYS)) {
+        try (Connection connection = DatabaseConnection.open();
+             PreparedStatement ps = connection
+                     .prepareStatement(INSERT_PRODUCT, Statement.RETURN_GENERATED_KEYS)) {
             bindCommon(ps, product);
             ps.setBoolean(7, product.isActive());
             ps.executeUpdate();
@@ -119,7 +122,8 @@ public class MySqlProductRepository implements ProductRepository {
 
     @Override
     public void update(Product product) throws SQLException {
-        try (PreparedStatement ps = DatabaseConnection.getConnection().prepareStatement(UPDATE_PRODUCT)) {
+        try (Connection connection = DatabaseConnection.open();
+             PreparedStatement ps = connection.prepareStatement(UPDATE_PRODUCT)) {
             bindCommon(ps, product);
             ps.setBoolean(7, product.isActive());
             ps.setInt(8, product.getId());
@@ -138,7 +142,8 @@ public class MySqlProductRepository implements ProductRepository {
     }
 
     private void setActive(String sql, int id) throws SQLException {
-        try (PreparedStatement ps = DatabaseConnection.getConnection().prepareStatement(sql)) {
+        try (Connection connection = DatabaseConnection.open();
+             PreparedStatement ps = connection.prepareStatement(sql)) {
             ps.setInt(1, id);
             ps.executeUpdate();
         }
@@ -165,7 +170,8 @@ public class MySqlProductRepository implements ProductRepository {
 
     private List<Product> query(String sql) throws SQLException {
         List<Product> products = new ArrayList<>();
-        try (Statement statement = DatabaseConnection.getConnection().createStatement();
+        try (Connection connection = DatabaseConnection.open();
+             Statement statement = connection.createStatement();
              ResultSet rs = statement.executeQuery(sql)) {
             while (rs.next()) {
                 products.add(map(rs));
@@ -177,8 +183,8 @@ public class MySqlProductRepository implements ProductRepository {
     private List<Product> queryFiltered(ProductFilter filter, boolean active) throws SQLException {
         List<Product> products = new ArrayList<>();
         String pattern = SqlSearch.likePattern(filter.search());
-        try (PreparedStatement ps = DatabaseConnection.getConnection()
-                .prepareStatement(SELECT_FILTERED)) {
+        try (Connection connection = DatabaseConnection.open();
+             PreparedStatement ps = connection.prepareStatement(SELECT_FILTERED)) {
             ps.setBoolean(1, active);
             bindString(ps, 2, pattern);
             bindString(ps, 3, pattern);

@@ -1,6 +1,7 @@
 package com.entidaddesconocida.monte_erp;
 
 import com.entidaddesconocida.monte_erp.app.AppContext;
+import com.entidaddesconocida.monte_erp.app.BackgroundTasks;
 import com.entidaddesconocida.monte_erp.app.AppShell;
 import com.entidaddesconocida.monte_erp.app.SessionState;
 import com.entidaddesconocida.monte_erp.domain.model.ConnectionSettings;
@@ -39,6 +40,10 @@ import java.util.logging.Logger;
 /**
  * Monte ERP JavaFX application.
  *
+ * <p>Every database operation opens and closes its own connection
+ * ({@code DatabaseConnection}), so there is no resource to release on shutdown;
+ * the blocking queries run on virtual threads ({@code BackgroundTasks}).</p>
+ *
  * <p>On startup it decides which screen to show. If the configuration (URL in a
  * properties file next to the application, credentials in the OS keyring) is
  * missing or incomplete, the onboarding screen is shown. Otherwise the pending
@@ -67,7 +72,8 @@ public class MonteErpApplication extends Application {
         AppContext context = new AppContext(session, appShell, userRepository,
                 categoryRepository, supplierRepository, productRepository, customerRepository,
                 salesOrderRepository, purchaseRepository, stockRepository, databaseConfig,
-                setupService, () -> new DatabaseUrl(DatabaseConnection.getUrl()));
+                setupService, () -> new DatabaseUrl(DatabaseConnection.getUrl()),
+                BackgroundTasks.virtualThreads());
 
         MvvmFX.setCustomDependencyInjector(context::create);
         appShell.setStage(stage);
@@ -103,10 +109,5 @@ public class MonteErpApplication extends Application {
             // The configuration exists but is wrong or unreachable: let the user fix it.
             appShell.showSetup(false);
         }
-    }
-
-    @Override
-    public void stop() {
-        DatabaseConnection.close();
     }
 }

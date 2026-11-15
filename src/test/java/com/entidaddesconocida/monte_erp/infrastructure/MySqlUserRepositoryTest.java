@@ -1,5 +1,6 @@
 package com.entidaddesconocida.monte_erp.infrastructure;
 
+import com.entidaddesconocida.monte_erp.domain.model.Role;
 import com.entidaddesconocida.monte_erp.domain.model.User;
 import com.entidaddesconocida.monte_erp.infrastructure.config.DatabaseConnection;
 import com.entidaddesconocida.monte_erp.infrastructure.support.FakeJdbc;
@@ -42,7 +43,6 @@ class MySqlUserRepositoryTest {
 
     @AfterEach
     void tearDown() {
-        DatabaseConnection.close();
         DatabaseConnection.configure(null, null, null);
         fake.uninstall();
     }
@@ -53,7 +53,7 @@ class MySqlUserRepositoryTest {
                 "name", "Ana",
                 "username", "ana",
                 "password_hash", HASH,
-                "role", User.ROLE_ADMIN,
+                "role", Role.ADMIN.dbValue(),
                 "active", true);
     }
 
@@ -69,7 +69,7 @@ class MySqlUserRepositoryTest {
         assertEquals("Ana", user.getName());
         assertEquals("ana", user.getUsername());
         assertEquals(HASH, user.getPasswordHash());
-        assertEquals(User.ROLE_ADMIN, user.getRole());
+        assertEquals(Role.ADMIN, user.getRole());
         assertTrue(user.isActive());
 
         assertEquals(1, fake.preparedSql().size());
@@ -91,7 +91,7 @@ class MySqlUserRepositoryTest {
         fake.withRows(
                 anaRow(),
                 FakeJdbc.row("id", 2, "name", "Bea", "username", "bea",
-                        "password_hash", HASH, "role", User.ROLE_EMPLOYEE, "active", false));
+                        "password_hash", HASH, "role", Role.EMPLOYEE.dbValue(), "active", false));
 
         List<User> users = repository.findAll();
 
@@ -110,7 +110,7 @@ class MySqlUserRepositoryTest {
     @DisplayName("insert enlaza las cinco columnas y asigna la clave generada")
     void insertBindsColumnsAndReturnsGeneratedKey() throws SQLException {
         fake.withGeneratedKey(42);
-        User user = new User("Nuevo", "nuevo", HASH, User.ROLE_EMPLOYEE, true);
+        User user = new User("Nuevo", "nuevo", HASH, Role.EMPLOYEE, true);
 
         int id = repository.insert(user);
 
@@ -122,7 +122,7 @@ class MySqlUserRepositoryTest {
         assertEquals("Nuevo", parameters.get(1));
         assertEquals("nuevo", parameters.get(2));
         assertEquals(HASH, parameters.get(3));
-        assertEquals(User.ROLE_EMPLOYEE, parameters.get(4));
+        assertEquals(Role.EMPLOYEE.dbValue(), parameters.get(4));
         assertEquals(true, parameters.get(5));
     }
 
@@ -130,7 +130,7 @@ class MySqlUserRepositoryTest {
     @DisplayName("insert sin clave generada deja el id a 0")
     void insertWithoutGeneratedKeyLeavesZeroId() throws SQLException {
         fake.withRows();
-        User user = new User("Nuevo", "nuevo", HASH, User.ROLE_ADMIN, true);
+        User user = new User("Nuevo", "nuevo", HASH, Role.ADMIN, true);
 
         assertEquals(0, repository.insert(user));
         assertEquals(0, user.getId());
@@ -139,7 +139,7 @@ class MySqlUserRepositoryTest {
     @Test
     @DisplayName("update enlaza las cinco columnas más el id")
     void updateBindsEveryColumnAndId() throws SQLException {
-        User user = new User("Ana", "ana", HASH, User.ROLE_ADMIN, true);
+        User user = new User("Ana", "ana", HASH, Role.ADMIN, true);
         user.setId(7);
 
         repository.update(user);
@@ -150,7 +150,7 @@ class MySqlUserRepositoryTest {
         assertEquals("Ana", parameters.get(1));
         assertEquals("ana", parameters.get(2));
         assertEquals(HASH, parameters.get(3));
-        assertEquals(User.ROLE_ADMIN, parameters.get(4));
+        assertEquals(Role.ADMIN.dbValue(), parameters.get(4));
         assertEquals(true, parameters.get(5));
         assertEquals(7, parameters.get(6));
     }

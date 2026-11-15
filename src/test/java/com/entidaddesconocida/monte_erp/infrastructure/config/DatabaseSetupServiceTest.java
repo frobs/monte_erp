@@ -1,5 +1,6 @@
 package com.entidaddesconocida.monte_erp.infrastructure.config;
 
+import com.entidaddesconocida.monte_erp.domain.model.Role;
 import com.entidaddesconocida.monte_erp.domain.model.ConnectionSettings;
 import com.entidaddesconocida.monte_erp.domain.model.User;
 import com.entidaddesconocida.monte_erp.domain.service.SetupException;
@@ -46,7 +47,6 @@ class DatabaseSetupServiceTest {
 
     @AfterEach
     void resetDatabaseConnection() {
-        DatabaseConnection.close();
         DatabaseConnection.configure(null, null, null);
         fake.uninstall();
     }
@@ -68,7 +68,7 @@ class DatabaseSetupServiceTest {
     @DisplayName("hasAdminUser devuelve false cuando solo hay empleados")
     void hasAdminUserReturnsFalseWhenOnlyEmployees() throws Exception {
         FakeUserRepository repo = new FakeUserRepository()
-                .withUser(new User("Ana", "ana", PasswordHasher.hash("ana123"), User.ROLE_EMPLOYEE, true));
+                .withUser(new User("Ana", "ana", PasswordHasher.hash("ana123"), Role.EMPLOYEE, true));
         assertFalse(service(repo).hasAdminUser());
     }
 
@@ -76,8 +76,8 @@ class DatabaseSetupServiceTest {
     @DisplayName("hasAdminUser devuelve true cuando hay al menos un administrador")
     void hasAdminUserReturnsTrueWhenAdminExists() throws Exception {
         FakeUserRepository repo = new FakeUserRepository()
-                .withUser(new User("Ana", "ana", PasswordHasher.hash("ana123"), User.ROLE_EMPLOYEE, true))
-                .withUser(new User("Bob", "bob", PasswordHasher.hash("bob123"), User.ROLE_ADMIN, true));
+                .withUser(new User("Ana", "ana", PasswordHasher.hash("ana123"), Role.EMPLOYEE, true))
+                .withUser(new User("Bob", "bob", PasswordHasher.hash("bob123"), Role.ADMIN, true));
         assertTrue(service(repo).hasAdminUser());
     }
 
@@ -100,14 +100,14 @@ class DatabaseSetupServiceTest {
     }
 
     @Test
-    @DisplayName("save persiste la configuración y configura la conexión compartida")
+    @DisplayName("save persiste la configuración y apunta la factoría a ella")
     void savePersistsAndConfiguresTheConnection() throws Exception {
         DatabaseSetupService service = service(new FakeUserRepository());
 
         service.save(SETTINGS);
 
         assertEquals(FakeJdbc.URL, DatabaseConnection.getUrl());
-        assertNotNull(DatabaseConnection.getConnection());
+        assertNotNull(DatabaseConnection.open());
     }
 
     @Test
@@ -146,7 +146,7 @@ class DatabaseSetupServiceTest {
     @DisplayName("provision es idempotente si el administrador ya existe")
     void provisionIsIdempotentForAnExistingAdmin() throws Exception {
         FakeUserRepository repo = new FakeUserRepository()
-                .withUser(new User("Administrador", "admin", PasswordHasher.hash("admin123"), User.ROLE_ADMIN, true));
+                .withUser(new User("Administrador", "admin", PasswordHasher.hash("admin123"), Role.ADMIN, true));
         DatabaseSetupService service = service(repo);
 
         service.provision(SETTINGS, "Otro", "admin", "otra123");
@@ -159,7 +159,7 @@ class DatabaseSetupServiceTest {
     @DisplayName("provision rechaza un nombre de usuario ocupado por un empleado")
     void provisionRejectsUsernameTakenByAnEmployee() throws Exception {
         FakeUserRepository repo = new FakeUserRepository()
-                .withUser(new User("Bea", "admin", PasswordHasher.hash("bea123"), User.ROLE_EMPLOYEE, true));
+                .withUser(new User("Bea", "admin", PasswordHasher.hash("bea123"), Role.EMPLOYEE, true));
 
         SetupException ex = assertThrows(SetupException.class,
                 () -> service(repo).provision(SETTINGS, "Administrador", "admin", "admin123"));

@@ -1,5 +1,7 @@
 package com.entidaddesconocida.monte_erp.infrastructure;
 
+import com.entidaddesconocida.monte_erp.domain.model.PurchaseStatus;
+import com.entidaddesconocida.monte_erp.domain.model.Role;
 import com.entidaddesconocida.monte_erp.domain.model.Product;
 import com.entidaddesconocida.monte_erp.domain.model.ProductSupplier;
 import com.entidaddesconocida.monte_erp.domain.model.Purchase;
@@ -36,7 +38,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * {@link FakeJdbc} double.
  *
  * <p>They pin down the SQL, the bound parameters, the transaction handling
- * (commit/rollback and the restored {@code autoCommit}) and the row-to-entity
+ * (commit/rollback on the operation own connection) and the row-to-entity
  * mapping, with no MySQL instance.</p>
  */
 class MySqlPurchaseRepositoryTest {
@@ -53,13 +55,12 @@ class MySqlPurchaseRepositoryTest {
 
     @AfterEach
     void tearDown() {
-        DatabaseConnection.close();
         DatabaseConnection.configure(null, null, null);
         fake.uninstall();
     }
 
     private static User user() {
-        User user = new User("Bea", "bea", "hash", User.ROLE_EMPLOYEE, true);
+        User user = new User("Bea", "bea", "hash", Role.EMPLOYEE, true);
         user.setId(9);
         return user;
     }
@@ -94,7 +95,7 @@ class MySqlPurchaseRepositoryTest {
         String purchaseSql = fake.preparedSql().get(1);
         assertTrue(purchaseSql.contains("INSERT INTO PURCHASE"));
         Map<Integer, Object> purchaseParameters = fake.boundParameters().get(1);
-        assertEquals(Purchase.STATUS_PENDING, purchaseParameters.get(1));
+        assertEquals(PurchaseStatus.PENDING.dbValue(), purchaseParameters.get(1));
         assertEquals(0, new BigDecimal("36.50").compareTo((BigDecimal) purchaseParameters.get(2)));
         assertEquals(3, purchaseParameters.get(3));
         assertEquals(9, purchaseParameters.get(4));
@@ -129,14 +130,13 @@ class MySqlPurchaseRepositoryTest {
     }
 
     @Test
-    @DisplayName("insert hace commit y restaura el autoCommit previo")
+    @DisplayName("insert hace commit en la conexión propia de la operación")
     void insertCommitsAndRestoresAutoCommit() throws SQLException {
         fake.withGeneratedKey(7).withRows(FakeJdbc.row("active", true));
 
         repository.insert(draftPurchase());
 
-        assertEquals(List.of("setAutoCommit(false)", "commit()", "setAutoCommit(true)"),
-                fake.transactionCalls());
+        assertEquals(List.of("setAutoCommit(false)", "commit()"), fake.transactionCalls());
     }
 
     @Test
@@ -149,7 +149,6 @@ class MySqlPurchaseRepositoryTest {
 
         assertTrue(fake.transactionCalls().contains("rollback()"));
         assertFalse(fake.transactionCalls().contains("commit()"));
-        assertTrue(fake.transactionCalls().contains("setAutoCommit(true)"));
     }
 
     @Test
@@ -163,7 +162,6 @@ class MySqlPurchaseRepositoryTest {
 
         assertTrue(fake.transactionCalls().contains("rollback()"));
         assertFalse(fake.transactionCalls().contains("commit()"));
-        assertTrue(fake.transactionCalls().contains("setAutoCommit(true)"));
     }
 
     @Test
@@ -201,7 +199,7 @@ class MySqlPurchaseRepositoryTest {
         fake.withRows(FakeJdbc.row(
                 "id", 5,
                 "purchase_date", Timestamp.valueOf(LocalDateTime.of(2024, 5, 1, 10, 30)),
-                "status", Purchase.STATUS_RECEIVED,
+                "status", PurchaseStatus.RECEIVED.dbValue(),
                 "total", new BigDecimal("36.50"),
                 "supplier_id", 3,
                 "supplier_name", "Acme"));
@@ -212,7 +210,7 @@ class MySqlPurchaseRepositoryTest {
         Purchase purchase = purchases.get(0);
         assertEquals(5, purchase.getId());
         assertEquals(LocalDateTime.of(2024, 5, 1, 10, 30), purchase.getPurchaseDate());
-        assertEquals(Purchase.STATUS_RECEIVED, purchase.getStatus());
+        assertEquals(PurchaseStatus.RECEIVED, purchase.getStatus());
         assertEquals(0, new BigDecimal("36.50").compareTo(purchase.getTotal()));
         assertEquals(3, purchase.getSupplier().getId());
         assertEquals("Acme", purchase.getSupplier().getName());
@@ -234,7 +232,7 @@ class MySqlPurchaseRepositoryTest {
     @DisplayName("findAll enlaza el rango de fechas, el proveedor y el estado en la consulta")
     void findAllBindsEveryFilter() throws SQLException {
         PurchaseFilter filter = PurchaseFilter.of(LocalDate.of(2024, 1, 1),
-                LocalDate.of(2024, 1, 31), 3, Purchase.STATUS_PENDING);
+                LocalDate.of(2024, 1, 31), 3, PurchaseStatus.PENDING);
 
         List<Purchase> purchases = repository.findAll(filter);
 
@@ -252,8 +250,8 @@ class MySqlPurchaseRepositoryTest {
         assertEquals(java.sql.Date.valueOf(LocalDate.of(2024, 1, 31)), parameters.get(4));
         assertEquals(3, parameters.get(5));
         assertEquals(3, parameters.get(6));
-        assertEquals(Purchase.STATUS_PENDING, parameters.get(7));
-        assertEquals(Purchase.STATUS_PENDING, parameters.get(8));
+        assertEquals(PurchaseStatus.PENDING.dbValue(), parameters.get(7));
+        assertEquals(PurchaseStatus.PENDING.dbValue(), parameters.get(8));
     }
 
     @Test
@@ -275,7 +273,7 @@ class MySqlPurchaseRepositoryTest {
         fake.withRows(FakeJdbc.row(
                 "id", 5,
                 "purchase_date", Timestamp.valueOf(LocalDateTime.of(2024, 5, 1, 10, 30)),
-                "status", Purchase.STATUS_RECEIVED,
+                "status", PurchaseStatus.RECEIVED.dbValue(),
                 "total", new BigDecimal("36.50"),
                 "supplier_id", 3,
                 "supplier_name", "Acme"));
@@ -376,19 +374,18 @@ class MySqlPurchaseRepositoryTest {
     @DisplayName("changeStatus a received actualiza con guarda optimista y libera los lotes")
     void changeStatusToReceivedMakesLotsAvailable()
             throws SQLException, PurchaseStockConsumedException {
-        int updated = repository.changeStatus(7, Purchase.STATUS_PENDING, Purchase.STATUS_RECEIVED);
+        int updated = repository.changeStatus(7, PurchaseStatus.PENDING, PurchaseStatus.RECEIVED);
 
         assertEquals(1, updated);
         assertTrue(fake.preparedSql().get(0).contains("UPDATE PURCHASE SET status = ?"));
         Map<Integer, Object> statusParameters = fake.boundParameters().get(0);
-        assertEquals(Purchase.STATUS_RECEIVED, statusParameters.get(1));
+        assertEquals(PurchaseStatus.RECEIVED.dbValue(), statusParameters.get(1));
         assertEquals(7, statusParameters.get(2));
-        assertEquals(Purchase.STATUS_PENDING, statusParameters.get(3));
+        assertEquals(PurchaseStatus.PENDING.dbValue(), statusParameters.get(3));
         assertTrue(fake.preparedSql().get(1).contains(
                 "UPDATE STOCK SET available_quantity = initial_quantity"));
         assertEquals(7, fake.boundParameters().get(1).get(1));
-        assertEquals(List.of("setAutoCommit(false)", "commit()", "setAutoCommit(true)"),
-                fake.transactionCalls());
+        assertEquals(List.of("setAutoCommit(false)", "commit()"), fake.transactionCalls());
     }
 
     @Test
@@ -397,7 +394,7 @@ class MySqlPurchaseRepositoryTest {
             throws SQLException, PurchaseStockConsumedException {
         fake.withRows(FakeJdbc.row("initial_quantity", 2, "available_quantity", 2));
 
-        int updated = repository.changeStatus(7, Purchase.STATUS_RECEIVED, Purchase.STATUS_RETURNED);
+        int updated = repository.changeStatus(7, PurchaseStatus.RECEIVED, PurchaseStatus.RETURNED);
 
         assertEquals(1, updated);
         String lockSql = fake.preparedSql().get(1);
@@ -415,7 +412,7 @@ class MySqlPurchaseRepositoryTest {
         fake.withRows(FakeJdbc.row("initial_quantity", 5, "available_quantity", 3));
 
         PurchaseStockConsumedException error = assertThrows(PurchaseStockConsumedException.class,
-                () -> repository.changeStatus(7, Purchase.STATUS_RECEIVED, Purchase.STATUS_RETURNED));
+                () -> repository.changeStatus(7, PurchaseStatus.RECEIVED, PurchaseStatus.RETURNED));
 
         assertEquals(7, error.getPurchaseId());
         assertEquals(2, error.getConsumedUnits());
@@ -431,11 +428,10 @@ class MySqlPurchaseRepositoryTest {
             throws SQLException, PurchaseStockConsumedException {
         fake.withUpdateCount(0);
 
-        int updated = repository.changeStatus(7, Purchase.STATUS_PENDING, Purchase.STATUS_RECEIVED);
+        int updated = repository.changeStatus(7, PurchaseStatus.PENDING, PurchaseStatus.RECEIVED);
 
         assertEquals(0, updated);
-        assertEquals(List.of("setAutoCommit(false)", "rollback()", "setAutoCommit(true)"),
-                fake.transactionCalls());
+        assertEquals(List.of("setAutoCommit(false)", "commit()"), fake.transactionCalls());
         assertTrue(fake.preparedSql().stream()
                 .noneMatch(sql -> sql.contains("UPDATE STOCK")));
     }

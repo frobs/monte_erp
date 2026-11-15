@@ -1,9 +1,11 @@
 package com.entidaddesconocida.monte_erp.infrastructure;
 
+import com.entidaddesconocida.monte_erp.domain.model.Role;
 import com.entidaddesconocida.monte_erp.domain.model.User;
 import com.entidaddesconocida.monte_erp.domain.repository.UserRepository;
 import com.entidaddesconocida.monte_erp.infrastructure.config.DatabaseConnection;
 
+import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -31,7 +33,8 @@ public class MySqlUserRepository implements UserRepository {
     @Override
     public User findByUsername(String username) throws SQLException {
         String sql = SELECT_ALL + " WHERE username = ?";
-        try (PreparedStatement ps = DatabaseConnection.getConnection().prepareStatement(sql)) {
+        try (Connection connection = DatabaseConnection.open();
+             PreparedStatement ps = connection.prepareStatement(sql)) {
             ps.setString(1, username);
             try (ResultSet rs = ps.executeQuery()) {
                 return rs.next() ? map(rs) : null;
@@ -42,7 +45,8 @@ public class MySqlUserRepository implements UserRepository {
     @Override
     public List<User> findAll() throws SQLException {
         List<User> users = new ArrayList<>();
-        try (Statement statement = DatabaseConnection.getConnection().createStatement();
+        try (Connection connection = DatabaseConnection.open();
+             Statement statement = connection.createStatement();
              ResultSet rs = statement.executeQuery(SELECT_ALL + " ORDER BY username")) {
             while (rs.next()) {
                 users.add(map(rs));
@@ -53,12 +57,13 @@ public class MySqlUserRepository implements UserRepository {
 
     @Override
     public int insert(User user) throws SQLException {
-        try (PreparedStatement ps = DatabaseConnection.getConnection()
-                .prepareStatement(INSERT_USER, Statement.RETURN_GENERATED_KEYS)) {
+        try (Connection connection = DatabaseConnection.open();
+             PreparedStatement ps = connection
+                     .prepareStatement(INSERT_USER, Statement.RETURN_GENERATED_KEYS)) {
             ps.setString(1, user.getName());
             ps.setString(2, user.getUsername());
             ps.setString(3, user.getPasswordHash());
-            ps.setString(4, user.getRole());
+            ps.setString(4, user.getRole().dbValue());
             ps.setBoolean(5, user.isActive());
             ps.executeUpdate();
             try (ResultSet keys = ps.getGeneratedKeys()) {
@@ -71,11 +76,12 @@ public class MySqlUserRepository implements UserRepository {
 
     @Override
     public void update(User user) throws SQLException {
-        try (PreparedStatement ps = DatabaseConnection.getConnection().prepareStatement(UPDATE_USER)) {
+        try (Connection connection = DatabaseConnection.open();
+             PreparedStatement ps = connection.prepareStatement(UPDATE_USER)) {
             ps.setString(1, user.getName());
             ps.setString(2, user.getUsername());
             ps.setString(3, user.getPasswordHash());
-            ps.setString(4, user.getRole());
+            ps.setString(4, user.getRole().dbValue());
             ps.setBoolean(5, user.isActive());
             ps.setInt(6, user.getId());
             ps.executeUpdate();
@@ -84,8 +90,8 @@ public class MySqlUserRepository implements UserRepository {
 
     @Override
     public void deactivate(int id) throws SQLException {
-        try (PreparedStatement ps = DatabaseConnection.getConnection()
-                .prepareStatement(DEACTIVATE_USER)) {
+        try (Connection connection = DatabaseConnection.open();
+             PreparedStatement ps = connection.prepareStatement(DEACTIVATE_USER)) {
             ps.setInt(1, id);
             ps.executeUpdate();
         }
@@ -97,7 +103,7 @@ public class MySqlUserRepository implements UserRepository {
         user.setName(rs.getString("name"));
         user.setUsername(rs.getString("username"));
         user.setPasswordHash(rs.getString("password_hash"));
-        user.setRole(rs.getString("role"));
+        user.setRole(Role.fromDb(rs.getString("role")));
         user.setActive(rs.getBoolean("active"));
         return user;
     }

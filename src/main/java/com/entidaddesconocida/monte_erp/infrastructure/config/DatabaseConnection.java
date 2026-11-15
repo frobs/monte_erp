@@ -5,60 +5,118 @@ import java.sql.DriverManager;
 import java.sql.SQLException;
 
 /**
- * Single JDBC connection point for the application (singleton).
+ * JDBC entry point of the application: holds the configuration and opens a
+ * <strong>connection per operation</strong>.
  *
- * <p>The configuration is no longer read from the classpath: it is set through
- * {@link #configure(String, String, String)} by {@link DatabaseSetupService}
+ * <p>There is deliberately no shared {@link Connection}. A single mutable
+ * connection reused by every repository forced the transactional repositories to
+ * flip {@code autoCommit} on global state and restore it on {@code finally}, and
+ * it only worked while all the database work happened on the JavaFX thread; two
+ * concurrent operations (a background query, a virtual thread) would have
+ * committed each other's work. Opening a connection per operation costs nothing
+ * at this scale (a local MySQL) and removes both problems: every
+ * {@link #withTransaction(SqlWork)} block is isolated, and a stale connection can
+ * never be handed out, so a dropped connection (MySQL restarted, container
+ * recreated) simply becomes a failed operation the caller reports, not a
+ * poisoned global.</p>
+ *
+ * <p>The configuration is set through {@link #configure(String, String, String)}
  * once the user has saved the URL (properties file) and the credentials (OS
- * keyring). If the connection has been closed or has dropped, it is reopened
- * transparently.</p>
+ * keyring).</p>
  */
 public final class DatabaseConnection {
 
     private static final String DRIVER_CLASS = "com.mysql.cj.jdbc.Driver";
 
-    private static Connection connection;
-    private static String url;
-    private static String user;
-    private static String password;
+    private static volatile String url;
+    private static volatile String user;
+    private static volatile String password;
 
     private DatabaseConnection() {
         // Utility class: never instantiated.
     }
 
+    /** Unit of work that receives the connection of the current operation. */
+    @FunctionalInterface
+    public interface SqlWork<T> {
+        T run(Connection connection) throws SQLException;
+    }
+
     /**
-     * Points the shared connection at the given settings. The previous
-     * connection, if any, is closed so the next {@link #getConnection()} opens a
-     * fresh one.
+     * Transactional unit of work: it may throw the domain exceptions of the
+     * adapter (checked), which propagate unchanged after the rollback.
      */
-    public static synchronized void configure(String url, String user, String password) {
-        close();
+    @FunctionalInterface
+    public interface TransactedWork<T, E extends Exception> {
+        T run(Connection connection) throws SQLException, E;
+    }
+
+    /**
+     * Points the connection factory at the given settings. Nothing is kept open:
+     * the next operation uses the new values.
+     */
+    public static void configure(String url, String user, String password) {
         DatabaseConnection.url = url;
         DatabaseConnection.user = user;
         DatabaseConnection.password = password;
     }
 
     /**
-     * Returns the shared connection, opening it when it does not exist yet.
+     * Opens a new connection with the configured settings. The caller owns it and
+     * must close it (prefer {@link #withConnection(SqlWork)} or
+     * {@link #withTransaction(SqlWork)}).
      *
      * @throws SQLException when the connection cannot be established or the
      *                      configuration is missing
      */
-    public static synchronized Connection getConnection() throws SQLException {
-        if (connection == null || connection.isClosed()) {
-            loadDriver();
-            if (isBlank(url) || isBlank(user) || password == null || password.isEmpty()) {
-                throw new SQLException("La configuración de la base de datos no está disponible "
-                        + "(url, usuario o contraseña vacíos).");
-            }
-            connection = DriverManager.getConnection(url, user, password);
+    public static Connection open() throws SQLException {
+        String configuredUrl = url;
+        String configuredUser = user;
+        String configuredPassword = password;
+        if (isBlank(configuredUrl) || isBlank(configuredUser)
+                || configuredPassword == null || configuredPassword.isEmpty()) {
+            throw new SQLException("La configuración de la base de datos no está disponible "
+                    + "(url, usuario o contraseña vacíos).");
         }
-        return connection;
+        loadDriver();
+        return DriverManager.getConnection(configuredUrl, configuredUser, configuredPassword);
     }
 
     /**
-     * Verifies that the given settings can open a JDBC connection. The shared
-     * connection is left untouched.
+     * Runs {@code work} with its own connection, closing it afterwards. Statement
+     * errors propagate; the connection is always closed, also on failure.
+     */
+    public static <T> T withConnection(SqlWork<T> work) throws SQLException {
+        try (Connection connection = open()) {
+            return work.run(connection);
+        }
+    }
+
+    /**
+     * Runs {@code work} inside a transaction on its own connection: commits when
+     * it returns and rolls the whole block back when it throws, so the caller sees
+     * the original exception (with the rollback failure attached as suppressed when
+     * there is one).
+     */
+    public static <T, E extends Exception> T withTransaction(TransactedWork<T, E> work)
+            throws SQLException, E {
+        try (Connection connection = open()) {
+            connection.setAutoCommit(false);
+            try {
+                T result = work.run(connection);
+                connection.commit();
+                return result;
+            } catch (Exception failure) {
+                // Precise rethrow: the compiler infers SQLException | E | RuntimeException.
+                rollback(connection, failure);
+                throw failure;
+            }
+        }
+    }
+
+    /**
+     * Verifies that the given settings can open a JDBC connection. Nothing is kept
+     * open.
      *
      * @throws SQLException when the connection cannot be established
      */
@@ -70,26 +128,22 @@ public final class DatabaseConnection {
     }
 
     /**
-     * Closes the shared connection (called when the application shuts down).
+     * Configured JDBC URL (handy to display the environment in the interface).
      */
-    public static synchronized void close() {
-        if (connection == null) {
-            return;
-        }
-        try {
-            connection.close();
-        } catch (SQLException e) {
-            // Shutting down: there is nothing useful to do with the error.
-        } finally {
-            connection = null;
-        }
+    public static String getUrl() {
+        return url;
     }
 
     /**
-     * Configured JDBC URL (handy to display the environment in the interface).
+     * Rolls the transaction back, attaching the rollback failure to the original
+     * exception so the real cause is never lost.
      */
-    public static synchronized String getUrl() {
-        return url;
+    private static void rollback(Connection connection, Exception failure) {
+        try {
+            connection.rollback();
+        } catch (SQLException rollbackFailure) {
+            failure.addSuppressed(rollbackFailure);
+        }
     }
 
     /**

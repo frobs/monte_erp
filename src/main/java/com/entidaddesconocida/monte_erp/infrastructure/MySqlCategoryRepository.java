@@ -4,6 +4,7 @@ import com.entidaddesconocida.monte_erp.domain.model.Category;
 import com.entidaddesconocida.monte_erp.domain.repository.CategoryRepository;
 import com.entidaddesconocida.monte_erp.infrastructure.config.DatabaseConnection;
 
+import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -70,7 +71,8 @@ public class MySqlCategoryRepository implements CategoryRepository {
     @Override
     public Category findByName(String name) throws SQLException {
         String sql = SELECT_ALL + " WHERE name = ?";
-        try (PreparedStatement ps = DatabaseConnection.getConnection().prepareStatement(sql)) {
+        try (Connection connection = DatabaseConnection.open();
+             PreparedStatement ps = connection.prepareStatement(sql)) {
             ps.setString(1, name);
             try (ResultSet rs = ps.executeQuery()) {
                 return rs.next() ? map(rs) : null;
@@ -80,8 +82,9 @@ public class MySqlCategoryRepository implements CategoryRepository {
 
     @Override
     public int insert(Category category) throws SQLException {
-        try (PreparedStatement ps = DatabaseConnection.getConnection()
-                .prepareStatement(INSERT_CATEGORY, Statement.RETURN_GENERATED_KEYS)) {
+        try (Connection connection = DatabaseConnection.open();
+             PreparedStatement ps = connection
+                     .prepareStatement(INSERT_CATEGORY, Statement.RETURN_GENERATED_KEYS)) {
             ps.setString(1, category.getName());
             ps.setString(2, category.getDescription());
             ps.executeUpdate();
@@ -96,7 +99,8 @@ public class MySqlCategoryRepository implements CategoryRepository {
     @Override
     public void update(Category category) throws SQLException {
         // The active flag is deliberately absent: only deactivate/activate change it.
-        try (PreparedStatement ps = DatabaseConnection.getConnection().prepareStatement(UPDATE_CATEGORY)) {
+        try (Connection connection = DatabaseConnection.open();
+             PreparedStatement ps = connection.prepareStatement(UPDATE_CATEGORY)) {
             ps.setString(1, category.getName());
             ps.setString(2, category.getDescription());
             ps.setInt(3, category.getId());
@@ -115,7 +119,8 @@ public class MySqlCategoryRepository implements CategoryRepository {
     }
 
     private void setActive(String sql, int id) throws SQLException {
-        try (PreparedStatement ps = DatabaseConnection.getConnection().prepareStatement(sql)) {
+        try (Connection connection = DatabaseConnection.open();
+             PreparedStatement ps = connection.prepareStatement(sql)) {
             ps.setInt(1, id);
             ps.executeUpdate();
         }
@@ -124,7 +129,8 @@ public class MySqlCategoryRepository implements CategoryRepository {
     private List<Category> query(String sql, String... parameters) throws SQLException {
         List<Category> categories = new ArrayList<>();
         if (parameters.length == 0) {
-            try (Statement statement = DatabaseConnection.getConnection().createStatement();
+            try (Connection connection = DatabaseConnection.open();
+                 Statement statement = connection.createStatement();
                  ResultSet rs = statement.executeQuery(sql)) {
                 while (rs.next()) {
                     categories.add(map(rs));
@@ -132,7 +138,8 @@ public class MySqlCategoryRepository implements CategoryRepository {
             }
             return categories;
         }
-        try (PreparedStatement ps = DatabaseConnection.getConnection().prepareStatement(sql)) {
+        try (Connection connection = DatabaseConnection.open();
+             PreparedStatement ps = connection.prepareStatement(sql)) {
             for (int index = 0; index < parameters.length; index++) {
                 ps.setString(index + 1, parameters[index]);
             }

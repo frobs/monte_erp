@@ -1,6 +1,7 @@
 package com.entidaddesconocida.monte_erp.infrastructure.config;
 
 import com.entidaddesconocida.monte_erp.domain.model.ConnectionSettings;
+import com.entidaddesconocida.monte_erp.domain.model.Role;
 import com.entidaddesconocida.monte_erp.domain.model.User;
 import com.entidaddesconocida.monte_erp.domain.repository.UserRepository;
 import com.entidaddesconocida.monte_erp.domain.service.SetupException;
@@ -14,8 +15,8 @@ import java.sql.SQLException;
  * Infrastructure implementation of {@link SetupService}.
  *
  * <p>It composes the pieces the domain layer must not know about: the
- * properties file and the keyring ({@link DatabaseConfig}), the shared JDBC
- * connection ({@link DatabaseConnection}), the migration engine
+ * properties file and the keyring ({@link DatabaseConfig}), the JDBC
+ * connection factory ({@link DatabaseConnection}), the migration engine
  * ({@link MigrationRunner}) and the {@link UserRepository} for the
  * administrator user.</p>
  */
@@ -89,7 +90,7 @@ public final class DatabaseSetupService implements SetupService {
                         + "' ya existe y no es administrador.");
             }
             User admin = new User(name, username,
-                    PasswordHasher.hash(password), User.ROLE_ADMIN, true);
+                    PasswordHasher.hash(password), Role.ADMIN, true);
             userRepository.insert(admin);
         } catch (SQLException e) {
             throw new SetupException(rootMessage(e), e);

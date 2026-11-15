@@ -4,6 +4,7 @@ import com.entidaddesconocida.monte_erp.domain.model.Product;
 import com.entidaddesconocida.monte_erp.domain.model.ProductSupplier;
 import com.entidaddesconocida.monte_erp.domain.model.Purchase;
 import com.entidaddesconocida.monte_erp.domain.model.PurchaseFilter;
+import com.entidaddesconocida.monte_erp.domain.model.PurchaseStatus;
 import com.entidaddesconocida.monte_erp.domain.model.Stock;
 import com.entidaddesconocida.monte_erp.domain.model.Supplier;
 import com.entidaddesconocida.monte_erp.domain.repository.PurchaseRepository;
@@ -114,39 +115,27 @@ public class MySqlPurchaseRepository implements PurchaseRepository {
 
     @Override
     public int insert(Purchase purchase) throws SQLException {
-        Connection connection = DatabaseConnection.getConnection();
-        boolean previousAutoCommit = connection.getAutoCommit();
-        connection.setAutoCommit(false);
-        try {
+        int id = DatabaseConnection.withTransaction(connection -> {
             requireActive(connection, SELECT_ACTIVE_SUPPLIER_FOR_UPDATE,
                     purchase.getSupplier().getId(), "proveedor");
-            int id = insertPurchase(connection, purchase);
-            purchase.setId(id);
+            int purchaseId = insertPurchase(connection, purchase);
             for (Stock lot : purchase.getLots()) {
                 requireActive(connection, SELECT_ACTIVE_PRODUCT_FOR_UPDATE,
                         lot.getProduct().getId(), "producto");
-                insertLot(connection, purchase, lot);
+                insertLot(connection, purchase, purchaseId, lot);
             }
-            connection.commit();
-            return id;
-        } catch (SQLException | RuntimeException e) {
-            try {
-                connection.rollback();
-            } catch (SQLException rollbackFailure) {
-                e.addSuppressed(rollbackFailure);
-            }
-            throw e;
-        } finally {
-            // The connection is shared (singleton): leave it as it was found.
-            connection.setAutoCommit(previousAutoCommit);
-        }
+            return purchaseId;
+        });
+        purchase.setId(id);
+        return id;
     }
 
     @Override
     public List<Purchase> findAll(PurchaseFilter filter) throws SQLException {
         List<Purchase> purchases = new ArrayList<>();
-        try (PreparedStatement ps = DatabaseConnection.getConnection()
-                .prepareStatement(SELECT_PURCHASES)) {
+        try (Connection connection = DatabaseConnection.open();
+             PreparedStatement ps = connection
+                     .prepareStatement(SELECT_PURCHASES)) {
             // Both placeholders of each guard receive the same value, so a null
             // criterion disables its comparison instead of filtering by NULL.
             bindDate(ps, 1, filter.period().from());
@@ -155,8 +144,8 @@ public class MySqlPurchaseRepository implements PurchaseRepository {
             bindDate(ps, 4, filter.period().to());
             bindInt(ps, 5, filter.supplierId());
             bindInt(ps, 6, filter.supplierId());
-            bindString(ps, 7, filter.status());
-            bindString(ps, 8, filter.status());
+            bindStatus(ps, 7, filter.status());
+            bindStatus(ps, 8, filter.status());
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
                     purchases.add(mapPurchase(rs));
@@ -169,7 +158,8 @@ public class MySqlPurchaseRepository implements PurchaseRepository {
     @Override
     public List<Stock> findLots(int purchaseId) throws SQLException {
         List<Stock> lots = new ArrayList<>();
-        try (PreparedStatement ps = DatabaseConnection.getConnection().prepareStatement(SELECT_LOTS)) {
+        try (Connection connection = DatabaseConnection.open();
+             PreparedStatement ps = connection.prepareStatement(SELECT_LOTS)) {
             ps.setInt(1, purchaseId);
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
@@ -183,7 +173,8 @@ public class MySqlPurchaseRepository implements PurchaseRepository {
     @Override
     public List<ProductSupplier> findProductSuppliers() throws SQLException {
         List<ProductSupplier> pairs = new ArrayList<>();
-        try (Statement statement = DatabaseConnection.getConnection().createStatement();
+        try (Connection connection = DatabaseConnection.open();
+             Statement statement = connection.createStatement();
              ResultSet rs = statement.executeQuery(SELECT_PRODUCT_SUPPLIERS)) {
             while (rs.next()) {
                 pairs.add(new ProductSupplier(rs.getInt("product_id"), rs.getInt("supplier_id")));
@@ -193,43 +184,30 @@ public class MySqlPurchaseRepository implements PurchaseRepository {
     }
 
     @Override
-    public int changeStatus(int id, String currentStatus, String newStatus)
+    public int changeStatus(int id, PurchaseStatus currentStatus, PurchaseStatus newStatus)
             throws SQLException, PurchaseStockConsumedException {
-        Connection connection = DatabaseConnection.getConnection();
-        boolean previousAutoCommit = connection.getAutoCommit();
-        connection.setAutoCommit(false);
-        try {
+        return DatabaseConnection.withTransaction(connection -> {
             int updated = updateStatus(connection, id, currentStatus, newStatus);
             if (updated == 0) {
-                connection.rollback();
+                // Someone else moved the purchase: nothing to apply.
                 return 0;
             }
-            if (Purchase.STATUS_RECEIVED.equals(newStatus)) {
+            if (newStatus == PurchaseStatus.RECEIVED) {
                 makeLotsAvailable(connection, id);
-            } else if (Purchase.STATUS_RETURNED.equals(newStatus)) {
+            } else if (newStatus == PurchaseStatus.RETURNED) {
                 emptyLots(connection, id);
             }
-            connection.commit();
             return updated;
-        } catch (SQLException | PurchaseStockConsumedException | RuntimeException e) {
-            try {
-                connection.rollback();
-            } catch (SQLException rollbackFailure) {
-                e.addSuppressed(rollbackFailure);
-            }
-            throw e;
-        } finally {
-            // The connection is shared (singleton): leave it as it was found.
-            connection.setAutoCommit(previousAutoCommit);
-        }
+        });
     }
 
-    private int updateStatus(Connection connection, int id, String currentStatus, String newStatus)
+    private int updateStatus(Connection connection, int id, PurchaseStatus currentStatus,
+                             PurchaseStatus newStatus)
             throws SQLException {
         try (PreparedStatement ps = connection.prepareStatement(UPDATE_STATUS)) {
-            ps.setString(1, newStatus);
+            ps.setString(1, newStatus.dbValue());
             ps.setInt(2, id);
-            ps.setString(3, currentStatus);
+            ps.setString(3, currentStatus.dbValue());
             return ps.executeUpdate();
         }
     }
@@ -283,7 +261,7 @@ public class MySqlPurchaseRepository implements PurchaseRepository {
     private int insertPurchase(Connection connection, Purchase purchase) throws SQLException {
         try (PreparedStatement ps = connection.prepareStatement(INSERT_PURCHASE,
                 Statement.RETURN_GENERATED_KEYS)) {
-            ps.setString(1, purchase.getStatus());
+            ps.setString(1, purchase.getStatus().dbValue());
             ps.setBigDecimal(2, purchase.getTotal());
             ps.setInt(3, purchase.getSupplier().getId());
             ps.setInt(4, purchase.getUser().getId());
@@ -294,17 +272,18 @@ public class MySqlPurchaseRepository implements PurchaseRepository {
         }
     }
 
-    private void insertLot(Connection connection, Purchase purchase, Stock lot) throws SQLException {
+    private void insertLot(Connection connection, Purchase purchase, int purchaseId, Stock lot)
+            throws SQLException {
         // A pending purchase writes its lots without stock: they only count from
         // the moment the purchase is received (available == initial then).
-        int availableQuantity = Purchase.STATUS_RECEIVED.equals(purchase.getStatus())
+        int availableQuantity = purchase.getStatus() == PurchaseStatus.RECEIVED
                 ? lot.getInitialQuantity() : 0;
         try (PreparedStatement ps = connection.prepareStatement(INSERT_LOT)) {
             ps.setInt(1, lot.getInitialQuantity());
             ps.setInt(2, availableQuantity);
             ps.setBigDecimal(3, lot.getPurchasePrice());
             ps.setInt(4, lot.getProduct().getId());
-            ps.setInt(5, purchase.getId());
+            ps.setInt(5, purchaseId);
             ps.executeUpdate();
             // The lot row id is not read back (one INSERT per line, like the
             // order lines): only the purchase link is known, and it is assigned
@@ -333,13 +312,13 @@ public class MySqlPurchaseRepository implements PurchaseRepository {
         }
     }
 
-    /** Binds an optional string (the status), using SQL NULL when absent. */
-    private static void bindString(PreparedStatement ps, int index, String value)
+    /** Binds an optional status (its database value), using SQL NULL when absent. */
+    private static void bindStatus(PreparedStatement ps, int index, PurchaseStatus value)
             throws SQLException {
         if (value == null) {
             ps.setNull(index, Types.VARCHAR);
         } else {
-            ps.setString(index, value);
+            ps.setString(index, value.dbValue());
         }
     }
 
@@ -348,7 +327,7 @@ public class MySqlPurchaseRepository implements PurchaseRepository {
                 null, null, null, true);
         return new Purchase(rs.getInt("id"),
                 rs.getTimestamp("purchase_date").toLocalDateTime(),
-                rs.getString("status"),
+                PurchaseStatus.fromDb(rs.getString("status")),
                 rs.getBigDecimal("total"),
                 supplier,
                 null,

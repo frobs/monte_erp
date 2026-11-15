@@ -74,20 +74,21 @@ public final class MigrationRunner {
             throw new IllegalStateException("No .sql script found in /" + MIGRATION_DIR);
         }
 
-        Connection connection = DatabaseConnection.getConnection();
-        ensureMigrationsTable(connection);
-        Set<String> applied = appliedVersions(connection);
+        try (Connection connection = DatabaseConnection.open()) {
+            ensureMigrationsTable(connection);
+            Set<String> applied = appliedVersions(connection);
 
-        int appliedNow = 0;
-        for (String script : scripts) {
-            String version = versionOf(script);
-            if (applied.contains(version)) {
-                continue;
+            int appliedNow = 0;
+            for (String script : scripts) {
+                String version = versionOf(script);
+                if (applied.contains(version)) {
+                    continue;
+                }
+                applyScript(connection, script, version);
+                appliedNow++;
             }
-            applyScript(connection, script, version);
-            appliedNow++;
+            return appliedNow;
         }
-        return appliedNow;
     }
 
     /**

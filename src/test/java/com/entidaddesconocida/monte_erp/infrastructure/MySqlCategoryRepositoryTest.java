@@ -41,7 +41,6 @@ class MySqlCategoryRepositoryTest {
 
     @AfterEach
     void tearDown() {
-        DatabaseConnection.close();
         DatabaseConnection.configure(null, null, null);
         fake.uninstall();
     }

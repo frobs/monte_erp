@@ -87,6 +87,11 @@ public final class FakeJdbc implements Driver {
         }
     }
 
+    /** Most recently opened connection (the proxy handed out by the driver). */
+    public Connection lastConnection() {
+        return (Connection) lastConnection;
+    }
+
     /** Rows returned (in order) by every query executed from now on. */
     public FakeJdbc withRows(Row... newRows) {
         this.rows = List.of(newRows);

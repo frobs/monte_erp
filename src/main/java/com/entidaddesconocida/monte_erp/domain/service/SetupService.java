@@ -29,7 +29,7 @@ public interface SetupService {
 
     /**
      * Persists the settings (URL to the properties file, credentials to the
-     * keyring) and points the shared JDBC connection at them.
+     * keyring) and points the connection factory at them.
      *
      * @throws SetupException when the settings cannot be written
      */

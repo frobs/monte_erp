@@ -2,12 +2,14 @@ package com.entidaddesconocida.monte_erp.infrastructure;
 
 import com.entidaddesconocida.monte_erp.domain.model.Product;
 import com.entidaddesconocida.monte_erp.domain.model.Purchase;
+import com.entidaddesconocida.monte_erp.domain.model.PurchaseStatus;
 import com.entidaddesconocida.monte_erp.domain.model.ReportPeriod;
 import com.entidaddesconocida.monte_erp.domain.model.Stock;
 import com.entidaddesconocida.monte_erp.domain.model.StockLevel;
 import com.entidaddesconocida.monte_erp.domain.repository.StockRepository;
 import com.entidaddesconocida.monte_erp.infrastructure.config.DatabaseConnection;
 
+import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -116,7 +118,8 @@ public class MySqlStockRepository implements StockRepository {
     @Override
     public List<StockLevel> findLevels() throws SQLException {
         List<StockLevel> levels = new ArrayList<>();
-        try (Statement statement = DatabaseConnection.getConnection().createStatement();
+        try (Connection connection = DatabaseConnection.open();
+             Statement statement = connection.createStatement();
              ResultSet rs = statement.executeQuery(SELECT_LEVELS)) {
             while (rs.next()) {
                 levels.add(mapLevel(rs));
@@ -133,8 +136,8 @@ public class MySqlStockRepository implements StockRepository {
             return findLevels();
         }
         List<StockLevel> levels = new ArrayList<>();
-        try (PreparedStatement ps = DatabaseConnection.getConnection()
-                .prepareStatement(SELECT_LEVELS_FILTERED)) {
+        try (Connection connection = DatabaseConnection.open();
+             PreparedStatement ps = connection.prepareStatement(SELECT_LEVELS_FILTERED)) {
             ps.setString(1, pattern);
             ps.setString(2, pattern);
             ps.setString(3, pattern);
@@ -150,7 +153,8 @@ public class MySqlStockRepository implements StockRepository {
 
     @Override
     public int countBelowMinimum() throws SQLException {
-        try (Statement statement = DatabaseConnection.getConnection().createStatement();
+        try (Connection connection = DatabaseConnection.open();
+             Statement statement = connection.createStatement();
              ResultSet rs = statement.executeQuery(COUNT_BELOW_MINIMUM)) {
             return rs.next() ? rs.getInt("total") : 0;
         }
@@ -169,8 +173,8 @@ public class MySqlStockRepository implements StockRepository {
     @Override
     public List<Stock> findAllLots(ReportPeriod period) throws SQLException {
         List<Stock> lots = new ArrayList<>();
-        try (PreparedStatement ps = DatabaseConnection.getConnection()
-                .prepareStatement(SELECT_ALL_LOTS)) {
+        try (Connection connection = DatabaseConnection.open();
+             PreparedStatement ps = connection.prepareStatement(SELECT_ALL_LOTS)) {
             // Both placeholders of the lower bound (the IS NULL guard and the
             // comparison) receive the same date, and the same for the upper one.
             bindDate(ps, 1, period.from());
@@ -198,7 +202,8 @@ public class MySqlStockRepository implements StockRepository {
 
     private List<Stock> findLots(String sql, int productId) throws SQLException {
         List<Stock> lots = new ArrayList<>();
-        try (PreparedStatement ps = DatabaseConnection.getConnection().prepareStatement(sql)) {
+        try (Connection connection = DatabaseConnection.open();
+             PreparedStatement ps = connection.prepareStatement(sql)) {
             ps.setInt(1, productId);
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
@@ -223,7 +228,7 @@ public class MySqlStockRepository implements StockRepository {
         // Light purchase: the id to show "Compra #id" and the status that explains
         // the available quantity of the lot in the report (RF-12).
         Purchase purchase = new Purchase(rs.getInt("purchase_id"), null,
-                rs.getString("purchase_status"), null, null, null, null);
+                PurchaseStatus.fromDb(rs.getString("purchase_status")), null, null, null, null);
         return new Stock(rs.getInt("id"), rs.getInt("initial_quantity"),
                 rs.getInt("available_quantity"), rs.getBigDecimal("purchase_price"),
                 rs.getTimestamp("entry_date").toLocalDateTime(), product, purchase);

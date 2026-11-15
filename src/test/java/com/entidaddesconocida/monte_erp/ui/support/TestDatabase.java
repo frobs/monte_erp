@@ -9,6 +9,7 @@ import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
@@ -102,7 +103,6 @@ public final class TestDatabase {
     /** Drops the schema and restores the seeded baseline (deterministic per test). */
     public static synchronized void resetToSeed() {
         provision();
-        DatabaseConnection.close();
         execInContainer("sh", "-c", "mysql -uroot -p" + ROOT_PASSWORD + " -e \"DROP DATABASE IF EXISTS "
                 + DATABASE + "; CREATE DATABASE " + DATABASE
                 + " CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci\""
@@ -148,7 +148,8 @@ public final class TestDatabase {
     // ---------------------------------------------------------------- queries
 
     public static long longValue(String sql) {
-        try (Statement statement = DatabaseConnection.getConnection().createStatement();
+        try (Connection connection = DatabaseConnection.open();
+             Statement statement = connection.createStatement();
              ResultSet rs = statement.executeQuery(sql)) {
             return rs.next() ? rs.getLong(1) : -1;
         } catch (SQLException e) {
@@ -157,7 +158,8 @@ public final class TestDatabase {
     }
 
     public static String stringValue(String sql) {
-        try (Statement statement = DatabaseConnection.getConnection().createStatement();
+        try (Connection connection = DatabaseConnection.open();
+             Statement statement = connection.createStatement();
              ResultSet rs = statement.executeQuery(sql)) {
             return rs.next() ? rs.getString(1) : null;
         } catch (SQLException e) {
@@ -167,7 +169,8 @@ public final class TestDatabase {
 
     public static List<Map<String, Object>> rows(String sql) {
         List<Map<String, Object>> rows = new ArrayList<>();
-        try (Statement statement = DatabaseConnection.getConnection().createStatement();
+        try (Connection connection = DatabaseConnection.open();
+             Statement statement = connection.createStatement();
              ResultSet rs = statement.executeQuery(sql)) {
             ResultSetMetaData meta = rs.getMetaData();
             while (rs.next()) {
@@ -184,7 +187,8 @@ public final class TestDatabase {
     }
 
     public static void execute(String sql) {
-        try (Statement statement = DatabaseConnection.getConnection().createStatement()) {
+        try (Connection connection = DatabaseConnection.open();
+             Statement statement = connection.createStatement()) {
             statement.execute(sql);
         } catch (SQLException e) {
             throw new IllegalStateException("Could not run: " + sql, e);

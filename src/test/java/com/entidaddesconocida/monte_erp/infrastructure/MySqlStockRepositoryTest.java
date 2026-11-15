@@ -1,6 +1,6 @@
 package com.entidaddesconocida.monte_erp.infrastructure;
 
-import com.entidaddesconocida.monte_erp.domain.model.Purchase;
+import com.entidaddesconocida.monte_erp.domain.model.PurchaseStatus;
 import com.entidaddesconocida.monte_erp.domain.model.ReportPeriod;
 import com.entidaddesconocida.monte_erp.domain.model.Stock;
 import com.entidaddesconocida.monte_erp.domain.model.StockLevel;
@@ -46,7 +46,6 @@ class MySqlStockRepositoryTest {
 
     @AfterEach
     void tearDown() {
-        DatabaseConnection.close();
         DatabaseConnection.configure(null, null, null);
         fake.uninstall();
     }
@@ -62,11 +61,11 @@ class MySqlStockRepositoryTest {
     }
 
     private static FakeJdbc.Row lotRow(int id, int initial, int available, int purchaseId) {
-        return lotRow(id, initial, available, purchaseId, Purchase.STATUS_RECEIVED);
+        return lotRow(id, initial, available, purchaseId, PurchaseStatus.RECEIVED);
     }
 
     private static FakeJdbc.Row lotRow(int id, int initial, int available, int purchaseId,
-                                       String purchaseStatus) {
+                                       PurchaseStatus purchaseStatus) {
         return FakeJdbc.row(
                 "id", id,
                 "initial_quantity", initial,
@@ -74,7 +73,7 @@ class MySqlStockRepositoryTest {
                 "purchase_price", new BigDecimal("1.50"),
                 "entry_date", ENTRY,
                 "purchase_id", purchaseId,
-                "purchase_status", purchaseStatus,
+                "purchase_status", purchaseStatus.dbValue(),
                 "product_id", 1,
                 "product_name", "Teclado",
                 "product_sku", "SKU-1");
@@ -181,7 +180,7 @@ class MySqlStockRepositoryTest {
 
         assertEquals(1, lots.size());
         assertEquals("Teclado", lots.get(0).getProduct().getName());
-        assertEquals(Purchase.STATUS_RECEIVED, lots.get(0).getPurchase().getStatus());
+        assertEquals(PurchaseStatus.RECEIVED, lots.get(0).getPurchase().getStatus());
         String sql = fake.preparedSql().get(0);
         assertTrue(sql.contains("JOIN PRODUCT"));
         assertTrue(sql.contains("JOIN PURCHASE"));
@@ -199,11 +198,11 @@ class MySqlStockRepositoryTest {
     @Test
     @DisplayName("findAllLots trae el estado de la compra: una devuelta no cuenta en los totales")
     void findAllLotsMapsThePurchaseStatus() throws SQLException {
-        fake.withRows(lotRow(12, 4, 0, 8, Purchase.STATUS_RETURNED));
+        fake.withRows(lotRow(12, 4, 0, 8, PurchaseStatus.RETURNED));
 
         List<Stock> lots = repository.findAllLots(ReportPeriod.all());
 
-        assertEquals(Purchase.STATUS_RETURNED, lots.get(0).getPurchase().getStatus());
+        assertEquals(PurchaseStatus.RETURNED, lots.get(0).getPurchase().getStatus());
         assertFalse(lots.get(0).countsInStockReport());
     }
 

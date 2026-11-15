@@ -4,6 +4,7 @@ import com.entidaddesconocida.monte_erp.domain.model.Supplier;
 import com.entidaddesconocida.monte_erp.domain.repository.SupplierRepository;
 import com.entidaddesconocida.monte_erp.infrastructure.config.DatabaseConnection;
 
+import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -74,7 +75,8 @@ public class MySqlSupplierRepository implements SupplierRepository {
     @Override
     public Supplier findByName(String name) throws SQLException {
         String sql = SELECT_ALL + " WHERE name = ?";
-        try (PreparedStatement ps = DatabaseConnection.getConnection().prepareStatement(sql)) {
+        try (Connection connection = DatabaseConnection.open();
+             PreparedStatement ps = connection.prepareStatement(sql)) {
             ps.setString(1, name);
             try (ResultSet rs = ps.executeQuery()) {
                 return rs.next() ? map(rs) : null;
@@ -84,8 +86,9 @@ public class MySqlSupplierRepository implements SupplierRepository {
 
     @Override
     public int insert(Supplier supplier) throws SQLException {
-        try (PreparedStatement ps = DatabaseConnection.getConnection()
-                .prepareStatement(INSERT_SUPPLIER, Statement.RETURN_GENERATED_KEYS)) {
+        try (Connection connection = DatabaseConnection.open();
+             PreparedStatement ps = connection
+                     .prepareStatement(INSERT_SUPPLIER, Statement.RETURN_GENERATED_KEYS)) {
             ps.setString(1, supplier.getName());
             ps.setString(2, supplier.getPhone());
             ps.setString(3, supplier.getEmail());
@@ -102,7 +105,8 @@ public class MySqlSupplierRepository implements SupplierRepository {
     @Override
     public void update(Supplier supplier) throws SQLException {
         // The active flag is deliberately absent: only deactivate/activate change it.
-        try (PreparedStatement ps = DatabaseConnection.getConnection().prepareStatement(UPDATE_SUPPLIER)) {
+        try (Connection connection = DatabaseConnection.open();
+             PreparedStatement ps = connection.prepareStatement(UPDATE_SUPPLIER)) {
             ps.setString(1, supplier.getName());
             ps.setString(2, supplier.getPhone());
             ps.setString(3, supplier.getEmail());
@@ -123,7 +127,8 @@ public class MySqlSupplierRepository implements SupplierRepository {
     }
 
     private void setActive(String sql, int id) throws SQLException {
-        try (PreparedStatement ps = DatabaseConnection.getConnection().prepareStatement(sql)) {
+        try (Connection connection = DatabaseConnection.open();
+             PreparedStatement ps = connection.prepareStatement(sql)) {
             ps.setInt(1, id);
             ps.executeUpdate();
         }
@@ -132,7 +137,8 @@ public class MySqlSupplierRepository implements SupplierRepository {
     private List<Supplier> query(String sql, String... parameters) throws SQLException {
         List<Supplier> suppliers = new ArrayList<>();
         if (parameters.length == 0) {
-            try (Statement statement = DatabaseConnection.getConnection().createStatement();
+            try (Connection connection = DatabaseConnection.open();
+                 Statement statement = connection.createStatement();
                  ResultSet rs = statement.executeQuery(sql)) {
                 while (rs.next()) {
                     suppliers.add(map(rs));
@@ -140,7 +146,8 @@ public class MySqlSupplierRepository implements SupplierRepository {
             }
             return suppliers;
         }
-        try (PreparedStatement ps = DatabaseConnection.getConnection().prepareStatement(sql)) {
+        try (Connection connection = DatabaseConnection.open();
+             PreparedStatement ps = connection.prepareStatement(sql)) {
             for (int index = 0; index < parameters.length; index++) {
                 ps.setString(index + 1, parameters[index]);
             }

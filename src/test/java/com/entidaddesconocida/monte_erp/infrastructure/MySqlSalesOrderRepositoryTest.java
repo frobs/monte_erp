@@ -1,5 +1,7 @@
 package com.entidaddesconocida.monte_erp.infrastructure;
 
+import com.entidaddesconocida.monte_erp.domain.model.OrderStatus;
+import com.entidaddesconocida.monte_erp.domain.model.Role;
 import com.entidaddesconocida.monte_erp.domain.model.Customer;
 import com.entidaddesconocida.monte_erp.domain.model.Product;
 import com.entidaddesconocida.monte_erp.domain.model.ReportPeriod;
@@ -38,7 +40,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * {@link FakeJdbc} double (RF-07 / RF-08 / RF-09 / RF-15).
  *
  * <p>They pin down the SQL, the bound parameters, the transaction handling
- * (commit/rollback and the restored {@code autoCommit}) and the row-to-entity
+ * (commit/rollback on the operation own connection) and the row-to-entity
  * mapping, with no MySQL instance.</p>
  */
 class MySqlSalesOrderRepositoryTest {
@@ -58,13 +60,12 @@ class MySqlSalesOrderRepositoryTest {
 
     @AfterEach
     void tearDown() {
-        DatabaseConnection.close();
         DatabaseConnection.configure(null, null, null);
         fake.uninstall();
     }
 
     private static User user() {
-        User user = new User("Bea", "bea", "hash", User.ROLE_EMPLOYEE, true);
+        User user = new User("Bea", "bea", "hash", Role.EMPLOYEE, true);
         user.setId(9);
         return user;
     }
@@ -172,14 +173,13 @@ class MySqlSalesOrderRepositoryTest {
     }
 
     @Test
-    @DisplayName("insert hace commit y restaura el autoCommit previo")
+    @DisplayName("insert hace commit en la conexión propia de la operación")
     void insertCommitsAndRestoresAutoCommit() throws Exception {
         fake.withGeneratedKey(7).withRows(lot(11, 10, OLD_ENTRY));
 
         repository.insert(draftOrder(2));
 
-        assertEquals(List.of("setAutoCommit(false)", "commit()", "setAutoCommit(true)"),
-                fake.transactionCalls());
+        assertEquals(List.of("setAutoCommit(false)", "commit()"), fake.transactionCalls());
     }
 
     @Test
@@ -192,7 +192,6 @@ class MySqlSalesOrderRepositoryTest {
 
         assertTrue(fake.transactionCalls().contains("rollback()"));
         assertFalse(fake.transactionCalls().contains("commit()"));
-        assertTrue(fake.transactionCalls().contains("setAutoCommit(true)"));
         assertTrue(fake.preparedSql().stream().noneMatch(sql -> sql.contains("INSERT INTO STOCK_ISSUE")));
     }
 
@@ -265,7 +264,7 @@ class MySqlSalesOrderRepositoryTest {
         SalesOrder order = orders.get(0);
         assertEquals(5, order.getId());
         assertEquals(LocalDateTime.of(2024, 5, 1, 10, 30), order.getOrderDate());
-        assertEquals(SalesOrder.STATUS_PENDING, order.getStatus());
+        assertEquals(OrderStatus.PENDING, order.getStatus());
         assertEquals(0, new BigDecimal("36.50").compareTo(order.getTotal()));
         assertEquals("Acme", order.getCustomer().getName());
 
@@ -286,7 +285,7 @@ class MySqlSalesOrderRepositoryTest {
     @DisplayName("findAll enlaza el rango de fechas, el cliente y el estado en la consulta")
     void findAllBindsEveryFilter() throws SQLException {
         SalesOrderFilter filter = SalesOrderFilter.of(LocalDate.of(2024, 1, 1),
-                LocalDate.of(2024, 1, 31), 3, SalesOrder.STATUS_PENDING);
+                LocalDate.of(2024, 1, 31), 3, OrderStatus.PENDING);
 
         List<SalesOrder> orders = repository.findAll(filter);
 
@@ -304,8 +303,8 @@ class MySqlSalesOrderRepositoryTest {
         assertEquals(java.sql.Date.valueOf(LocalDate.of(2024, 1, 31)), parameters.get(4));
         assertEquals(3, parameters.get(5));
         assertEquals(3, parameters.get(6));
-        assertEquals(SalesOrder.STATUS_PENDING, parameters.get(7));
-        assertEquals(SalesOrder.STATUS_PENDING, parameters.get(8));
+        assertEquals(OrderStatus.PENDING.dbValue(), parameters.get(7));
+        assertEquals(OrderStatus.PENDING.dbValue(), parameters.get(8));
     }
 
     @Test
@@ -327,7 +326,7 @@ class MySqlSalesOrderRepositoryTest {
         fake.withRows(FakeJdbc.row(
                 "id", 5,
                 "order_date", Timestamp.valueOf(LocalDateTime.of(2024, 5, 1, 10, 30)),
-                "status", SalesOrder.STATUS_DELIVERED,
+                "status", OrderStatus.DELIVERED.dbValue(),
                 "total", new BigDecimal("36.50"),
                 "customer_id", 3,
                 "customer_name", "Acme"));
@@ -411,7 +410,7 @@ class MySqlSalesOrderRepositoryTest {
         fake.withRows(FakeJdbc.row(
                 "order_id", 5,
                 "order_date", Timestamp.valueOf(LocalDateTime.of(2025, 1, 15, 10, 0)),
-                "status", SalesOrder.STATUS_PENDING,
+                "status", OrderStatus.PENDING.dbValue(),
                 "quantity", 3,
                 "unit_price", new BigDecimal("10.00"),
                 "product_id", 1,
@@ -424,7 +423,7 @@ class MySqlSalesOrderRepositoryTest {
         assertEquals(1, lines.size());
         SalesReportLine line = lines.get(0);
         assertEquals(5, line.getOrderId());
-        assertEquals(SalesOrder.STATUS_PENDING, line.getStatus());
+        assertEquals(OrderStatus.PENDING, line.getStatus());
         assertEquals(3, line.getQuantity());
         assertEquals("Teclado", line.getProduct().getName());
         String sql = fake.preparedSql().get(0);
@@ -459,16 +458,16 @@ class MySqlSalesOrderRepositoryTest {
     void changeStatusBindsOptimisticGuard() throws SQLException {
         fake.withUpdateCount(1);
 
-        int updated = repository.changeStatus(7, SalesOrder.STATUS_PENDING, SalesOrder.STATUS_SHIPPED);
+        int updated = repository.changeStatus(7, OrderStatus.PENDING, OrderStatus.SHIPPED);
 
         assertEquals(1, updated);
         String sql = fake.preparedSql().get(0);
         assertTrue(sql.contains("UPDATE SALES_ORDER SET status = ?"));
         assertTrue(sql.contains("WHERE id = ? AND status = ?"));
         Map<Integer, Object> parameters = fake.boundParameters().get(0);
-        assertEquals(SalesOrder.STATUS_SHIPPED, parameters.get(1));
+        assertEquals(OrderStatus.SHIPPED.dbValue(), parameters.get(1));
         assertEquals(7, parameters.get(2));
-        assertEquals(SalesOrder.STATUS_PENDING, parameters.get(3));
+        assertEquals(OrderStatus.PENDING.dbValue(), parameters.get(3));
     }
 
     @Test
@@ -476,7 +475,7 @@ class MySqlSalesOrderRepositoryTest {
     void changeStatusReturnsZeroOnConflict() throws SQLException {
         fake.withUpdateCount(0);
 
-        int updated = repository.changeStatus(7, SalesOrder.STATUS_PENDING, SalesOrder.STATUS_SHIPPED);
+        int updated = repository.changeStatus(7, OrderStatus.PENDING, OrderStatus.SHIPPED);
 
         assertEquals(0, updated);
     }
@@ -487,7 +486,7 @@ class MySqlSalesOrderRepositoryTest {
         fake.failUpdateNumber(1);
 
         assertThrows(SQLException.class, () ->
-                repository.changeStatus(7, SalesOrder.STATUS_PENDING, SalesOrder.STATUS_SHIPPED));
+                repository.changeStatus(7, OrderStatus.PENDING, OrderStatus.SHIPPED));
     }
 
     @Test
@@ -495,12 +494,11 @@ class MySqlSalesOrderRepositoryTest {
     void cancelRestoresStockAndDeletesIssues() throws SQLException {
         fake.withUpdateCount(1).withRows(FakeJdbc.row("stock_id", 11, "quantity", 3));
 
-        int updated = repository.changeStatus(7, SalesOrder.STATUS_PENDING,
-                SalesOrder.STATUS_CANCELLED);
+        int updated = repository.changeStatus(7, OrderStatus.PENDING,
+                OrderStatus.CANCELLED);
 
         assertEquals(1, updated);
-        assertEquals(List.of("setAutoCommit(false)", "commit()", "setAutoCommit(true)"),
-                fake.transactionCalls());
+        assertEquals(List.of("setAutoCommit(false)", "commit()"), fake.transactionCalls());
         assertTrue(fake.preparedSql().stream().anyMatch(sql ->
                 sql.contains("UPDATE STOCK SET available_quantity = available_quantity + ?")));
         assertTrue(fake.preparedSql().stream().anyMatch(sql ->
@@ -516,12 +514,12 @@ class MySqlSalesOrderRepositoryTest {
     void cancelWithZeroRowsDoesNotTouchStock() throws SQLException {
         fake.withUpdateCount(0);
 
-        int updated = repository.changeStatus(7, SalesOrder.STATUS_PENDING,
-                SalesOrder.STATUS_CANCELLED);
+        int updated = repository.changeStatus(7, OrderStatus.PENDING,
+                OrderStatus.CANCELLED);
 
         assertEquals(0, updated);
-        assertTrue(fake.transactionCalls().contains("rollback()"));
-        assertFalse(fake.transactionCalls().contains("commit()"));
+        // Nothing was written, so the transaction commits empty: no stock is touched.
+        assertFalse(fake.transactionCalls().contains("rollback()"));
         assertTrue(fake.preparedSql().stream().noneMatch(sql ->
                 sql.contains("UPDATE STOCK SET available_quantity = available_quantity + ?")));
         assertTrue(fake.preparedSql().stream().noneMatch(sql ->
