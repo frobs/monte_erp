@@ -1,5 +1,6 @@
 package com.entidaddesconocida.monte_erp.viewmodel;
 
+import com.entidaddesconocida.monte_erp.app.BackgroundTasks;
 import com.entidaddesconocida.monte_erp.domain.model.Product;
 import com.entidaddesconocida.monte_erp.domain.model.Stock;
 import com.entidaddesconocida.monte_erp.domain.model.StockLevel;
@@ -11,6 +12,10 @@ import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.ArrayDeque;
+import java.util.Deque;
+import java.util.concurrent.Callable;
+import java.util.function.Consumer;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -115,6 +120,41 @@ class StockViewModelTest {
 
         assertEquals(StockViewModel.DATABASE_ERROR, failing.errorMessageProperty().get());
         assertEquals(0, failing.levels().size());
+    }
+
+    @Test
+    @DisplayName("Una respuesta antigua de otra búsqueda no pisa las filas de la actual")
+    void staleSearchResultIsDiscarded() {
+        // Two submissions that resolve out of order, as a slow first query would.
+        Deque<Runnable> pending = new ArrayDeque<>();
+        BackgroundTasks deferred = new BackgroundTasks() {
+            @Override
+            public <T> void submit(Callable<T> task, Consumer<T> onSuccess,
+                                   Consumer<Throwable> onFailure) {
+                pending.add(() -> {
+                    try {
+                        onSuccess.accept(task.call());
+                    } catch (Exception failure) {
+                        onFailure.accept(failure);
+                    }
+                });
+            }
+        };
+        StockViewModel viewModel = new StockViewModel(stockRepository, null, deferred);
+
+        viewModel.load();                            // generation 1
+        viewModel.searchTextProperty().set("ra");    // generation 2
+        viewModel.searchTextProperty().set("rat");   // generation 3
+
+        // Resolve them in the wrong order: the newest result must win.
+        pending.removeLast().run();
+        int afterNewest = viewModel.levels().size();
+        while (!pending.isEmpty()) {
+            pending.removeFirst().run();
+        }
+
+        assertEquals(afterNewest, viewModel.levels().size());
+        assertEquals("Ratón", viewModel.levels().get(0).getProduct().getName());
     }
 
     @Test

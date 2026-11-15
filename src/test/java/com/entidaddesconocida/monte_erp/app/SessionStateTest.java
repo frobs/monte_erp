@@ -1,5 +1,6 @@
 package com.entidaddesconocida.monte_erp.app;
 
+import com.entidaddesconocida.monte_erp.domain.model.Role;
 import com.entidaddesconocida.monte_erp.domain.model.User;
 
 import org.junit.jupiter.api.DisplayName;
@@ -31,7 +32,7 @@ class SessionStateTest {
     @DisplayName("signIn guarda el usuario y requireCurrentUser lo devuelve")
     void signInStoresTheUser() {
         SessionState session = new SessionState();
-        User user = new User("Ana", "ana", "hash", User.ROLE_ADMIN, true);
+        User user = new User("Ana", "ana", "hash", Role.ADMIN, true);
 
         session.signIn(user);
 
@@ -43,7 +44,7 @@ class SessionStateTest {
     @DisplayName("signOut limpia la sesión y vuelve a exigir un usuario")
     void signOutClearsTheSession() {
         SessionState session = new SessionState();
-        session.signIn(new User("Ana", "ana", "hash", User.ROLE_ADMIN, true));
+        session.signIn(new User("Ana", "ana", "hash", Role.ADMIN, true));
 
         session.signOut();
 

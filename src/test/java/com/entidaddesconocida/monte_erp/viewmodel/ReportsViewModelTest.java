@@ -1,5 +1,8 @@
 package com.entidaddesconocida.monte_erp.viewmodel;
 
+import com.entidaddesconocida.monte_erp.domain.model.OrderStatus;
+import com.entidaddesconocida.monte_erp.domain.model.PurchaseStatus;
+import com.entidaddesconocida.monte_erp.domain.model.Role;
 import com.entidaddesconocida.monte_erp.app.SessionState;
 import com.entidaddesconocida.monte_erp.app.SessionValidator;
 import com.entidaddesconocida.monte_erp.domain.model.Customer;
@@ -50,8 +53,8 @@ class ReportsViewModelTest {
     void setUp() {
         stockRepository = new FakeStockRepository().withLot(1, lot());
         salesOrderRepository = new FakeSalesOrderRepository()
-                .withOrder(order(1, SalesOrder.STATUS_PENDING, 3, "10.00"))
-                .withOrder(order(2, SalesOrder.STATUS_CANCELLED, 50, "10.00"));
+                .withOrder(order(1, OrderStatus.PENDING, 3, "10.00"))
+                .withOrder(order(2, OrderStatus.CANCELLED, 50, "10.00"));
         viewModel = new ReportsViewModel(salesOrderRepository, stockRepository);
     }
 
@@ -66,12 +69,12 @@ class ReportsViewModelTest {
         return new Stock(11, 10, 7, new BigDecimal("1.50"), JANUARY, product(), purchase);
     }
 
-    private static Stock lot(int id, int initial, int available, String purchaseStatus) {
+    private static Stock lot(int id, int initial, int available, PurchaseStatus purchaseStatus) {
         Purchase purchase = new Purchase(5, null, purchaseStatus, null, null, null, null);
         return new Stock(id, initial, available, new BigDecimal("1.50"), JANUARY, product(), purchase);
     }
 
-    private static SalesOrder order(int id, String status, int quantity, String price) {
+    private static SalesOrder order(int id, OrderStatus status, int quantity, String price) {
         Product product = product();
         SalesOrderLine line = new SalesOrderLine(quantity, new BigDecimal(price), product);
         Customer customer = new Customer(1, "Acme", null, null, null);
@@ -189,7 +192,7 @@ class ReportsViewModelTest {
     @Test
     @DisplayName("Una sesión desactivada no puede seguir exportando el informe cargado")
     void deactivatedSessionCannotExportPreviouslyLoadedData() throws Exception {
-        User current = new User("Ana", "ana", "hash", User.ROLE_EMPLOYEE, true);
+        User current = new User("Ana", "ana", "hash", Role.EMPLOYEE, true);
         FakeUserRepository users = new FakeUserRepository().withUser(current);
         SessionState session = new SessionState();
         session.signIn(current);
@@ -224,9 +227,9 @@ class ReportsViewModelTest {
     @DisplayName("Un lote de compra devuelta se muestra marcado pero no suma en el total")
     void returnedLotIsShownButNotTotaled() {
         stockRepository = new FakeStockRepository()
-                .withLot(1, lot(1, 10, 4, Purchase.STATUS_RECEIVED))
-                .withLot(1, lot(2, 5, 0, Purchase.STATUS_RETURNED))
-                .withLot(1, lot(3, 2, 0, Purchase.STATUS_CANCELLED));
+                .withLot(1, lot(1, 10, 4, PurchaseStatus.RECEIVED))
+                .withLot(1, lot(2, 5, 0, PurchaseStatus.RETURNED))
+                .withLot(1, lot(3, 2, 0, PurchaseStatus.CANCELLED));
         viewModel = new ReportsViewModel(salesOrderRepository, stockRepository);
 
         viewModel.load();
@@ -243,8 +246,8 @@ class ReportsViewModelTest {
     @DisplayName("Un producto solo con pedidos cancelados aparece marcado y no suma en ventas")
     void onlyCancelledProductIsShownButNotTotaled() {
         salesOrderRepository = new FakeSalesOrderRepository()
-                .withOrder(order(1, SalesOrder.STATUS_PENDING, 3, "10.00"))
-                .withOrder(order(2, SalesOrder.STATUS_CANCELLED, 50, "10.00"));
+                .withOrder(order(1, OrderStatus.PENDING, 3, "10.00"))
+                .withOrder(order(2, OrderStatus.CANCELLED, 50, "10.00"));
         viewModel = new ReportsViewModel(salesOrderRepository, stockRepository);
 
         viewModel.load();

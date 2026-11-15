@@ -1,5 +1,7 @@
 package com.entidaddesconocida.monte_erp.viewmodel;
 
+import com.entidaddesconocida.monte_erp.domain.model.PurchaseStatus;
+import com.entidaddesconocida.monte_erp.domain.model.Role;
 import com.entidaddesconocida.monte_erp.domain.model.Product;
 import com.entidaddesconocida.monte_erp.domain.model.Purchase;
 import com.entidaddesconocida.monte_erp.domain.model.PurchaseFilter;
@@ -66,7 +68,7 @@ class PurchasesViewModelTest {
     }
 
     private static User user() {
-        User user = new User("Bea", "bea", "hash", User.ROLE_EMPLOYEE, true);
+        User user = new User("Bea", "bea", "hash", Role.EMPLOYEE, true);
         user.setId(9);
         return user;
     }
@@ -110,7 +112,7 @@ class PurchasesViewModelTest {
     @Test
     @DisplayName("load limpia la selección del histórico y su detalle")
     void loadClearsSelectedPurchase() {
-        Purchase purchase = new Purchase(5, LocalDateTime.now(), Purchase.STATUS_RECEIVED,
+        Purchase purchase = new Purchase(5, LocalDateTime.now(), PurchaseStatus.RECEIVED,
                 new BigDecimal("20.00"), ACME, user(), List.of());
         purchaseRepository.withPurchase(purchase)
                 .withLot(5, new Stock(product(1, "Teclado"), 2, new BigDecimal("10.00")));
@@ -274,7 +276,7 @@ class PurchasesViewModelTest {
         assertNull(viewModel.selectedSupplierProperty().get());
 
         Purchase inserted = purchaseRepository.lastInserted();
-        assertEquals(Purchase.STATUS_PENDING, inserted.getStatus());
+        assertEquals(PurchaseStatus.PENDING, inserted.getStatus());
         assertEquals("Acme", inserted.getSupplier().getName());
         assertEquals(9, inserted.getUser().getId());
         assertEquals(2, inserted.getLots().size());
@@ -283,7 +285,7 @@ class PurchasesViewModelTest {
         assertEquals(1, viewModel.purchases().size());
         Purchase saved = viewModel.purchases().get(0);
         assertTrue(viewModel.statusMessageProperty().get().contains("Compra #" + saved.getId()));
-        assertEquals(Purchase.STATUS_PENDING, saved.getStatus());
+        assertEquals(PurchaseStatus.PENDING, saved.getStatus());
     }
 
     @Test
@@ -301,7 +303,7 @@ class PurchasesViewModelTest {
     @Test
     @DisplayName("selectPurchase carga los lotes y null los vacía")
     void selectPurchaseLoadsAndClearsLots() {
-        Purchase purchase = new Purchase(5, LocalDateTime.now(), Purchase.STATUS_RECEIVED,
+        Purchase purchase = new Purchase(5, LocalDateTime.now(), PurchaseStatus.RECEIVED,
                 new BigDecimal("20.00"), ACME, user(), List.of());
         purchaseRepository.withPurchase(purchase)
                 .withLot(5, new Stock(product(1, "Teclado"), 2, new BigDecimal("10.00")));
@@ -318,7 +320,7 @@ class PurchasesViewModelTest {
     @DisplayName("selectPurchase con la base de datos caída vacía el detalle y avisa")
     void selectPurchaseReportsDatabaseError() {
         purchaseRepository.failOn("findLots");
-        Purchase purchase = new Purchase(5, LocalDateTime.now(), Purchase.STATUS_RECEIVED,
+        Purchase purchase = new Purchase(5, LocalDateTime.now(), PurchaseStatus.RECEIVED,
                 BigDecimal.ZERO, ACME, user(), List.of());
 
         viewModel.selectPurchase(purchase);
@@ -388,7 +390,7 @@ class PurchasesViewModelTest {
 
     // --- Status machine -------------------------------------------------
 
-    private Purchase selectStoredPurchase(String status) {
+    private Purchase selectStoredPurchase(PurchaseStatus status) {
         Purchase purchase = new Purchase(0, LocalDateTime.now(), status,
                 new BigDecimal("20.00"), ACME, user(), List.of());
         purchaseRepository.withPurchase(purchase)
@@ -406,24 +408,24 @@ class PurchasesViewModelTest {
     void availableTransitionsReflectTheSelectedPurchase() {
         assertEquals(List.of(), viewModel.availableTransitions());
 
-        selectStoredPurchase(Purchase.STATUS_PENDING);
+        selectStoredPurchase(PurchaseStatus.PENDING);
 
-        assertEquals(List.of(Purchase.STATUS_RECEIVED, Purchase.STATUS_CANCELLED),
+        assertEquals(List.of(PurchaseStatus.RECEIVED, PurchaseStatus.CANCELLED),
                 viewModel.availableTransitions());
     }
 
     @Test
     @DisplayName("availableTransitions de una compra recibida solo ofrece devolver")
     void receivedPurchaseOnlyOffersReturn() {
-        selectStoredPurchase(Purchase.STATUS_RECEIVED);
+        selectStoredPurchase(PurchaseStatus.RECEIVED);
 
-        assertEquals(List.of(Purchase.STATUS_RETURNED), viewModel.availableTransitions());
+        assertEquals(List.of(PurchaseStatus.RETURNED), viewModel.availableTransitions());
     }
 
     @Test
     @DisplayName("availableTransitions vacío para una compra terminal")
     void availableTransitionsAreEmptyForTerminalPurchases() {
-        selectStoredPurchase(Purchase.STATUS_RETURNED);
+        selectStoredPurchase(PurchaseStatus.RETURNED);
 
         assertEquals(List.of(), viewModel.availableTransitions());
     }
@@ -431,7 +433,7 @@ class PurchasesViewModelTest {
     @Test
     @DisplayName("load limpia availableTransitions junto con la selección")
     void loadClearsAvailableTransitions() {
-        selectStoredPurchase(Purchase.STATUS_PENDING);
+        selectStoredPurchase(PurchaseStatus.PENDING);
         assertEquals(2, viewModel.availableTransitions().size());
 
         viewModel.load();
@@ -444,7 +446,7 @@ class PurchasesViewModelTest {
     void changeStatusWithoutSelectionFails() {
         purchaseRepository.failOn("changeStatus");
 
-        viewModel.changeStatus(Purchase.STATUS_RECEIVED);
+        viewModel.changeStatus(PurchaseStatus.RECEIVED);
 
         assertEquals(PurchasesViewModel.PURCHASE_REQUIRED, viewModel.errorMessageProperty().get());
     }
@@ -452,10 +454,10 @@ class PurchasesViewModelTest {
     @Test
     @DisplayName("changeStatus con transición no permitida avisa y no toca el repositorio")
     void changeStatusWithInvalidTransitionFailsBeforeTheRepository() {
-        selectStoredPurchase(Purchase.STATUS_RECEIVED);
+        selectStoredPurchase(PurchaseStatus.RECEIVED);
         purchaseRepository.failOn("changeStatus");
 
-        viewModel.changeStatus(Purchase.STATUS_CANCELLED);
+        viewModel.changeStatus(PurchaseStatus.CANCELLED);
 
         assertEquals(String.format(PurchasesViewModel.INVALID_TRANSITION, "Recibida", "Cancelada"),
                 viewModel.errorMessageProperty().get());
@@ -464,29 +466,29 @@ class PurchasesViewModelTest {
     @Test
     @DisplayName("changeStatus válido persiste, recarga el histórico y reselecciona")
     void changeStatusPersistsAndReloads() {
-        Purchase selected = selectStoredPurchase(Purchase.STATUS_PENDING);
+        Purchase selected = selectStoredPurchase(PurchaseStatus.PENDING);
         int id = selected.getId();
 
-        viewModel.changeStatus(Purchase.STATUS_RECEIVED);
+        viewModel.changeStatus(PurchaseStatus.RECEIVED);
 
         assertEquals("", viewModel.errorMessageProperty().get());
         assertTrue(viewModel.statusMessageProperty().get().contains("Compra #" + id));
         assertTrue(viewModel.statusMessageProperty().get().contains("Recibida"));
         Purchase reloaded = viewModel.selectedPurchaseProperty().get();
-        assertEquals(Purchase.STATUS_RECEIVED, reloaded.getStatus());
-        assertEquals(List.of(Purchase.STATUS_RETURNED), viewModel.availableTransitions());
+        assertEquals(PurchaseStatus.RECEIVED, reloaded.getStatus());
+        assertEquals(List.of(PurchaseStatus.RETURNED), viewModel.availableTransitions());
         assertEquals(2, viewModel.selectedPurchaseLots().get(0).getAvailableQuantity());
     }
 
     @Test
     @DisplayName("changeStatus con guarda optimista rota recarga y avisa del conflicto")
     void changeStatusReportsConflict() {
-        Purchase selected = selectStoredPurchase(Purchase.STATUS_PENDING);
+        Purchase selected = selectStoredPurchase(PurchaseStatus.PENDING);
         // Someone else moved the purchase: the stored status no longer matches.
         purchaseRepository.withPurchase(new Purchase(selected.getId(), LocalDateTime.now(),
-                Purchase.STATUS_CANCELLED, selected.getTotal(), ACME, user(), List.of()));
+                PurchaseStatus.CANCELLED, selected.getTotal(), ACME, user(), List.of()));
 
-        viewModel.changeStatus(Purchase.STATUS_RECEIVED);
+        viewModel.changeStatus(PurchaseStatus.RECEIVED);
 
         assertEquals(PurchasesViewModel.CONFLICT, viewModel.errorMessageProperty().get());
     }
@@ -494,7 +496,7 @@ class PurchasesViewModelTest {
     @Test
     @DisplayName("Devolver una compra con unidades vendidas muestra el motivo del rechazo")
     void returnRejectedWhenStockWasConsumed() {
-        Purchase purchase = new Purchase(0, LocalDateTime.now(), Purchase.STATUS_RECEIVED,
+        Purchase purchase = new Purchase(0, LocalDateTime.now(), PurchaseStatus.RECEIVED,
                 new BigDecimal("20.00"), ACME, user(), List.of());
         purchaseRepository.withPurchase(purchase)
                 .withLot(purchase.getId(), new Stock(11, 2, 1, new BigDecimal("10.00"),
@@ -504,28 +506,28 @@ class PurchasesViewModelTest {
         viewModel.selectedPurchaseProperty().set(selected);
         viewModel.selectPurchase(selected);
 
-        viewModel.changeStatus(Purchase.STATUS_RETURNED);
+        viewModel.changeStatus(PurchaseStatus.RETURNED);
 
         assertEquals("No se puede devolver la compra #" + purchase.getId()
                 + ": 1 unidad ya se ha vendido.", viewModel.errorMessageProperty().get());
-        assertEquals(Purchase.STATUS_RECEIVED,
+        assertEquals(PurchaseStatus.RECEIVED,
                 viewModel.selectedPurchaseProperty().get().getStatus());
     }
 
     @Test
     @DisplayName("changeStatus con la base de datos caída muestra el error de conexión")
     void changeStatusReportsDatabaseError() {
-        selectStoredPurchase(Purchase.STATUS_PENDING);
+        selectStoredPurchase(PurchaseStatus.PENDING);
         purchaseRepository.failOn("changeStatus");
 
-        viewModel.changeStatus(Purchase.STATUS_RECEIVED);
+        viewModel.changeStatus(PurchaseStatus.RECEIVED);
 
         assertEquals(PurchasesViewModel.DATABASE_ERROR, viewModel.errorMessageProperty().get());
     }
 
     // --- History filters (queried in the database) ----------------------
 
-    private Purchase storePurchase(LocalDate date, Supplier supplier, String status) {
+    private Purchase storePurchase(LocalDate date, Supplier supplier, PurchaseStatus status) {
         Purchase purchase = new Purchase(0, date.atTime(10, 0), status,
                 new BigDecimal("20.00"), supplier, user(), List.of());
         purchaseRepository.withPurchase(purchase);
@@ -534,9 +536,9 @@ class PurchasesViewModelTest {
 
     /** Three purchases in two months, from three suppliers, in three statuses. */
     private void loadThreePurchases() {
-        storePurchase(LocalDate.of(2024, 1, 15), ACME, Purchase.STATUS_PENDING);
-        storePurchase(LocalDate.of(2024, 2, 15), GLOBEX, Purchase.STATUS_RECEIVED);
-        storePurchase(LocalDate.of(2024, 2, 29), INACTIVE, Purchase.STATUS_RETURNED);
+        storePurchase(LocalDate.of(2024, 1, 15), ACME, PurchaseStatus.PENDING);
+        storePurchase(LocalDate.of(2024, 2, 15), GLOBEX, PurchaseStatus.RECEIVED);
+        storePurchase(LocalDate.of(2024, 2, 29), INACTIVE, PurchaseStatus.RETURNED);
         viewModel.load();
     }
 
@@ -597,10 +599,10 @@ class PurchasesViewModelTest {
     void statusFilterIsQueried() {
         loadThreePurchases();
 
-        viewModel.statusFilterProperty().set(Purchase.STATUS_RECEIVED);
+        viewModel.statusFilterProperty().set(PurchaseStatus.RECEIVED);
 
         assertEquals(1, viewModel.purchases().size());
-        assertEquals(Purchase.STATUS_RECEIVED, purchaseRepository.lastFilter().status());
+        assertEquals(PurchaseStatus.RECEIVED, purchaseRepository.lastFilter().status());
     }
 
     @Test
@@ -611,12 +613,12 @@ class PurchasesViewModelTest {
 
         viewModel.fromDateProperty().set(LocalDate.of(2024, 2, 1));
         viewModel.supplierFilterProperty().set(GLOBEX);
-        viewModel.statusFilterProperty().set(Purchase.STATUS_RECEIVED);
+        viewModel.statusFilterProperty().set(PurchaseStatus.RECEIVED);
 
         assertEquals(1, viewModel.purchases().size());
         assertEquals(calls + 3, purchaseRepository.findAllCalls());
         assertEquals(PurchaseFilter.of(LocalDate.of(2024, 2, 1), null, GLOBEX.getId(),
-                Purchase.STATUS_RECEIVED), purchaseRepository.lastFilter());
+                PurchaseStatus.RECEIVED), purchaseRepository.lastFilter());
     }
 
     @Test
@@ -642,13 +644,13 @@ class PurchasesViewModelTest {
     void filteringDropsTheSelectionOfAHiddenPurchase() {
         loadThreePurchases();
         Purchase pending = viewModel.purchases().stream()
-                .filter(purchase -> Purchase.STATUS_PENDING.equals(purchase.getStatus()))
+                .filter(purchase -> PurchaseStatus.PENDING.equals(purchase.getStatus()))
                 .findFirst().orElseThrow();
         viewModel.selectedPurchaseProperty().set(pending);
         viewModel.selectPurchase(pending);
         assertEquals(2, viewModel.availableTransitions().size());
 
-        viewModel.statusFilterProperty().set(Purchase.STATUS_RECEIVED);
+        viewModel.statusFilterProperty().set(PurchaseStatus.RECEIVED);
 
         assertNull(viewModel.selectedPurchaseProperty().get());
         assertEquals(0, viewModel.availableTransitions().size());
@@ -661,7 +663,7 @@ class PurchasesViewModelTest {
         loadThreePurchases();
         purchaseRepository.failOn("findAll");
 
-        viewModel.statusFilterProperty().set(Purchase.STATUS_RECEIVED);
+        viewModel.statusFilterProperty().set(PurchaseStatus.RECEIVED);
 
         assertEquals(PurchasesViewModel.DATABASE_ERROR, viewModel.errorMessageProperty().get());
         assertEquals(0, viewModel.purchases().size());
@@ -670,31 +672,31 @@ class PurchasesViewModelTest {
     @Test
     @DisplayName("Guardar mantiene el filtro activo en la recarga del histórico")
     void saveReloadsWithTheActiveFilter() {
-        viewModel.statusFilterProperty().set(Purchase.STATUS_PENDING);
+        viewModel.statusFilterProperty().set(PurchaseStatus.PENDING);
         selectSupplier();
         addLot("Teclado", "1", "10.00");
 
         viewModel.save();
 
         assertEquals(1, viewModel.purchases().size());
-        assertEquals(Purchase.STATUS_PENDING, purchaseRepository.lastFilter().status());
+        assertEquals(PurchaseStatus.PENDING, purchaseRepository.lastFilter().status());
         assertEquals("", viewModel.errorMessageProperty().get());
     }
 
     @Test
     @DisplayName("Cambiar el estado mantiene el filtro: la compra puede desaparecer del histórico")
     void changeStatusReloadsWithTheActiveFilter() {
-        storePurchase(LocalDate.of(2024, 1, 15), ACME, Purchase.STATUS_PENDING);
-        viewModel.statusFilterProperty().set(Purchase.STATUS_PENDING);
+        storePurchase(LocalDate.of(2024, 1, 15), ACME, PurchaseStatus.PENDING);
+        viewModel.statusFilterProperty().set(PurchaseStatus.PENDING);
         Purchase selected = viewModel.purchases().get(0);
         viewModel.selectedPurchaseProperty().set(selected);
 
-        viewModel.changeStatus(Purchase.STATUS_RECEIVED);
+        viewModel.changeStatus(PurchaseStatus.RECEIVED);
 
         assertEquals("", viewModel.errorMessageProperty().get());
         assertEquals(0, viewModel.purchases().size());
         assertTrue(viewModel.statusMessageProperty().get().contains("Recibida"));
-        assertEquals(Purchase.STATUS_PENDING, purchaseRepository.lastFilter().status());
+        assertEquals(PurchaseStatus.PENDING, purchaseRepository.lastFilter().status());
     }
 
     @Test
@@ -702,8 +704,8 @@ class PurchasesViewModelTest {
     void filterOptionsCoverEverySupplierAndStatus() {
         assertEquals(List.of("Acme", "Globex", "Old"),
                 viewModel.supplierFilterOptions().stream().map(Supplier::getName).toList());
-        assertEquals(List.of(Purchase.STATUS_PENDING, Purchase.STATUS_RECEIVED,
-                        Purchase.STATUS_CANCELLED, Purchase.STATUS_RETURNED),
+        assertEquals(List.of(PurchaseStatus.PENDING, PurchaseStatus.RECEIVED,
+                        PurchaseStatus.CANCELLED, PurchaseStatus.RETURNED),
                 viewModel.statusFilterOptions());
     }
 }

@@ -1,6 +1,7 @@
 package com.entidaddesconocida.monte_erp.ui.support;
 
 import com.entidaddesconocida.monte_erp.app.AppContext;
+import com.entidaddesconocida.monte_erp.app.BackgroundTasks;
 import com.entidaddesconocida.monte_erp.app.AppShell;
 import com.entidaddesconocida.monte_erp.app.SessionState;
 import com.entidaddesconocida.monte_erp.domain.model.User;
@@ -53,7 +54,11 @@ public final class UiTestSupport {
                 new MySqlProductRepository(), new MySqlCustomerRepository(),
                 new MySqlSalesOrderRepository(), new MySqlPurchaseRepository(),
                 new MySqlStockRepository(), config, setupService,
-                () -> new DatabaseUrl(DatabaseConnection.getUrl()));
+                () -> new DatabaseUrl(DatabaseConnection.getUrl()),
+                // Synchronous on purpose: TestFX drives the real window and asserts
+                // right after each click, so a background result would race the
+                // assertion. The virtual-thread runner is covered by unit tests.
+                BackgroundTasks.synchronous());
         MvvmFX.setCustomDependencyInjector(this::create);
     }
 

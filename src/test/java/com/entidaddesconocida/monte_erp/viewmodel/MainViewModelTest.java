@@ -1,5 +1,6 @@
 package com.entidaddesconocida.monte_erp.viewmodel;
 
+import com.entidaddesconocida.monte_erp.domain.model.Role;
 import com.entidaddesconocida.monte_erp.domain.model.User;
 import com.entidaddesconocida.monte_erp.infrastructure.config.DatabaseUrl;
 
@@ -15,7 +16,7 @@ class MainViewModelTest {
     @DisplayName("La pantalla principal no revela secretos heredados en la URL JDBC")
     void databaseLabelRedactsSensitiveUrlParameters() {
         MainViewModel viewModel = new MainViewModel(
-                new User("Ana", "ana", "hash", User.ROLE_ADMIN, true),
+                new User("Ana", "ana", "hash", Role.ADMIN, true),
                 new DatabaseUrl("jdbc:mysql://db/erp?password=hidden&serverTimezone=UTC"));
 
         String databaseLabel = viewModel.databaseProperty().get();

@@ -1,5 +1,6 @@
 package com.entidaddesconocida.monte_erp.viewmodel;
 
+import com.entidaddesconocida.monte_erp.app.BackgroundTasks;
 import com.entidaddesconocida.monte_erp.app.SessionValidator;
 
 import de.saxsys.mvvmfx.ViewModel;
@@ -21,6 +22,8 @@ import javafx.collections.ObservableList;
 import java.sql.SQLException;
 import java.sql.SQLIntegrityConstraintViolationException;
 import java.util.List;
+import java.util.concurrent.Callable;
+import java.util.function.Consumer;
 import java.util.function.Supplier;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -52,16 +55,15 @@ public abstract class CrudViewModel<T> implements ViewModel {
     private static final Logger LOGGER = Logger.getLogger(CrudViewModel.class.getName());
 
     /** Message shown when the database cannot be reached. */
-    protected static final String DATABASE_ERROR =
-            "No se pudo conectar con la base de datos. Comprueba que MySQL esté arrancado.";
+    protected static final String DATABASE_ERROR = ViewMessages.DATABASE_ERROR;
 
     /** Message shown when the write succeeded but the list could not be reloaded. */
-    protected static final String RELOAD_ERROR =
-            "Los cambios se guardaron, pero no se pudo recargar la lista. Pulsa 'Actualizar'.";
-    protected static final String SESSION_EXPIRED =
-            "La sesión ya no está activa. Inicia sesión de nuevo.";
+    protected static final String RELOAD_ERROR = ViewMessages.RELOAD_ERROR;
+
+    protected static final String SESSION_EXPIRED = ViewMessages.SESSION_EXPIRED;
 
     private final SessionValidator sessionValidator;
+    private final BackgroundTasks backgroundTasks;
 
     /** Master list currently loaded (active or inactive rows, depending on the subclass). */
     protected final ObservableList<T> items = FXCollections.observableArrayList();
@@ -80,6 +82,13 @@ public abstract class CrudViewModel<T> implements ViewModel {
     protected boolean validateOnEdit;
 
     /**
+     * Sequence of the list queries. Only the newest submission is applied: with
+     * the asynchronous reload a slow query for a previous search text could
+     * otherwise overwrite the rows of the current one.
+     */
+    private long queryGeneration;
+
+    /**
      * Live re-validation once the user has already tried to save. The summary
      * label is refreshed too, otherwise the combined message of the failed save
      * stays visible after the user has corrected the fields.
@@ -92,11 +101,21 @@ public abstract class CrudViewModel<T> implements ViewModel {
     };
 
     protected CrudViewModel() {
-        this(null);
+        this(null, BackgroundTasks.synchronous());
     }
 
     protected CrudViewModel(SessionValidator sessionValidator) {
+        this(sessionValidator, BackgroundTasks.synchronous());
+    }
+
+    /**
+     * @param backgroundTasks executor of the list query; {@link
+     *                        BackgroundTasks#synchronous()} in tests and a
+     *                        virtual-thread executor in the application
+     */
+    protected CrudViewModel(SessionValidator sessionValidator, BackgroundTasks backgroundTasks) {
         this.sessionValidator = sessionValidator;
+        this.backgroundTasks = backgroundTasks;
         // Selecting a row loads it into the form; clearing the selection resets
         // the form so a stale row can never be edited/saved by accident.
         selectedItem.addListener((observable, oldValue, newValue) -> {
@@ -169,11 +188,12 @@ public abstract class CrudViewModel<T> implements ViewModel {
         if (!ensureActiveSession()) {
             return;
         }
+        // The combos are bounded queries; the list is not, so it runs off the UI
+        // thread and comes back as an already built list.
         try {
             loadAuxiliaryData();
-            refreshItems();
         } catch (SQLException e) {
-            LOGGER.log(Level.SEVERE, "Could not load the list", e);
+            LOGGER.log(Level.SEVERE, "Could not load the form data", e);
             // The form is reset even on failure: otherwise the title and the
             // toggle button would stay blank on the "database is down" screen.
             // fail() goes last because clearForm() clears the message.
@@ -181,7 +201,58 @@ public abstract class CrudViewModel<T> implements ViewModel {
             fail(DATABASE_ERROR);
             return;
         }
+        submitRows(
+                loaded -> {
+                    applyItems(loaded);
+                    resetForm();
+                },
+                this::reportLoadFailure);
+    }
+
+    /**
+     * Runs the master-list query in the background and applies the rows on the UI
+     * thread. Failures are reported through {@link #reportLoadFailure(Throwable)};
+     * the filter layer passes its own handler so it can roll back the control that
+     * triggered the reload.
+     */
+    protected final void refreshItems() {
+        refreshItems(this::reportLoadFailure);
+    }
+
+    /** Same as {@link #refreshItems()} with a caller supplied failure handler. */
+    protected final void refreshItems(Consumer<Throwable> onFailure) {
+        submitRows(this::applyItems, onFailure);
+    }
+
+    /**
+     * Submits a list query and drops its outcome when another one has been
+     * submitted since, so a stale result never replaces fresher rows.
+     */
+    private void submitRows(Consumer<List<T>> onSuccess, Consumer<Throwable> onFailure) {
+        long generation = ++queryGeneration;
+        backgroundTasks.submit(
+                rowsQuery(),
+                loaded -> {
+                    if (generation == queryGeneration) {
+                        onSuccess.accept(loaded);
+                    }
+                },
+                failure -> {
+                    if (generation == queryGeneration) {
+                        onFailure.accept(failure);
+                    }
+                });
+    }
+
+    /**
+     * Default reaction to a failed list query: the form is reset (otherwise the
+     * title and the toggle button stay blank on the "database is down" screen) and
+     * the message goes last, because {@code clearForm()} clears it.
+     */
+    private void reportLoadFailure(Throwable failure) {
+        LOGGER.log(Level.SEVERE, "Could not load the list", failure);
         resetForm();
+        fail(DATABASE_ERROR);
     }
 
     /** Clears the form so a brand new item can be typed in. */
@@ -393,16 +464,29 @@ public abstract class CrudViewModel<T> implements ViewModel {
      * message and the form is still reset.
      */
     private void reloadAfterWrite(String successMessage) {
-        try {
-            refreshItems();
-        } catch (SQLException e) {
-            LOGGER.log(Level.WARNING, "The write succeeded but the reload failed", e);
-            resetForm();
-            fail(RELOAD_ERROR);
-            return;
+        submitRows(
+                loaded -> {
+                    applyItems(loaded);
+                    resetForm();
+                    succeed(successMessage);
+                },
+                failure -> {
+                    LOGGER.log(Level.WARNING, "The write succeeded but the reload failed", failure);
+                    resetForm();
+                    fail(RELOAD_ERROR);
+                });
+    }
+
+    /**
+     * Replaces the rows and drops a selection that no longer belongs to the list
+     * (a row can vanish after a filter change or a write). Runs on the UI thread.
+     */
+    private void applyItems(List<T> loaded) {
+        items.setAll(loaded);
+        T selected = selectedItem.get();
+        if (selected != null && items.stream().noneMatch(item -> itemId(item) == itemId(selected))) {
+            selectedItem.set(null);
         }
-        resetForm();
-        succeed(successMessage);
     }
 
     /** Trims a possibly {@code null} value; {@code null} becomes the empty string. */
@@ -416,16 +500,18 @@ public abstract class CrudViewModel<T> implements ViewModel {
      * only, so that rule stays in {@code UsersViewModel}.
      */
     protected static String joinedErrors(String... messages) {
-        return List.of(messages).stream()
-                .filter(message -> !message.isBlank())
-                .reduce((first, second) -> first + "\n" + second)
-                .orElse("");
+        return ViewMessages.join(messages);
     }
 
     // --- Hooks específicos de cada entidad ---
 
-    /** Loads {@link #items} from the repository (the Filterable layer implements it). */
-    protected abstract void refreshItems() throws SQLException;
+    /**
+     * Builds the query that loads the master list. It runs on the UI thread, so
+     * the current criteria (search text, combos, active/inactive toggle) are
+     * captured here and the returned {@link Callable} is what the background
+     * thread executes.
+     */
+    protected abstract Callable<List<T>> rowsQuery();
 
     /** Extra data loaded only by {@link #load()} (e.g. the product combos). */
     protected void loadAuxiliaryData() throws SQLException {

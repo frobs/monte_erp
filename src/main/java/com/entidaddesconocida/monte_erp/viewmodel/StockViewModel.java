@@ -1,5 +1,6 @@
 package com.entidaddesconocida.monte_erp.viewmodel;
 
+import com.entidaddesconocida.monte_erp.app.BackgroundTasks;
 import com.entidaddesconocida.monte_erp.app.SessionValidator;
 import com.entidaddesconocida.monte_erp.domain.model.Stock;
 import com.entidaddesconocida.monte_erp.domain.model.StockLevel;
@@ -20,6 +21,7 @@ import javafx.collections.ObservableList;
 import javafx.collections.transformation.FilteredList;
 
 import java.sql.SQLException;
+import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -43,12 +45,12 @@ public class StockViewModel implements ViewModel {
     private static final Logger LOGGER = Logger.getLogger(StockViewModel.class.getName());
 
     /** Message shown when the database cannot be reached. */
-    protected static final String DATABASE_ERROR =
-            "No se pudo conectar con la base de datos. Comprueba que MySQL esté arrancado.";
-    private static final String SESSION_EXPIRED = "La sesión ya no está activa. Inicia sesión de nuevo.";
+    protected static final String DATABASE_ERROR = ViewMessages.DATABASE_ERROR;
+    private static final String SESSION_EXPIRED = ViewMessages.SESSION_EXPIRED;
 
     private final StockRepository stockRepository;
     private final SessionValidator sessionValidator;
+    private final BackgroundTasks backgroundTasks;
 
     private final ObservableList<StockLevel> levels = FXCollections.observableArrayList();
     private final FilteredList<StockLevel> filteredLevels = new FilteredList<>(levels);
@@ -59,13 +61,31 @@ public class StockViewModel implements ViewModel {
     private final ReadOnlyStringWrapper alertCount = new ReadOnlyStringWrapper("");
     private final StringProperty errorMessage = new SimpleStringProperty("");
 
+    /**
+     * Sequence of the level queries. Only the newest submission is applied: with
+     * the asynchronous reload a slow query for a previous search text could
+     * otherwise overwrite the rows of the current one.
+     */
+    private long levelQueryGeneration;
+
     public StockViewModel(StockRepository stockRepository) {
-        this(stockRepository, null);
+        this(stockRepository, null, BackgroundTasks.synchronous());
     }
 
     public StockViewModel(StockRepository stockRepository, SessionValidator sessionValidator) {
+        this(stockRepository, sessionValidator, BackgroundTasks.synchronous());
+    }
+
+    /**
+     * @param backgroundTasks executor of the blocking queries; {@link
+     *                        BackgroundTasks#synchronous()} in tests and a
+     *                        virtual-thread executor in the application
+     */
+    public StockViewModel(StockRepository stockRepository, SessionValidator sessionValidator,
+                          BackgroundTasks backgroundTasks) {
         this.stockRepository = stockRepository;
         this.sessionValidator = sessionValidator;
+        this.backgroundTasks = backgroundTasks;
         searchText.addListener((observable, oldValue, newValue) -> reloadLevels());
         onlyBelowMinimum.addListener((observable, oldValue, newValue) -> reloadLevels());
     }
@@ -113,17 +133,27 @@ public class StockViewModel implements ViewModel {
         if (!ensureActiveSession()) {
             return;
         }
-        try {
-            levels.setAll(stockRepository.findLevels(searchText.get(), onlyBelowMinimum.get()));
-            alertCount.set("Productos bajo mínimo: " + stockRepository.countBelowMinimum());
-        } catch (SQLException e) {
-            LOGGER.log(Level.SEVERE, "Could not load the stock levels", e);
-            levels.clear();
-            alertCount.set("Productos bajo mínimo: 0");
-            errorMessage.set(DATABASE_ERROR);
-        }
-        selectedLevel.set(null);
-        selectedLots.clear();
+        String search = searchText.get();
+        boolean onlyBelowMin = onlyBelowMinimum.get();
+        // The queries run off the UI thread; only the state update comes back.
+        long generation = ++levelQueryGeneration;
+        backgroundTasks.submit(
+                () -> new LevelSnapshot(stockRepository.findLevels(search, onlyBelowMin),
+                        stockRepository.countBelowMinimum()),
+                snapshot -> {
+                    if (generation != levelQueryGeneration) {
+                        return;
+                    }
+                    levels.setAll(snapshot.levels());
+                    alertCount.set("Productos bajo mínimo: " + snapshot.belowMinimum());
+                    selectedLevel.set(null);
+                    selectedLots.clear();
+                },
+                failure -> {
+                    if (generation == levelQueryGeneration) {
+                        reportLoadFailure(failure);
+                    }
+                });
     }
 
     /**
@@ -138,13 +168,15 @@ public class StockViewModel implements ViewModel {
             selectedLots.clear();
             return;
         }
-        try {
-            selectedLots.setAll(stockRepository.findLots(level.getProduct().getId()));
-        } catch (SQLException e) {
-            LOGGER.log(Level.SEVERE, "Could not load the stock lots", e);
-            selectedLots.clear();
-            errorMessage.set(DATABASE_ERROR);
-        }
+        int productId = level.getProduct().getId();
+        backgroundTasks.submit(
+                () -> stockRepository.findLots(productId),
+                selectedLots::setAll,
+                failure -> {
+                    LOGGER.log(Level.SEVERE, "Could not load the stock lots", failure);
+                    selectedLots.clear();
+                    errorMessage.set(DATABASE_ERROR);
+                });
     }
 
     /** Whether the level passes the text search and the "only below minimum" toggle. */
@@ -182,18 +214,44 @@ public class StockViewModel implements ViewModel {
         if (!ensureActiveSession()) {
             return;
         }
-        try {
-            levels.setAll(stockRepository.findLevels(searchText.get(), onlyBelowMinimum.get()));
-        } catch (SQLException e) {
-            LOGGER.log(Level.SEVERE, "Could not reload the filtered stock levels", e);
-            errorMessage.set(DATABASE_ERROR);
-            return;
-        }
-        StockLevel selected = selectedLevel.get();
-        if (selected != null && levels.stream().noneMatch(level -> sameProduct(level, selected))) {
-            selectedLevel.set(null);
-            selectedLots.clear();
-        }
+        String search = searchText.get();
+        boolean onlyBelowMin = onlyBelowMinimum.get();
+        long generation = ++levelQueryGeneration;
+        backgroundTasks.submit(
+                () -> stockRepository.findLevels(search, onlyBelowMin),
+                loaded -> {
+                    if (generation != levelQueryGeneration) {
+                        return;
+                    }
+                    levels.setAll(loaded);
+                    StockLevel selected = selectedLevel.get();
+                    if (selected != null
+                            && levels.stream().noneMatch(level -> sameProduct(level, selected))) {
+                        selectedLevel.set(null);
+                        selectedLots.clear();
+                    }
+                },
+                failure -> {
+                    if (generation != levelQueryGeneration) {
+                        return;
+                    }
+                    LOGGER.log(Level.SEVERE, "Could not reload the filtered stock levels", failure);
+                    errorMessage.set(DATABASE_ERROR);
+                });
+    }
+
+    /** Reports a failed level query: the table is emptied and the cause is logged. */
+    private void reportLoadFailure(Throwable failure) {
+        LOGGER.log(Level.SEVERE, "Could not load the stock levels", failure);
+        levels.clear();
+        alertCount.set("Productos bajo mínimo: 0");
+        selectedLevel.set(null);
+        selectedLots.clear();
+        errorMessage.set(DATABASE_ERROR);
+    }
+
+    /** Rows and global alert count read together, so they are applied atomically. */
+    private record LevelSnapshot(List<StockLevel> levels, int belowMinimum) {
     }
 
     private static boolean sameProduct(StockLevel first, StockLevel second) {

@@ -1,7 +1,7 @@
 package com.entidaddesconocida.monte_erp.viewmodel;
 
+import com.entidaddesconocida.monte_erp.app.BackgroundTasks;
 import com.entidaddesconocida.monte_erp.domain.model.ConnectionSettings;
-import com.entidaddesconocida.monte_erp.domain.service.SetupException;
 import com.entidaddesconocida.monte_erp.domain.service.SetupService;
 import com.entidaddesconocida.monte_erp.infrastructure.config.DatabaseUrl;
 
@@ -40,6 +40,7 @@ public class SetupViewModel implements ViewModel {
             Pattern.compile("^jdbc:mysql://[^/\\s]+/[^\\s?]+(\\?\\S*)?$");
 
     private final SetupService setupService;
+    private final BackgroundTasks backgroundTasks;
     private final boolean onboarding;
     private ConnectionSettings storedSettings;
 
@@ -53,8 +54,22 @@ public class SetupViewModel implements ViewModel {
     private final StringProperty statusMessage = new SimpleStringProperty("");
     private final ReadOnlyBooleanWrapper adminSectionVisible = new ReadOnlyBooleanWrapper();
 
+    /** Guards a save in flight: the migrations must not run twice on a double click. */
+    private boolean saveInFlight;
+
     public SetupViewModel(SetupService setupService, boolean onboarding) {
+        this(setupService, onboarding, BackgroundTasks.synchronous());
+    }
+
+    /**
+     * @param backgroundTasks executor of the connection test and of the
+     *                        migrations; {@link BackgroundTasks#synchronous()} in
+     *                        tests and a virtual-thread executor in the application
+     */
+    public SetupViewModel(SetupService setupService, boolean onboarding,
+                          BackgroundTasks backgroundTasks) {
         this.setupService = setupService;
+        this.backgroundTasks = backgroundTasks;
         this.onboarding = onboarding;
         adminSectionVisible.set(onboarding);
 
@@ -114,14 +129,19 @@ public class SetupViewModel implements ViewModel {
             statusMessage.set("");
             return;
         }
-        try {
-            setupService.testConnection(settings);
-            statusMessage.set("Conexión correcta.");
-            errorMessage.set("");
-        } catch (SetupException e) {
-            statusMessage.set("");
-            errorMessage.set("No se pudo conectar: " + e.getMessage());
-        }
+        backgroundTasks.submit(
+                () -> {
+                    setupService.testConnection(settings);
+                    return null;
+                },
+                ignored -> {
+                    statusMessage.set("Conexión correcta.");
+                    errorMessage.set("");
+                },
+                failure -> {
+                    statusMessage.set("");
+                    errorMessage.set("No se pudo conectar: " + failure.getMessage());
+                });
     }
 
     /**
@@ -149,21 +169,33 @@ public class SetupViewModel implements ViewModel {
             return;
         }
 
-        try {
-            if (onboarding) {
-                setupService.provision(settings, adminNameValue, adminUser, adminPass);
-            } else {
-                setupService.save(settings);
-            }
-            storedSettings = settings;
-            dbPassword.set("");
-            errorMessage.set("");
-            statusMessage.set("");
-            publish(SETUP_SUCCEEDED);
-        } catch (SetupException e) {
-            statusMessage.set("");
-            errorMessage.set("No se pudo guardar la configuración: " + e.getMessage());
+        if (saveInFlight) {
+            return;
         }
+        // The migrations (and the admin user insert) run off the UI thread.
+        saveInFlight = true;
+        backgroundTasks.submit(
+                () -> {
+                    if (onboarding) {
+                        setupService.provision(settings, adminNameValue, adminUser, adminPass);
+                    } else {
+                        setupService.save(settings);
+                    }
+                    return null;
+                },
+                ignored -> {
+                    saveInFlight = false;
+                    storedSettings = settings;
+                    dbPassword.set("");
+                    errorMessage.set("");
+                    statusMessage.set("");
+                    publish(SETUP_SUCCEEDED);
+                },
+                failure -> {
+                    saveInFlight = false;
+                    statusMessage.set("");
+                    errorMessage.set("No se pudo guardar la configuración: " + failure.getMessage());
+                });
     }
 
     /** Clears the visible messages (useful on view initialisation). */

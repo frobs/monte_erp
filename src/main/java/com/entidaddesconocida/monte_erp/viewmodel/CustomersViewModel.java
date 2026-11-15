@@ -1,5 +1,6 @@
 package com.entidaddesconocida.monte_erp.viewmodel;
 
+import com.entidaddesconocida.monte_erp.app.BackgroundTasks;
 import com.entidaddesconocida.monte_erp.app.SessionValidator;
 import com.entidaddesconocida.monte_erp.domain.model.Customer;
 import com.entidaddesconocida.monte_erp.domain.repository.CustomerRepository;
@@ -14,6 +15,7 @@ import javafx.collections.transformation.FilteredList;
 
 import java.sql.SQLException;
 import java.util.List;
+import java.util.concurrent.Callable;
 
 /**
  * ViewModel of the customer management screen (RF-06 / CU-06).
@@ -65,7 +67,12 @@ public class CustomersViewModel extends FilterableCrudViewModel<Customer> {
     }
 
     public CustomersViewModel(CustomerRepository customerRepository, SessionValidator sessionValidator) {
-        super(sessionValidator);
+        this(customerRepository, sessionValidator, BackgroundTasks.synchronous());
+    }
+
+    public CustomersViewModel(CustomerRepository customerRepository, SessionValidator sessionValidator,
+                        BackgroundTasks backgroundTasks) {
+        super(sessionValidator, backgroundTasks);
         this.customerRepository = customerRepository;
         bindFilter(searchText);
         watchFields(name, phone, email, address);
@@ -139,13 +146,16 @@ public class CustomersViewModel extends FilterableCrudViewModel<Customer> {
     }
 
     @Override
-    protected List<Customer> loadActive() throws SQLException {
-        return customerRepository.findActive(searchText.get());
+    protected Callable<List<Customer>> activeQuery() {
+        // The criteria are captured here, on the UI thread.
+        String search = searchText.get();
+        return () -> customerRepository.findActive(search);
     }
 
     @Override
-    protected List<Customer> loadInactive() throws SQLException {
-        return customerRepository.findInactive(searchText.get());
+    protected Callable<List<Customer>> inactiveQuery() {
+        String search = searchText.get();
+        return () -> customerRepository.findInactive(search);
     }
 
     @Override

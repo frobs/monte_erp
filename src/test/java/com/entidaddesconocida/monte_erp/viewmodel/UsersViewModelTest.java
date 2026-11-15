@@ -1,5 +1,6 @@
 package com.entidaddesconocida.monte_erp.viewmodel;
 
+import com.entidaddesconocida.monte_erp.domain.model.Role;
 import com.entidaddesconocida.monte_erp.app.SessionState;
 import com.entidaddesconocida.monte_erp.app.SessionValidator;
 import com.entidaddesconocida.monte_erp.domain.model.User;
@@ -34,7 +35,7 @@ class UsersViewModelTest {
 
     @BeforeEach
     void setUp() {
-        admin = new User("Ana", "ana", PasswordHasher.hash(ADMIN_PASSWORD), User.ROLE_ADMIN, true);
+        admin = new User("Ana", "ana", PasswordHasher.hash(ADMIN_PASSWORD), Role.ADMIN, true);
         fakeRepository = new FakeUserRepository().withUser(admin);
         viewModel = new UsersViewModel(fakeRepository, admin);
         viewModel.load();
@@ -80,7 +81,7 @@ class UsersViewModelTest {
         viewModel.nameProperty().set("Nuevo Usuario");
         viewModel.usernameProperty().set("nuevo");
         viewModel.passwordProperty().set("clave123");
-        viewModel.roleProperty().set(User.ROLE_ADMIN_LABEL);
+        viewModel.roleProperty().set(Role.ADMIN.label());
 
         viewModel.save();
 
@@ -111,7 +112,7 @@ class UsersViewModelTest {
     @Test
     @DisplayName("Edición sin contraseña: conserva el hash almacenado")
     void editWithoutPasswordKeepsHash() throws Exception {
-        User employee = new User("Bea", "bea", PasswordHasher.hash("bea123"), User.ROLE_EMPLOYEE, true);
+        User employee = new User("Bea", "bea", PasswordHasher.hash("bea123"), Role.EMPLOYEE, true);
         fakeRepository.withUser(employee);
         viewModel.load();
 
@@ -129,7 +130,7 @@ class UsersViewModelTest {
     @Test
     @DisplayName("Edición con contraseña: sustituye el hash")
     void editWithPasswordReplacesHash() throws Exception {
-        User employee = new User("Bea", "bea", PasswordHasher.hash("bea123"), User.ROLE_EMPLOYEE, true);
+        User employee = new User("Bea", "bea", PasswordHasher.hash("bea123"), Role.EMPLOYEE, true);
         fakeRepository.withUser(employee);
         viewModel.load();
 
@@ -145,7 +146,7 @@ class UsersViewModelTest {
     @Test
     @DisplayName("Edición a un usuario ya existente: error de duplicado")
     void editToExistingUsernameFails() throws Exception {
-        User employee = new User("Bea", "bea", PasswordHasher.hash("bea123"), User.ROLE_EMPLOYEE, true);
+        User employee = new User("Bea", "bea", PasswordHasher.hash("bea123"), Role.EMPLOYEE, true);
         fakeRepository.withUser(employee);
         viewModel.load();
 
@@ -160,7 +161,7 @@ class UsersViewModelTest {
     @Test
     @DisplayName("Desactivar: el usuario queda inactivo (baja lógica)")
     void deactivateMakesUserInactive() throws Exception {
-        User employee = new User("Bea", "bea", PasswordHasher.hash("bea123"), User.ROLE_EMPLOYEE, true);
+        User employee = new User("Bea", "bea", PasswordHasher.hash("bea123"), Role.EMPLOYEE, true);
         fakeRepository.withUser(employee);
         viewModel.load();
 
@@ -185,7 +186,7 @@ class UsersViewModelTest {
     @Test
     @DisplayName("Activar: un usuario desactivado vuelve a estar activo")
     void activateMakesUserActiveAgain() throws Exception {
-        User employee = new User("Bea", "bea", PasswordHasher.hash("bea123"), User.ROLE_EMPLOYEE, false);
+        User employee = new User("Bea", "bea", PasswordHasher.hash("bea123"), Role.EMPLOYEE, false);
         fakeRepository.withUser(employee);
         viewModel.load();
 
@@ -218,7 +219,7 @@ class UsersViewModelTest {
     @Test
     @DisplayName("El estado del botón activar/desactivar depende del usuario seleccionado")
     void toggleStateFollowsSelection() {
-        User employee = new User("Bea", "bea", PasswordHasher.hash("bea123"), User.ROLE_EMPLOYEE, true);
+        User employee = new User("Bea", "bea", PasswordHasher.hash("bea123"), Role.EMPLOYEE, true);
         fakeRepository.withUser(employee);
         viewModel.load();
 
@@ -247,13 +248,13 @@ class UsersViewModelTest {
     @DisplayName("El admin no puede quitarse a sí mismo el rol de administrador")
     void selfDemotionIsRejected() throws Exception {
         viewModel.selectedUserProperty().set(admin);
-        viewModel.roleProperty().set(User.ROLE_EMPLOYEE_LABEL);
+        viewModel.roleProperty().set(Role.EMPLOYEE.label());
 
         viewModel.save();
 
         assertEquals("No puedes quitarte el rol de administrador.", viewModel.errorMessageProperty().get());
         assertTrue(fakeRepository.findByUsername("ana").isAdmin());
-        assertEquals(User.ROLE_ADMIN, admin.getRole());
+        assertEquals(Role.ADMIN, admin.getRole());
     }
 
     @Test
@@ -271,7 +272,7 @@ class UsersViewModelTest {
     @Test
     @DisplayName("Un fallo al guardar la edición no deja la fila con datos sin persistir")
     void failedEditKeepsRowUnchanged() throws Exception {
-        User employee = new User("Bea", "bea", PasswordHasher.hash("bea123"), User.ROLE_EMPLOYEE, true);
+        User employee = new User("Bea", "bea", PasswordHasher.hash("bea123"), Role.EMPLOYEE, true);
         fakeRepository.withUser(employee);
         viewModel.load();
         viewModel.selectedUserProperty().set(employee);
@@ -290,7 +291,7 @@ class UsersViewModelTest {
     @Test
     @DisplayName("Un fallo al activar mantiene al usuario inactivo y el botón ofrece activar")
     void failedActivateKeepsUserInactive() throws Exception {
-        User employee = new User("Bea", "bea", PasswordHasher.hash("bea123"), User.ROLE_EMPLOYEE, false);
+        User employee = new User("Bea", "bea", PasswordHasher.hash("bea123"), Role.EMPLOYEE, false);
         fakeRepository.withUser(employee);
         viewModel.load();
         viewModel.selectedUserProperty().set(employee);
@@ -306,7 +307,7 @@ class UsersViewModelTest {
     @Test
     @DisplayName("Un fallo al desactivar mantiene al usuario activo")
     void failedDeactivateKeepsUserActive() throws Exception {
-        User employee = new User("Bea", "bea", PasswordHasher.hash("bea123"), User.ROLE_EMPLOYEE, true);
+        User employee = new User("Bea", "bea", PasswordHasher.hash("bea123"), Role.EMPLOYEE, true);
         fakeRepository.withUser(employee);
         viewModel.load();
         viewModel.selectedUserProperty().set(employee);
@@ -350,12 +351,12 @@ class UsersViewModelTest {
         viewModel.nameProperty().set("Nuevo Empleado");
         viewModel.usernameProperty().set("empleado");
         viewModel.passwordProperty().set("clave123");
-        viewModel.roleProperty().set(User.ROLE_EMPLOYEE_LABEL);
+        viewModel.roleProperty().set(Role.EMPLOYEE.label());
 
         viewModel.save();
 
         User created = fakeRepository.findByUsername("empleado");
-        assertEquals(User.ROLE_EMPLOYEE, created.getRole());
+        assertEquals(Role.EMPLOYEE, created.getRole());
         assertFalse(created.isAdmin());
     }
 
@@ -375,7 +376,7 @@ class UsersViewModelTest {
     @Test
     @DisplayName("Nuevo usuario limpia el formulario y vuelve al rol por defecto")
     void newUserResetsForm() {
-        User employee = new User("Bea", "bea", PasswordHasher.hash("bea123"), User.ROLE_ADMIN, true);
+        User employee = new User("Bea", "bea", PasswordHasher.hash("bea123"), Role.ADMIN, true);
         fakeRepository.withUser(employee);
         viewModel.load();
         viewModel.selectedUserProperty().set(employee);
@@ -387,13 +388,13 @@ class UsersViewModelTest {
         assertEquals("", viewModel.nameProperty().get());
         assertEquals("", viewModel.usernameProperty().get());
         assertEquals("", viewModel.passwordProperty().get());
-        assertEquals(User.ROLE_EMPLOYEE_LABEL, viewModel.roleProperty().get());
+        assertEquals(Role.EMPLOYEE.label(), viewModel.roleProperty().get());
     }
 
     @Test
     @DisplayName("Limpiar la selección resetea el formulario a 'Nuevo usuario'")
     void clearingSelectionResetsForm() {
-        User employee = new User("Bea", "bea", PasswordHasher.hash("bea123"), User.ROLE_EMPLOYEE, true);
+        User employee = new User("Bea", "bea", PasswordHasher.hash("bea123"), Role.EMPLOYEE, true);
         fakeRepository.withUser(employee);
         viewModel.load();
         viewModel.selectedUserProperty().set(employee);
@@ -453,7 +454,7 @@ class UsersViewModelTest {
     @Test
     @DisplayName("Desactivar un usuario ya inactivo avisa sin tocar la base de datos")
     void deactivatingAnInactiveUserFails() throws Exception {
-        User inactive = new User("Bea", "bea", PasswordHasher.hash("bea123"), User.ROLE_EMPLOYEE, false);
+        User inactive = new User("Bea", "bea", PasswordHasher.hash("bea123"), Role.EMPLOYEE, false);
         fakeRepository.withUser(inactive);
         viewModel.load();
 
@@ -479,11 +480,11 @@ class UsersViewModelTest {
     @DisplayName("Las opciones de rol y el texto de contraseña cambian según el formulario")
     void roleOptionsAndPasswordPromptFollowTheForm() {
         assertEquals(2, viewModel.roleOptions().size());
-        assertTrue(viewModel.roleOptions().contains(User.ROLE_ADMIN_LABEL));
-        assertTrue(viewModel.roleOptions().contains(User.ROLE_EMPLOYEE_LABEL));
+        assertTrue(viewModel.roleOptions().contains(Role.ADMIN.label()));
+        assertTrue(viewModel.roleOptions().contains(Role.EMPLOYEE.label()));
         assertEquals("Contraseña", viewModel.passwordPromptProperty().get());
 
-        User employee = new User("Bea", "bea", PasswordHasher.hash("bea123"), User.ROLE_EMPLOYEE, true);
+        User employee = new User("Bea", "bea", PasswordHasher.hash("bea123"), Role.EMPLOYEE, true);
         fakeRepository.withUser(employee);
         viewModel.load();
         viewModel.selectedUserProperty().set(employee);
@@ -533,7 +534,7 @@ class UsersViewModelTest {
     @Test
     @DisplayName("Una sesión administradora degradada no puede crear usuarios")
     void demotedSessionCannotCreateUsers() throws SQLException {
-        User current = new User("Ana", "ana", PasswordHasher.hash(ADMIN_PASSWORD), User.ROLE_ADMIN, true);
+        User current = new User("Ana", "ana", PasswordHasher.hash(ADMIN_PASSWORD), Role.ADMIN, true);
         FakeUserRepository repository = new FakeUserRepository().withUser(current);
         SessionState session = new SessionState();
         session.signIn(current);
@@ -542,7 +543,7 @@ class UsersViewModelTest {
         guarded.nameProperty().set("Nuevo Usuario");
         guarded.usernameProperty().set("nuevo");
         guarded.passwordProperty().set("clave123");
-        User demoted = new User("Ana", "ana", current.getPasswordHash(), User.ROLE_EMPLOYEE, true);
+        User demoted = new User("Ana", "ana", current.getPasswordHash(), Role.EMPLOYEE, true);
         demoted.setId(current.getId());
         repository.update(demoted);
 

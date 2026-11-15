@@ -1,5 +1,6 @@
 package com.entidaddesconocida.monte_erp.app;
 
+import com.entidaddesconocida.monte_erp.domain.model.Role;
 import com.entidaddesconocida.monte_erp.domain.model.User;
 import com.entidaddesconocida.monte_erp.viewmodel.support.FakeUserRepository;
 
@@ -15,11 +16,11 @@ class SessionValidatorTest {
     @Test
     @DisplayName("Actualiza el rol de una sesión activa desde el repositorio")
     void refreshUpdatesCurrentUserRole() throws Exception {
-        User current = new User("Ana", "ana", "hash", User.ROLE_ADMIN, true);
+        User current = new User("Ana", "ana", "hash", Role.ADMIN, true);
         FakeUserRepository repository = new FakeUserRepository().withUser(current);
         SessionState session = new SessionState();
         session.signIn(current);
-        User demoted = new User("Ana", "ana", "hash", User.ROLE_EMPLOYEE, true);
+        User demoted = new User("Ana", "ana", "hash", Role.EMPLOYEE, true);
         demoted.setId(current.getId());
         repository.update(demoted);
 
@@ -31,7 +32,7 @@ class SessionValidatorTest {
     @Test
     @DisplayName("Cierra una sesión cuyo usuario fue desactivado")
     void refreshSignsOutDeactivatedUser() throws Exception {
-        User current = new User("Bea", "bea", "hash", User.ROLE_EMPLOYEE, true);
+        User current = new User("Bea", "bea", "hash", Role.EMPLOYEE, true);
         FakeUserRepository repository = new FakeUserRepository().withUser(current);
         SessionState session = new SessionState();
         session.signIn(current);

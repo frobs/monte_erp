@@ -1,5 +1,6 @@
 package com.entidaddesconocida.monte_erp.viewmodel;
 
+import com.entidaddesconocida.monte_erp.app.BackgroundTasks;
 import com.entidaddesconocida.monte_erp.app.SessionValidator;
 import com.entidaddesconocida.monte_erp.domain.model.ReportPeriod;
 import com.entidaddesconocida.monte_erp.domain.model.SalesReportLine;
@@ -54,17 +55,16 @@ public class ReportsViewModel implements ViewModel {
     private static final Logger LOGGER = Logger.getLogger(ReportsViewModel.class.getName());
 
     /** Message shown when the database cannot be reached. */
-    protected static final String DATABASE_ERROR =
-            "No se pudo conectar con la base de datos. Comprueba que MySQL esté arrancado.";
+    protected static final String DATABASE_ERROR = ViewMessages.DATABASE_ERROR;
 
     /** Message shown when the "desde" date is after the "hasta" date. */
-    protected static final String PERIOD_ERROR =
-            "La fecha «desde» no puede ser posterior a la fecha «hasta».";
-    private static final String SESSION_EXPIRED = "La sesión ya no está activa. Inicia sesión de nuevo.";
+    protected static final String PERIOD_ERROR = ViewMessages.PERIOD_ERROR;
+    private static final String SESSION_EXPIRED = ViewMessages.SESSION_EXPIRED;
 
     private final SalesOrderRepository salesOrderRepository;
     private final StockRepository stockRepository;
     private final SessionValidator sessionValidator;
+    private final BackgroundTasks backgroundTasks;
 
     private final ObjectProperty<LocalDate> fromDate = new SimpleObjectProperty<>();
     private final ObjectProperty<LocalDate> toDate = new SimpleObjectProperty<>();
@@ -80,15 +80,28 @@ public class ReportsViewModel implements ViewModel {
 
     public ReportsViewModel(SalesOrderRepository salesOrderRepository,
                             StockRepository stockRepository) {
-        this(salesOrderRepository, stockRepository, null);
+        this(salesOrderRepository, stockRepository, null, BackgroundTasks.synchronous());
     }
 
     public ReportsViewModel(SalesOrderRepository salesOrderRepository,
                             StockRepository stockRepository,
                             SessionValidator sessionValidator) {
+        this(salesOrderRepository, stockRepository, sessionValidator, BackgroundTasks.synchronous());
+    }
+
+    /**
+     * @param backgroundTasks executor of the two report queries; {@link
+     *                        BackgroundTasks#synchronous()} in tests and a
+     *                        virtual-thread executor in the application
+     */
+    public ReportsViewModel(SalesOrderRepository salesOrderRepository,
+                            StockRepository stockRepository,
+                            SessionValidator sessionValidator,
+                            BackgroundTasks backgroundTasks) {
         this.salesOrderRepository = salesOrderRepository;
         this.stockRepository = stockRepository;
         this.sessionValidator = sessionValidator;
+        this.backgroundTasks = backgroundTasks;
         publish(StockReportSummary.empty(), SalesReportSummary.empty());
     }
 
@@ -159,18 +172,35 @@ public class ReportsViewModel implements ViewModel {
             errorMessage.set(PERIOD_ERROR);
             return;
         }
-        try {
+        // Two potentially large queries and their aggregation, off the UI thread.
+        backgroundTasks.submit(
+                () -> ReportData.load(salesOrderRepository, stockRepository, period),
+                data -> {
+                    stockLots.setAll(data.lots());
+                    salesRows.setAll(data.sales().rows());
+                    publish(data.stock(), data.sales());
+                },
+                failure -> {
+                    LOGGER.log(Level.SEVERE, "Could not load the reports", failure);
+                    clearReports();
+                    errorMessage.set(DATABASE_ERROR);
+                });
+    }
+
+    /**
+     * Flat rows read by the adapters plus their aggregation, computed on the
+     * background thread so the UI thread only applies the result.
+     */
+    private record ReportData(List<Stock> lots, List<SalesReportLine> lines,
+                              StockReportSummary stock, SalesReportSummary sales) {
+
+        private static ReportData load(SalesOrderRepository salesOrderRepository,
+                                       StockRepository stockRepository, ReportPeriod period)
+                throws SQLException {
             List<Stock> lots = stockRepository.findAllLots(period);
             List<SalesReportLine> lines = salesOrderRepository.findReportLines(period);
-            StockReportSummary stock = StockReportCalculator.summarize(lots);
-            SalesReportSummary sales = SalesReportCalculator.summarize(lines);
-            stockLots.setAll(lots);
-            salesRows.setAll(sales.rows());
-            publish(stock, sales);
-        } catch (SQLException e) {
-            LOGGER.log(Level.SEVERE, "Could not load the reports", e);
-            clearReports();
-            errorMessage.set(DATABASE_ERROR);
+            return new ReportData(lots, lines, StockReportCalculator.summarize(lots),
+                    SalesReportCalculator.summarize(lines));
         }
     }
 

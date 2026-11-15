@@ -1,5 +1,6 @@
 package com.entidaddesconocida.monte_erp.viewmodel;
 
+import com.entidaddesconocida.monte_erp.app.BackgroundTasks;
 import com.entidaddesconocida.monte_erp.app.SessionValidator;
 
 import javafx.beans.property.BooleanProperty;
@@ -10,8 +11,8 @@ import javafx.beans.value.ObservableValue;
 import javafx.collections.ListChangeListener;
 import javafx.collections.transformation.FilteredList;
 
-import java.sql.SQLException;
 import java.util.List;
+import java.util.concurrent.Callable;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -27,8 +28,8 @@ import java.util.logging.Logger;
  * reload fails while toggling the checkbox, the checkbox is rolled back so it
  * never disagrees with the rows still on screen.</p>
  *
- * <p>The subclass exposes its criteria through {@link #loadActive()} /
- * {@link #loadInactive()}; {@link #bindFilter} only registers the reload
+ * <p>The subclass builds its queries through {@link #activeQuery()} /
+ * {@link #inactiveQuery()}; {@link #bindFilter} only registers the reload
  * listeners. {@code UsersViewModel} does not extend this layer: users have no
  * search and no active/inactive visibility toggle.</p>
  *
@@ -54,11 +55,16 @@ public abstract class FilterableCrudViewModel<T> extends CrudViewModel<T> {
     private boolean suppressFilterReload;
 
     protected FilterableCrudViewModel() {
-        this(null);
+        this(null, BackgroundTasks.synchronous());
     }
 
     protected FilterableCrudViewModel(SessionValidator sessionValidator) {
-        super(sessionValidator);
+        this(sessionValidator, BackgroundTasks.synchronous());
+    }
+
+    protected FilterableCrudViewModel(SessionValidator sessionValidator,
+                                      BackgroundTasks backgroundTasks) {
+        super(sessionValidator, backgroundTasks);
         // Active and inactive rows come from different queries, so toggling the
         // checkbox reloads the master list. If the reload fails the checkbox is
         // rolled back, so it never disagrees with the rows still on screen.
@@ -70,13 +76,13 @@ public abstract class FilterableCrudViewModel<T> extends CrudViewModel<T> {
                 revertShowInactive(oldValue);
                 return;
             }
-            try {
-                refreshItems();
-            } catch (SQLException e) {
-                LOGGER.log(Level.SEVERE, "Could not reload the list", e);
+            // The reload is asynchronous: the checkbox is rolled back only when
+            // the query fails, so it never disagrees with the rows on screen.
+            refreshItems(failure -> {
+                LOGGER.log(Level.SEVERE, "Could not reload the list", failure);
                 revertShowInactive(oldValue);
                 fail(DATABASE_ERROR);
-            }
+            });
         });
     }
 
@@ -119,38 +125,37 @@ public abstract class FilterableCrudViewModel<T> extends CrudViewModel<T> {
     }
 
     /**
-     * Reloads the master list with the active or inactive rows, depending on
-     * {@link #showInactive}. A reload can drop the selected row (e.g. it moved
-     * to the other list or no longer matches the search): the form must not keep
-     * editing a row that is no longer shown.
+     * Active or inactive rows, depending on {@link #showInactive}. The flag is
+     * read here, on the UI thread, and only the query runs in the background. A
+     * reload can drop the selected row (e.g. it moved to the other list or no
+     * longer matches the search): the base class clears the form in that case.
      */
     @Override
-    protected final void refreshItems() throws SQLException {
-        List<T> loaded = showInactive.get() ? loadInactive() : loadActive();
-        T selected = selectedItem.get();
-        items.setAll(loaded);
-        if (selected != null && items.stream().noneMatch(item -> itemId(item) == itemId(selected))) {
-            selectedItem.set(null);
-        }
+    protected final Callable<List<T>> rowsQuery() {
+        return showInactive.get() ? inactiveQuery() : activeQuery();
     }
 
     private void reloadFilteredItems() {
         if (!ensureActiveSession()) {
             return;
         }
-        try {
-            refreshItems();
-        } catch (SQLException e) {
-            LOGGER.log(Level.SEVERE, "Could not reload the filtered list", e);
+        refreshItems(failure -> {
+            LOGGER.log(Level.SEVERE, "Could not reload the filtered list", failure);
             fail(DATABASE_ERROR);
-        }
+        });
     }
 
-    /** Active rows query, with the current filter criteria in the SQL. */
-    protected abstract List<T> loadActive() throws SQLException;
+    /**
+     * Builds the active-rows query. It runs on the UI thread, so the criteria are
+     * captured here; the returned {@link Callable} is executed in the background.
+     */
+    protected abstract Callable<List<T>> activeQuery();
 
-    /** Logically deleted rows query, with the current filter criteria in the SQL. */
-    protected abstract List<T> loadInactive() throws SQLException;
+    /**
+     * Builds the logically deleted rows query, with the same capture rule as
+     * {@link #activeQuery()}.
+     */
+    protected abstract Callable<List<T>> inactiveQuery();
 
     public final StringProperty searchTextProperty() {
         return searchText;

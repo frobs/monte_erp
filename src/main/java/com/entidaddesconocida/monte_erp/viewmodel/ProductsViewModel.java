@@ -1,5 +1,6 @@
 package com.entidaddesconocida.monte_erp.viewmodel;
 
+import com.entidaddesconocida.monte_erp.app.BackgroundTasks;
 import com.entidaddesconocida.monte_erp.app.SessionValidator;
 import com.entidaddesconocida.monte_erp.domain.model.Category;
 import com.entidaddesconocida.monte_erp.domain.model.Product;
@@ -23,6 +24,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.sql.SQLException;
 import java.util.List;
+import java.util.concurrent.Callable;
 
 /**
  * ViewModel of the product management screen (RF-03 / CU-03, with the search
@@ -102,7 +104,16 @@ public class ProductsViewModel extends FilterableCrudViewModel<Product> {
                              CategoryRepository categoryRepository,
                              SupplierRepository supplierRepository,
                              SessionValidator sessionValidator) {
-        super(sessionValidator);
+        this(productRepository, categoryRepository, supplierRepository, sessionValidator,
+                BackgroundTasks.synchronous());
+    }
+
+    public ProductsViewModel(ProductRepository productRepository,
+                             CategoryRepository categoryRepository,
+                             SupplierRepository supplierRepository,
+                             SessionValidator sessionValidator,
+                             BackgroundTasks backgroundTasks) {
+        super(sessionValidator, backgroundTasks);
         this.productRepository = productRepository;
         this.categoryRepository = categoryRepository;
         this.supplierRepository = supplierRepository;
@@ -256,13 +267,17 @@ public class ProductsViewModel extends FilterableCrudViewModel<Product> {
     }
 
     @Override
-    protected List<Product> loadActive() throws SQLException {
-        return productRepository.findAll(currentFilter());
+    protected Callable<List<Product>> activeQuery() {
+        // The criteria (search text and both combos) are captured here, on the
+        // UI thread; the query itself runs in the background.
+        ProductFilter filter = currentFilter();
+        return () -> productRepository.findAll(filter);
     }
 
     @Override
-    protected List<Product> loadInactive() throws SQLException {
-        return productRepository.findInactive(currentFilter());
+    protected Callable<List<Product>> inactiveQuery() {
+        ProductFilter filter = currentFilter();
+        return () -> productRepository.findInactive(filter);
     }
 
     private ProductFilter currentFilter() {

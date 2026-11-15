@@ -1,7 +1,9 @@
 package com.entidaddesconocida.monte_erp.viewmodel;
 
+import com.entidaddesconocida.monte_erp.app.BackgroundTasks;
 import com.entidaddesconocida.monte_erp.app.SessionValidator;
 import com.entidaddesconocida.monte_erp.domain.model.Customer;
+import com.entidaddesconocida.monte_erp.domain.model.OrderStatus;
 import com.entidaddesconocida.monte_erp.domain.model.Product;
 import com.entidaddesconocida.monte_erp.domain.model.SalesOrder;
 import com.entidaddesconocida.monte_erp.domain.model.SalesOrderFilter;
@@ -73,9 +75,8 @@ public class SalesOrdersViewModel implements ViewModel {
     private static final Logger LOGGER = Logger.getLogger(SalesOrdersViewModel.class.getName());
 
     /** Message shown when the database cannot be reached. */
-    protected static final String DATABASE_ERROR =
-            "No se pudo conectar con la base de datos. Comprueba que MySQL esté arrancado.";
-    private static final String SESSION_EXPIRED = "La sesión ya no está activa. Inicia sesión de nuevo.";
+    protected static final String DATABASE_ERROR = ViewMessages.DATABASE_ERROR;
+    private static final String SESSION_EXPIRED = ViewMessages.SESSION_EXPIRED;
     private static final String SAVE_RELOAD_ERROR =
             "Pedido #%d guardado, pero no se pudo actualizar el histórico. Pulsa 'Actualizar'.";
     private static final BigDecimal MAX_STORED_TOTAL = new BigDecimal("99999999.99");
@@ -83,8 +84,7 @@ public class SalesOrdersViewModel implements ViewModel {
             "El total del pedido no puede superar 99.999.999,99 €.";
 
     /** Message shown when the "desde" date is after the "hasta" date. */
-    protected static final String PERIOD_ERROR =
-            "La fecha «desde» no puede ser posterior a la fecha «hasta».";
+    protected static final String PERIOD_ERROR = ViewMessages.PERIOD_ERROR;
 
     /** Shown when the order was saved but the filter hides the history. */
     private static final String SAVED_WITH_BAD_FILTER =
@@ -126,6 +126,7 @@ public class SalesOrdersViewModel implements ViewModel {
     private final StockRepository stockRepository;
     private final User currentUser;
     private final SessionValidator sessionValidator;
+    private final BackgroundTasks backgroundTasks;
 
     private final ObservableList<Customer> customers = FXCollections.observableArrayList();
     private final ObservableList<Product> products = FXCollections.observableArrayList();
@@ -147,22 +148,29 @@ public class SalesOrdersViewModel implements ViewModel {
     private final ObservableList<StockIssue> selectedOrderIssues = FXCollections.observableArrayList();
 
     /** RF-08: statuses reachable from the selected order, in button order. */
-    private final ObservableList<String> availableTransitions = FXCollections.observableArrayList();
+    private final ObservableList<OrderStatus> availableTransitions =
+            FXCollections.observableArrayList();
 
     // History filters: they travel to the database, so every change re-runs
     // findAll(filter) instead of filtering the loaded list in memory.
     private final ObjectProperty<LocalDate> fromDate = new SimpleObjectProperty<>();
     private final ObjectProperty<LocalDate> toDate = new SimpleObjectProperty<>();
     private final ObjectProperty<Customer> customerFilter = new SimpleObjectProperty<>();
-    private final ObjectProperty<String> statusFilter = new SimpleObjectProperty<>();
+    private final ObjectProperty<OrderStatus> statusFilter = new SimpleObjectProperty<>();
     private final ObservableList<Customer> customerFilterOptions =
             FXCollections.observableArrayList();
-    private final ObservableList<String> statusFilterOptions = FXCollections.observableArrayList(
-            SalesOrder.STATUS_PENDING, SalesOrder.STATUS_SHIPPED,
-            SalesOrder.STATUS_DELIVERED, SalesOrder.STATUS_CANCELLED);
+    private final ObservableList<OrderStatus> statusFilterOptions =
+            FXCollections.observableArrayList(OrderStatus.values());
 
     /** Guards a batched filter reset so it issues a single query. */
     private boolean suppressReload;
+
+    /**
+     * Guards a write in flight. The insert ran on the UI thread before, which made
+     * a double click impossible; now that it runs in the background the flag stops
+     * a second order or a second transition from being submitted.
+     */
+    private boolean writeInFlight;
 
     private final StringProperty errorMessage = new SimpleStringProperty("");
     private final StringProperty statusMessage = new SimpleStringProperty("");
@@ -177,7 +185,8 @@ public class SalesOrdersViewModel implements ViewModel {
                                 ProductRepository productRepository,
                                 StockRepository stockRepository,
                                 User currentUser) {
-        this(salesOrderRepository, customerRepository, productRepository, stockRepository, currentUser, null);
+        this(salesOrderRepository, customerRepository, productRepository, stockRepository,
+                currentUser, null, BackgroundTasks.synchronous());
     }
 
     public SalesOrdersViewModel(SalesOrderRepository salesOrderRepository,
@@ -186,12 +195,30 @@ public class SalesOrdersViewModel implements ViewModel {
                                 StockRepository stockRepository,
                                 User currentUser,
                                 SessionValidator sessionValidator) {
+        this(salesOrderRepository, customerRepository, productRepository, stockRepository,
+                currentUser, sessionValidator, BackgroundTasks.synchronous());
+    }
+
+    /**
+     * @param backgroundTasks executor of the insert and the status change (both
+     *                        lock rows and can wait for another session); {@link
+     *                        BackgroundTasks#synchronous()} in tests and a
+     *                        virtual-thread executor in the application
+     */
+    public SalesOrdersViewModel(SalesOrderRepository salesOrderRepository,
+                                CustomerRepository customerRepository,
+                                ProductRepository productRepository,
+                                StockRepository stockRepository,
+                                User currentUser,
+                                SessionValidator sessionValidator,
+                                BackgroundTasks backgroundTasks) {
         this.salesOrderRepository = salesOrderRepository;
         this.customerRepository = customerRepository;
         this.productRepository = productRepository;
         this.stockRepository = stockRepository;
         this.currentUser = currentUser;
         this.sessionValidator = sessionValidator;
+        this.backgroundTasks = backgroundTasks;
         // The view shows the available units of the chosen product and caps the
         // quantity field with them, so the stock is refreshed on every change.
         selectedProduct.addListener((observable, previous, product) -> refreshAvailableStock(product));
@@ -269,7 +296,7 @@ public class SalesOrdersViewModel implements ViewModel {
      * there is no selection or the order is in a terminal state, so the view can
      * bind the visibility of each action button to it.
      */
-    public ObservableList<String> availableTransitions() {
+    public ObservableList<OrderStatus> availableTransitions() {
         return availableTransitions;
     }
 
@@ -288,8 +315,8 @@ public class SalesOrdersViewModel implements ViewModel {
         return customerFilter;
     }
 
-    /** Status filter ({@code SalesOrder.STATUS_*}); {@code null} means "every status". */
-    public ObjectProperty<String> statusFilterProperty() {
+    /** Status filter; {@code null} means "every status". */
+    public ObjectProperty<OrderStatus> statusFilterProperty() {
         return statusFilter;
     }
 
@@ -303,7 +330,7 @@ public class SalesOrdersViewModel implements ViewModel {
     }
 
     /** Statuses offered by the filter, in domain order. */
-    public ObservableList<String> statusFilterOptions() {
+    public ObservableList<OrderStatus> statusFilterOptions() {
         return statusFilterOptions;
     }
 
@@ -452,7 +479,7 @@ public class SalesOrdersViewModel implements ViewModel {
         }
 
         if (hasFieldErrors()) {
-            fail(joinedErrors(productError.get(), quantityError.get()));
+            fail(ViewMessages.join(productError.get(), quantityError.get()));
             return;
         }
 
@@ -507,7 +534,7 @@ public class SalesOrdersViewModel implements ViewModel {
             linesError.set(LINES_REQUIRED);
         }
         if (hasFieldErrors()) {
-            fail(joinedErrors(customerError.get(), linesError.get()));
+            fail(ViewMessages.join(customerError.get(), linesError.get()));
             return;
         }
         if (calculateDraftTotal().compareTo(MAX_STORED_TOTAL) > 0) {
@@ -515,26 +542,30 @@ public class SalesOrdersViewModel implements ViewModel {
             return;
         }
 
-        SalesOrder order = new SalesOrder(selectedCustomer.get(), currentUser, draftLines);
-        int id;
-        try {
-            id = salesOrderRepository.insert(order);
-        } catch (InactiveEntityException e) {
-            fail(e.getMessage());
-            return;
-        } catch (InsufficientStockException e) {
-            // The repository re-read the lots under lock and the order no longer
-            // fits: keep the draft so the employee can adjust the quantity.
-            fail(e.getMessage());
-            return;
-        } catch (SQLException e) {
-            LOGGER.log(Level.SEVERE, "Could not save the sales order", e);
-            fail(DATABASE_ERROR);
+        if (writeInFlight) {
             return;
         }
+        SalesOrder order = new SalesOrder(selectedCustomer.get(), currentUser, draftLines);
+        // The insert locks the customer and the stock lots (FOR UPDATE), so it can
+        // wait for another session: it must not run on the UI thread.
+        writeInFlight = true;
+        backgroundTasks.submit(
+                () -> salesOrderRepository.insert(order),
+                id -> {
+                    writeInFlight = false;
+                    onOrderSaved(id);
+                },
+                failure -> {
+                    writeInFlight = false;
+                    onOrderSaveFailure(failure);
+                });
+    }
 
-        // The insert is committed at this point: discard the draft before the
-        // independent history read so a reload failure cannot cause a duplicate.
+    /**
+     * Applies a committed order: the draft is discarded before the independent
+     * history read, so a reload failure cannot cause a duplicate.
+     */
+    private void onOrderSaved(int id) {
         resetDraft();
         clearFieldErrors();
         if (reloadHistory()) {
@@ -546,6 +577,21 @@ public class SalesOrdersViewModel implements ViewModel {
             LOGGER.log(Level.WARNING, "Sales order was saved but its history could not be reloaded");
             fail(String.format(SAVE_RELOAD_ERROR, id));
         }
+    }
+
+    /**
+     * Reports a rejected insert. The domain exceptions carry the message the
+     * employee must read (inactive customer, not enough stock); anything else is
+     * a connection failure. The draft is kept so it can be corrected.
+     */
+    private void onOrderSaveFailure(Throwable failure) {
+        if (failure instanceof InactiveEntityException
+                || failure instanceof InsufficientStockException) {
+            fail(failure.getMessage());
+            return;
+        }
+        LOGGER.log(Level.SEVERE, "Could not save the sales order", failure);
+        fail(DATABASE_ERROR);
     }
 
     /** Loads the lines of the selected order; a {@code null} order clears them. */
@@ -576,7 +622,7 @@ public class SalesOrdersViewModel implements ViewModel {
      * a 0-row update means someone else moved the order in the meantime, so the
      * history is reloaded and the user is warned instead of overwriting it.
      */
-    public void changeStatus(String newStatus) {
+    public void changeStatus(OrderStatus newStatus) {
         if (!ensureActiveSession()) {
             return;
         }
@@ -587,34 +633,51 @@ public class SalesOrdersViewModel implements ViewModel {
             return;
         }
         if (!order.canTransitionTo(newStatus)) {
-            fail(String.format(INVALID_TRANSITION, SalesOrder.labelFor(order.getStatus()),
-                    SalesOrder.labelFor(newStatus)));
+            fail(String.format(INVALID_TRANSITION, order.getStatus().label(),
+                    newStatus.label()));
             return;
         }
-        try {
-            int updated = salesOrderRepository.changeStatus(order.getId(), order.getStatus(), newStatus);
-            if (updated == 0) {
-                reloadHistory();
-                fail(CONFLICT);
-                return;
-            }
-            order.changeStatus(newStatus);
-            String message = "Pedido #" + order.getId() + " marcado como "
-                    + SalesOrder.labelFor(newStatus) + ".";
-            if (!reloadHistory()) {
-                // The write is committed: confirm it even though the filter or
-                // the database hides the reloaded history.
-                statusMessage.set(message);
-                return;
-            }
-            SalesOrder reloaded = findById(order.getId());
-            selectedOrder.set(reloaded);
-            selectOrder(reloaded);
-            succeed(message);
-        } catch (SQLException e) {
-            LOGGER.log(Level.SEVERE, "Could not change the sales order status", e);
-            fail(DATABASE_ERROR);
+        if (writeInFlight) {
+            return;
         }
+        int orderId = order.getId();
+        OrderStatus currentStatus = order.getStatus();
+        // The cancellation gives stock back inside a transaction: off the UI thread.
+        writeInFlight = true;
+        backgroundTasks.submit(
+                () -> salesOrderRepository.changeStatus(orderId, currentStatus, newStatus),
+                updated -> {
+                    writeInFlight = false;
+                    onStatusChanged(order, newStatus, updated);
+                },
+                failure -> {
+                    writeInFlight = false;
+                    LOGGER.log(Level.SEVERE, "Could not change the sales order status", failure);
+                    fail(DATABASE_ERROR);
+                });
+    }
+
+    /** Applies a status change already committed by the repository. */
+    private void onStatusChanged(SalesOrder order, OrderStatus newStatus, int updated) {
+        if (updated == 0) {
+            // Someone else moved the order: reload instead of overwriting it.
+            reloadHistory();
+            fail(CONFLICT);
+            return;
+        }
+        order.changeStatus(newStatus);
+        String message = "Pedido #" + order.getId() + " marcado como "
+                + newStatus.label() + ".";
+        if (!reloadHistory()) {
+            // The write is committed: confirm it even though the filter or the
+            // database hides the reloaded history.
+            statusMessage.set(message);
+            return;
+        }
+        SalesOrder reloaded = findById(order.getId());
+        selectedOrder.set(reloaded);
+        selectOrder(reloaded);
+        succeed(message);
     }
 
     private boolean ensureActiveSession() {
@@ -774,12 +837,5 @@ public class SalesOrdersViewModel implements ViewModel {
     private void succeed(String message) {
         errorMessage.set("");
         statusMessage.set(message);
-    }
-
-    private static String joinedErrors(String... messages) {
-        return List.of(messages).stream()
-                .filter(message -> !message.isBlank())
-                .reduce((first, second) -> first + "\n" + second)
-                .orElse("");
     }
 }

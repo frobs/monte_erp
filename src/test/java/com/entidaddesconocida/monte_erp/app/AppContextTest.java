@@ -1,5 +1,6 @@
 package com.entidaddesconocida.monte_erp.app;
 
+import com.entidaddesconocida.monte_erp.domain.model.Role;
 import com.entidaddesconocida.monte_erp.domain.model.User;
 import com.entidaddesconocida.monte_erp.infrastructure.config.DatabaseConfig;
 import com.entidaddesconocida.monte_erp.infrastructure.config.DatabaseUrl;
@@ -64,7 +65,8 @@ class AppContextTest {
                 new FakeCategoryRepository(), new FakeSupplierRepository(), new FakeProductRepository(),
                 new FakeCustomerRepository(), new FakeSalesOrderRepository(),
                 new FakePurchaseRepository(), new FakeStockRepository(),
-                config, setup, () -> new DatabaseUrl("jdbc:test"));
+                config, setup, () -> new DatabaseUrl("jdbc:test"),
+                BackgroundTasks.synchronous());
     }
 
     @Test
@@ -97,14 +99,14 @@ class AppContextTest {
     @DisplayName("create(MainViewModel) con sesión devuelve VM con datos del usuario")
     void mainViewModelWithSessionSucceeds() {
         SessionState session = new SessionState();
-        session.signIn(new User("Ana", "ana", PasswordHasher.hash("ana123"), User.ROLE_ADMIN, true));
+        session.signIn(new User("Ana", "ana", PasswordHasher.hash("ana123"), Role.ADMIN, true));
         AppContext context = context(session);
 
         MainViewModel vm = (MainViewModel) context.create(MainViewModel.class);
         assertNotNull(vm);
         assertEquals("Bienvenido/a, Ana", vm.welcomeProperty().get());
         assertEquals("ana", vm.usernameProperty().get());
-        assertEquals(User.ROLE_ADMIN_LABEL, vm.roleLabelProperty().get());
+        assertEquals(Role.ADMIN.label(), vm.roleLabelProperty().get());
         assertTrue(vm.adminProperty().get());
         assertEquals("Base de datos: jdbc:test", vm.databaseProperty().get());
     }
@@ -128,7 +130,7 @@ class AppContextTest {
     @DisplayName("create(UsersViewModel) con sesión carga la lista del repositorio")
     void usersViewModelWithSessionSucceeds() {
         SessionState session = new SessionState();
-        User admin = new User("Ana", "ana", PasswordHasher.hash("ana123"), User.ROLE_ADMIN, true);
+        User admin = new User("Ana", "ana", PasswordHasher.hash("ana123"), Role.ADMIN, true);
         session.signIn(admin);
         FakeUserRepository repo = new FakeUserRepository().withUser(admin);
         AppContext context = context(session, repo);
@@ -183,7 +185,7 @@ class AppContextTest {
     @DisplayName("create(SalesOrdersViewModel) devuelve un VM con las dependencias inyectadas")
     void salesOrdersViewModelIsCreatedWithDependencies() {
         SessionState session = new SessionState();
-        session.signIn(new User("Bea", "bea", PasswordHasher.hash("bea123"), User.ROLE_EMPLOYEE, true));
+        session.signIn(new User("Bea", "bea", PasswordHasher.hash("bea123"), Role.EMPLOYEE, true));
         AppContext context = context(session);
 
         SalesOrdersViewModel vm = (SalesOrdersViewModel) context.create(SalesOrdersViewModel.class);
@@ -206,7 +208,7 @@ class AppContextTest {
     @DisplayName("create(PurchasesViewModel) devuelve un VM con las dependencias inyectadas")
     void purchasesViewModelIsCreatedWithDependencies() {
         SessionState session = new SessionState();
-        session.signIn(new User("Bea", "bea", PasswordHasher.hash("bea123"), User.ROLE_EMPLOYEE, true));
+        session.signIn(new User("Bea", "bea", PasswordHasher.hash("bea123"), Role.EMPLOYEE, true));
         AppContext context = context(session);
 
         PurchasesViewModel vm = (PurchasesViewModel) context.create(PurchasesViewModel.class);

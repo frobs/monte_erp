@@ -1,5 +1,6 @@
 package com.entidaddesconocida.monte_erp.viewmodel;
 
+import com.entidaddesconocida.monte_erp.app.BackgroundTasks;
 import com.entidaddesconocida.monte_erp.domain.model.User;
 import com.entidaddesconocida.monte_erp.domain.repository.UserRepository;
 import com.entidaddesconocida.monte_erp.security.PasswordHasher;
@@ -10,6 +11,7 @@ import javafx.beans.property.SimpleStringProperty;
 import javafx.beans.property.StringProperty;
 
 import java.sql.SQLException;
+import java.util.Optional;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -28,13 +30,25 @@ public class LoginViewModel implements ViewModel {
     public static final String LOGIN_SUCCEEDED = "loginSucceeded";
 
     private final UserRepository userRepository;
+    private final BackgroundTasks backgroundTasks;
 
     private final StringProperty username = new SimpleStringProperty("");
     private final StringProperty password = new SimpleStringProperty("");
     private final StringProperty errorMessage = new SimpleStringProperty("");
 
     public LoginViewModel(UserRepository userRepository) {
+        this(userRepository, BackgroundTasks.synchronous());
+    }
+
+    /**
+     * @param backgroundTasks executor of the authentication (PBKDF2 is
+     *                        deliberately slow); {@link
+     *                        BackgroundTasks#synchronous()} in tests and a
+     *                        virtual-thread executor in the application
+     */
+    public LoginViewModel(UserRepository userRepository, BackgroundTasks backgroundTasks) {
         this.userRepository = userRepository;
+        this.backgroundTasks = backgroundTasks;
     }
 
     /** Username bound to the login form. */
@@ -62,26 +76,41 @@ public class LoginViewModel implements ViewModel {
             return;
         }
 
-        try {
-            User user = userRepository.findByUsername(u);
+        // The query and the key derivation run off the UI thread.
+        backgroundTasks.submit(
+                () -> authenticate(u, p),
+                authenticated -> {
+                    password.set("");
+                    if (authenticated.isEmpty()) {
+                        errorMessage.set("Usuario o contraseña incorrectos.");
+                        return;
+                    }
+                    errorMessage.set("");
+                    publish(LOGIN_SUCCEEDED, authenticated.get());
+                },
+                failure -> {
+                    LOGGER.log(Level.SEVERE, "Database error during sign in", failure);
+                    errorMessage.set(ViewMessages.DATABASE_ERROR);
+                });
+    }
 
-            // Always perform one PBKDF2 verification, including for missing and
-            // disabled accounts, so neither response nor work reveals account state.
-            String hash = user == null ? UNKNOWN_USER_HASH : user.getPasswordHash();
-            boolean passwordMatches = PasswordHasher.verify(p, hash);
-            if (user == null || !passwordMatches || !user.isActive()) {
-                errorMessage.set("Usuario o contraseña incorrectos.");
-                password.set("");
-                return;
-            }
-
-            password.set("");
-            errorMessage.set("");
-            publish(LOGIN_SUCCEEDED, user);
-        } catch (SQLException e) {
-            LOGGER.log(Level.SEVERE, "Database error during sign in", e);
-            errorMessage.set("No se pudo conectar con la base de datos. Comprueba que MySQL esté arrancado.");
+    /**
+     * Authenticates off the UI thread.
+     *
+     * <p>Always performs one PBKDF2 verification, including for missing and
+     * disabled accounts, so neither the response nor the elapsed work reveals the
+     * account state.</p>
+     *
+     * @return the signed-in user, or empty when the credentials are rejected
+     */
+    private Optional<User> authenticate(String username, String password) throws SQLException {
+        User user = userRepository.findByUsername(username);
+        String hash = user == null ? UNKNOWN_USER_HASH : user.getPasswordHash();
+        boolean passwordMatches = PasswordHasher.verify(password, hash);
+        if (user == null || !passwordMatches || !user.isActive()) {
+            return Optional.empty();
         }
+        return Optional.of(user);
     }
 
     /** Clears any visible error (useful on view initialisation). */

@@ -1,5 +1,6 @@
 package com.entidaddesconocida.monte_erp.viewmodel;
 
+import com.entidaddesconocida.monte_erp.app.BackgroundTasks;
 import com.entidaddesconocida.monte_erp.app.SessionValidator;
 import com.entidaddesconocida.monte_erp.domain.model.Category;
 import com.entidaddesconocida.monte_erp.domain.repository.CategoryRepository;
@@ -14,6 +15,7 @@ import javafx.collections.transformation.FilteredList;
 
 import java.sql.SQLException;
 import java.util.List;
+import java.util.concurrent.Callable;
 
 /**
  * ViewModel of the category management screen (RF-04 / CU-04).
@@ -63,7 +65,12 @@ public class CategoriesViewModel extends FilterableCrudViewModel<Category> {
     }
 
     public CategoriesViewModel(CategoryRepository categoryRepository, SessionValidator sessionValidator) {
-        super(sessionValidator);
+        this(categoryRepository, sessionValidator, BackgroundTasks.synchronous());
+    }
+
+    public CategoriesViewModel(CategoryRepository categoryRepository, SessionValidator sessionValidator,
+                        BackgroundTasks backgroundTasks) {
+        super(sessionValidator, backgroundTasks);
         this.categoryRepository = categoryRepository;
         bindFilter(searchText);
         watchFields(name, description);
@@ -115,13 +122,16 @@ public class CategoriesViewModel extends FilterableCrudViewModel<Category> {
     }
 
     @Override
-    protected List<Category> loadActive() throws SQLException {
-        return categoryRepository.findActive(searchText.get());
+    protected Callable<List<Category>> activeQuery() {
+        // The criteria are captured here, on the UI thread.
+        String search = searchText.get();
+        return () -> categoryRepository.findActive(search);
     }
 
     @Override
-    protected List<Category> loadInactive() throws SQLException {
-        return categoryRepository.findInactive(searchText.get());
+    protected Callable<List<Category>> inactiveQuery() {
+        String search = searchText.get();
+        return () -> categoryRepository.findInactive(search);
     }
 
     @Override

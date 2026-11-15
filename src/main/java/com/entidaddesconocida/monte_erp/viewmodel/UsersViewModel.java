@@ -1,6 +1,8 @@
 package com.entidaddesconocida.monte_erp.viewmodel;
 
+import com.entidaddesconocida.monte_erp.app.BackgroundTasks;
 import com.entidaddesconocida.monte_erp.app.SessionValidator;
+import com.entidaddesconocida.monte_erp.domain.model.Role;
 import com.entidaddesconocida.monte_erp.domain.model.User;
 import com.entidaddesconocida.monte_erp.domain.repository.UserRepository;
 import com.entidaddesconocida.monte_erp.security.PasswordHasher;
@@ -14,6 +16,8 @@ import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 
 import java.sql.SQLException;
+import java.util.List;
+import java.util.concurrent.Callable;
 
 /**
  * ViewModel of the user management screen (RF-02 / CU-02).
@@ -50,12 +54,12 @@ public class UsersViewModel extends CrudViewModel<User> {
     private final StringProperty name = new SimpleStringProperty("");
     private final StringProperty username = new SimpleStringProperty("");
     private final StringProperty password = new SimpleStringProperty("");
-    private final StringProperty role = new SimpleStringProperty(User.ROLE_EMPLOYEE_LABEL);
+    private final StringProperty roleLabel = new SimpleStringProperty(Role.EMPLOYEE.label());
 
     private final ReadOnlyStringWrapper passwordPrompt =
             new ReadOnlyStringWrapper("Contraseña");
     private final ObservableList<String> roleOptions = FXCollections.unmodifiableObservableList(
-            FXCollections.observableArrayList(User.ROLE_ADMIN_LABEL, User.ROLE_EMPLOYEE_LABEL));
+            FXCollections.observableArrayList(Role.ADMIN.label(), Role.EMPLOYEE.label()));
 
     private final ReadOnlyStringWrapper nameError = new ReadOnlyStringWrapper("");
     private final ReadOnlyStringWrapper usernameError = new ReadOnlyStringWrapper("");
@@ -67,7 +71,12 @@ public class UsersViewModel extends CrudViewModel<User> {
 
     public UsersViewModel(UserRepository userRepository, User currentUser,
                           SessionValidator sessionValidator) {
-        super(sessionValidator);
+        this(userRepository, currentUser, sessionValidator, BackgroundTasks.synchronous());
+    }
+
+    public UsersViewModel(UserRepository userRepository, User currentUser,
+                          SessionValidator sessionValidator, BackgroundTasks backgroundTasks) {
+        super(sessionValidator, backgroundTasks);
         this.userRepository = userRepository;
         this.currentUser = currentUser;
         watchItemsForCount();
@@ -97,9 +106,9 @@ public class UsersViewModel extends CrudViewModel<User> {
         return password;
     }
 
-    /** Selected role as a user facing label ({@link User#ROLE_ADMIN_LABEL} / {@link User#ROLE_EMPLOYEE_LABEL}). */
+    /** Selected role as a user facing label ({@link Role#label()}). */
     public StringProperty roleProperty() {
-        return role;
+        return roleLabel;
     }
 
     /** Options for the role combo box (shared, immutable list). */
@@ -138,8 +147,8 @@ public class UsersViewModel extends CrudViewModel<User> {
     }
 
     @Override
-    protected void refreshItems() throws SQLException {
-        items.setAll(userRepository.findAll());
+    protected Callable<List<User>> rowsQuery() {
+        return userRepository::findAll;
     }
 
     @Override
@@ -148,7 +157,7 @@ public class UsersViewModel extends CrudViewModel<User> {
         String usernameValue = trimmed(username.get());
         String passwordValue = password.get() == null ? "" : password.get();
         User selected = selectedItem.get();
-        String roleValue = toRole(role.get());
+        Role roleValue = toRole(roleLabel.get());
         if (selected == null) {
             User user = new User(nameValue, usernameValue,
                     PasswordHasher.hash(passwordValue), roleValue, true);
@@ -175,8 +184,8 @@ public class UsersViewModel extends CrudViewModel<User> {
             return false;
         }
         User selected = selectedItem.get();
-        String roleValue = toRole(role.get());
-        if (selected != null && isCurrentUser(selected) && !User.ROLE_ADMIN.equals(roleValue)) {
+        Role roleValue = toRole(roleLabel.get());
+        if (selected != null && isCurrentUser(selected) && roleValue != Role.ADMIN) {
             fail("No puedes quitarte el rol de administrador.");
             return false;
         }
@@ -256,7 +265,7 @@ public class UsersViewModel extends CrudViewModel<User> {
         name.set(user.getName());
         username.set(user.getUsername());
         password.set("");
-        role.set(user.isAdmin() ? User.ROLE_ADMIN_LABEL : User.ROLE_EMPLOYEE_LABEL);
+        roleLabel.set(user.getRoleLabel());
         setFormTitle(editFormTitle());
         passwordPrompt.set("Dejar en blanco para mantener la actual");
         clearFieldErrors();
@@ -268,7 +277,7 @@ public class UsersViewModel extends CrudViewModel<User> {
         name.set("");
         username.set("");
         password.set("");
-        role.set(User.ROLE_EMPLOYEE_LABEL);
+        roleLabel.set(Role.EMPLOYEE.label());
         setFormTitle(newFormTitle());
         passwordPrompt.set("Contraseña");
         clearFieldErrors();
@@ -414,7 +423,7 @@ public class UsersViewModel extends CrudViewModel<User> {
         return "El nombre de usuario '" + username + "' ya existe.";
     }
 
-    private static String toRole(String roleLabel) {
-        return User.ROLE_ADMIN_LABEL.equals(roleLabel) ? User.ROLE_ADMIN : User.ROLE_EMPLOYEE;
+    private static Role toRole(String label) {
+        return Role.ADMIN.label().equals(label) ? Role.ADMIN : Role.EMPLOYEE;
     }
 }

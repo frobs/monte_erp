@@ -52,6 +52,9 @@ import java.util.function.Supplier;
  * <ul>
  *   <li>Stateless resources (repositories, configuration) are bound as singleton
  *       instances.</li>
+ *   <li>{@link BackgroundTasks} is a stateless executor owned by the composition
+ *       root, injected into every ViewModel that runs a query: the blocking JDBC
+ *       work never happens on the JavaFX thread.</li>
  *   <li>Views and ViewModels are bound with factories ({@link Supplier}) so
  *       each view load gets a fresh instance. Binding an instance directly
  *       would make two loads of the same view share state → subtle bug.</li>
@@ -68,7 +71,7 @@ public final class AppContext {
                       PurchaseRepository purchaseRepository,
                       StockRepository stockRepository,
                       DatabaseConfig databaseConfig, SetupService setupService,
-                      Supplier<DatabaseUrl> databaseUrl) {
+                      Supplier<DatabaseUrl> databaseUrl, BackgroundTasks backgroundTasks) {
         SessionValidator sessionValidator = new SessionValidator(session, userRepository);
         // Stateless resources: single instance for the whole application.
         bind(UserRepository.class, () -> userRepository);
@@ -98,31 +101,36 @@ public final class AppContext {
         bind(ReportsView.class, () -> new ReportsView(appShell));
 
         // ViewModels: constructor injection, one new instance per view load.
-        bind(LoginViewModel.class, () -> new LoginViewModel(userRepository));
+        bind(LoginViewModel.class, () -> new LoginViewModel(userRepository, backgroundTasks));
         bind(MainViewModel.class,
                 () -> new MainViewModel(session.requireCurrentUser(), databaseUrl.get()));
         bind(UsersViewModel.class,
-                () -> new UsersViewModel(userRepository, session.requireCurrentUser(), sessionValidator));
+                () -> new UsersViewModel(userRepository, session.requireCurrentUser(),
+                        sessionValidator, backgroundTasks));
         bind(ProductsViewModel.class,
                 () -> new ProductsViewModel(productRepository, categoryRepository,
-                        supplierRepository, sessionValidator));
+                        supplierRepository, sessionValidator, backgroundTasks));
         bind(CategoriesViewModel.class,
-                () -> new CategoriesViewModel(categoryRepository, sessionValidator));
+                () -> new CategoriesViewModel(categoryRepository, sessionValidator, backgroundTasks));
         bind(SuppliersViewModel.class,
-                () -> new SuppliersViewModel(supplierRepository, sessionValidator));
+                () -> new SuppliersViewModel(supplierRepository, sessionValidator, backgroundTasks));
         bind(CustomersViewModel.class,
-                () -> new CustomersViewModel(customerRepository, sessionValidator));
+                () -> new CustomersViewModel(customerRepository, sessionValidator, backgroundTasks));
         bind(SalesOrdersViewModel.class,
                 () -> new SalesOrdersViewModel(salesOrderRepository, customerRepository,
-                        productRepository, stockRepository, session.requireCurrentUser(), sessionValidator));
+                        productRepository, stockRepository, session.requireCurrentUser(),
+                        sessionValidator, backgroundTasks));
         bind(PurchasesViewModel.class,
                 () -> new PurchasesViewModel(purchaseRepository, supplierRepository,
-                        productRepository, session.requireCurrentUser(), sessionValidator));
-        bind(StockViewModel.class, () -> new StockViewModel(stockRepository, sessionValidator));
+                        productRepository, session.requireCurrentUser(), sessionValidator,
+                        backgroundTasks));
+        bind(StockViewModel.class,
+                () -> new StockViewModel(stockRepository, sessionValidator, backgroundTasks));
         bind(ReportsViewModel.class,
-                () -> new ReportsViewModel(salesOrderRepository, stockRepository, sessionValidator));
+                () -> new ReportsViewModel(salesOrderRepository, stockRepository, sessionValidator,
+                        backgroundTasks));
         bind(SetupViewModel.class,
-                () -> new SetupViewModel(setupService, appShell.isOnboarding()));
+                () -> new SetupViewModel(setupService, appShell.isOnboarding(), backgroundTasks));
     }
 
     /** Callback registered in mvvmFX via {@link de.saxsys.mvvmfx.MvvmFX#setCustomDependencyInjector}. */

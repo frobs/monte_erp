@@ -1,5 +1,6 @@
 package com.entidaddesconocida.monte_erp.viewmodel.support;
 
+import com.entidaddesconocida.monte_erp.domain.model.PurchaseStatus;
 import com.entidaddesconocida.monte_erp.domain.model.Product;
 import com.entidaddesconocida.monte_erp.domain.model.ProductSupplier;
 import com.entidaddesconocida.monte_erp.domain.model.Purchase;
@@ -164,15 +165,15 @@ public class FakePurchaseRepository implements PurchaseRepository {
      * available and returning empties them only when no unit was sold.
      */
     @Override
-    public int changeStatus(int id, String currentStatus, String newStatus)
+    public int changeStatus(int id, PurchaseStatus currentStatus, PurchaseStatus newStatus)
             throws SQLException, PurchaseStockConsumedException {
         maybeThrow("changeStatus");
         Purchase stored = purchases.get(id);
-        if (stored == null || !currentStatus.equals(stored.getStatus())) {
+        if (stored == null || currentStatus != stored.getStatus()) {
             return 0;
         }
         List<Stock> lots = lotsByPurchase.getOrDefault(id, List.of());
-        if (Purchase.STATUS_RETURNED.equals(newStatus)) {
+        if (newStatus == PurchaseStatus.RETURNED) {
             int consumed = lots.stream()
                     .mapToInt(lot -> lot.getInitialQuantity() - lot.getAvailableQuantity())
                     .sum();
@@ -181,9 +182,9 @@ public class FakePurchaseRepository implements PurchaseRepository {
             }
         }
         for (Stock lot : lots) {
-            if (Purchase.STATUS_RECEIVED.equals(newStatus)) {
+            if (newStatus == PurchaseStatus.RECEIVED) {
                 lot.setAvailableQuantity(lot.getInitialQuantity());
-            } else if (Purchase.STATUS_RETURNED.equals(newStatus)) {
+            } else if (newStatus == PurchaseStatus.RETURNED) {
                 lot.setAvailableQuantity(0);
             }
         }

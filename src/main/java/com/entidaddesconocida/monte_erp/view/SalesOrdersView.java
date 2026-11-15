@@ -2,9 +2,9 @@ package com.entidaddesconocida.monte_erp.view;
 
 import com.entidaddesconocida.monte_erp.app.AppShell;
 import com.entidaddesconocida.monte_erp.domain.model.Customer;
+import com.entidaddesconocida.monte_erp.domain.model.OrderStatus;
 import com.entidaddesconocida.monte_erp.domain.model.Product;
 import com.entidaddesconocida.monte_erp.domain.model.SalesOrder;
-import com.entidaddesconocida.monte_erp.domain.model.SalesOrderFilter;
 import com.entidaddesconocida.monte_erp.domain.model.SalesOrderLine;
 import com.entidaddesconocida.monte_erp.domain.model.StockIssue;
 import com.entidaddesconocida.monte_erp.viewmodel.SalesOrdersViewModel;
@@ -76,7 +76,7 @@ public class SalesOrdersView implements FxmlView<SalesOrdersViewModel> {
     private ComboBox<Customer> customerFilterCombo;
 
     @FXML
-    private ComboBox<String> statusFilterCombo;
+    private ComboBox<OrderStatus> statusFilterCombo;
 
     @FXML
     private TableColumn<SalesOrder, String> orderIdColumn;
@@ -284,7 +284,7 @@ public class SalesOrdersView implements FxmlView<SalesOrdersViewModel> {
 
         statusFilterCombo.setItems(withAllOption(viewModel.statusFilterOptions()));
         SearchableCombos.install(statusFilterCombo,
-                status -> status == null ? ALL_STATUSES : SalesOrder.labelFor(status));
+                status -> status == null ? ALL_STATUSES : status.label());
         statusFilterCombo.valueProperty().bindBidirectional(viewModel.statusFilterProperty());
         selectAllOption(statusFilterCombo);
     }
@@ -305,15 +305,15 @@ public class SalesOrdersView implements FxmlView<SalesOrdersViewModel> {
             }
             HBox actions = new HBox(6.0);
             actions.setAlignment(Pos.CENTER_LEFT);
-            if (order.canTransitionTo(SalesOrder.STATUS_SHIPPED)) {
+            if (order.canTransitionTo(OrderStatus.SHIPPED)) {
                 actions.getChildren().add(actionButton("Marcar enviado", false,
-                        () -> changeStatus(order, SalesOrder.STATUS_SHIPPED)));
+                        () -> changeStatus(order, OrderStatus.SHIPPED)));
             }
-            if (order.canTransitionTo(SalesOrder.STATUS_DELIVERED)) {
+            if (order.canTransitionTo(OrderStatus.DELIVERED)) {
                 actions.getChildren().add(actionButton("Marcar entregado", false,
-                        () -> changeStatus(order, SalesOrder.STATUS_DELIVERED)));
+                        () -> changeStatus(order, OrderStatus.DELIVERED)));
             }
-            if (order.canTransitionTo(SalesOrder.STATUS_CANCELLED)) {
+            if (order.canTransitionTo(OrderStatus.CANCELLED)) {
                 actions.getChildren().add(actionButton("Cancelar", true,
                         () -> onCancelOrder(order)));
             }
@@ -343,7 +343,7 @@ public class SalesOrdersView implements FxmlView<SalesOrdersViewModel> {
     }
 
     /** Selects the row the button belongs to, then delegates the transition. */
-    private void changeStatus(SalesOrder order, String newStatus) {
+    private void changeStatus(SalesOrder order, OrderStatus newStatus) {
         viewModel.selectedOrderProperty().set(order);
         viewModel.changeStatus(newStatus);
     }
@@ -357,7 +357,7 @@ public class SalesOrdersView implements FxmlView<SalesOrdersViewModel> {
                 + " ¿Quieres continuar?");
         alert.showAndWait()
                 .filter(button -> button == ButtonType.OK)
-                .ifPresent(button -> changeStatus(order, SalesOrder.STATUS_CANCELLED));
+                .ifPresent(button -> changeStatus(order, OrderStatus.CANCELLED));
     }
 
     /** Stock hint of the chosen product: no text without a selection. */
@@ -455,7 +455,7 @@ public class SalesOrdersView implements FxmlView<SalesOrdersViewModel> {
         customerFilterCombo.setValue(customer);
         selectAllOption(customerFilterCombo);
 
-        String status = statusFilterCombo.getValue();
+        OrderStatus status = statusFilterCombo.getValue();
         statusFilterCombo.setItems(withAllOption(viewModel.statusFilterOptions()));
         statusFilterCombo.setValue(status);
         selectAllOption(statusFilterCombo);

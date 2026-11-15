@@ -1,6 +1,9 @@
 package com.entidaddesconocida.monte_erp.viewmodel;
 
+import com.entidaddesconocida.monte_erp.app.BackgroundTasks;
 import com.entidaddesconocida.monte_erp.domain.model.Customer;
+import com.entidaddesconocida.monte_erp.domain.model.OrderStatus;
+import com.entidaddesconocida.monte_erp.domain.model.Role;
 import com.entidaddesconocida.monte_erp.domain.model.Product;
 import com.entidaddesconocida.monte_erp.domain.model.SalesOrder;
 import com.entidaddesconocida.monte_erp.domain.model.SalesOrderFilter;
@@ -21,7 +24,11 @@ import java.math.BigDecimal;
 import java.sql.SQLException;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayDeque;
+import java.util.Deque;
 import java.util.List;
+import java.util.concurrent.Callable;
+import java.util.function.Consumer;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -84,7 +91,7 @@ class SalesOrdersViewModelTest {
     }
 
     private static User user() {
-        User user = new User("Bea", "bea", "hash", User.ROLE_EMPLOYEE, true);
+        User user = new User("Bea", "bea", "hash", Role.EMPLOYEE, true);
         user.setId(9);
         return user;
     }
@@ -129,7 +136,7 @@ class SalesOrdersViewModelTest {
     @DisplayName("load limpia la selección del histórico y su detalle")
     void loadClearsSelectedOrder() {
         SalesOrder order = new SalesOrder(5, java.time.LocalDateTime.now(),
-                SalesOrder.STATUS_PENDING, BigDecimal.ZERO, ACME, user(), List.of());
+                OrderStatus.PENDING, BigDecimal.ZERO, ACME, user(), List.of());
         salesOrderRepository.withOrder(order)
                 .withLine(5, new SalesOrderLine(1, new BigDecimal("10.00"), product(1, "Teclado", "10.00")));
         viewModel.selectedOrderProperty().set(order);
@@ -286,7 +293,7 @@ class SalesOrdersViewModelTest {
         assertEquals(1, viewModel.orders().size());
         SalesOrder saved = viewModel.orders().get(0);
         assertTrue(viewModel.statusMessageProperty().get().contains("Pedido #" + saved.getId()));
-        assertEquals(SalesOrder.STATUS_PENDING, saved.getStatus());
+        assertEquals(OrderStatus.PENDING, saved.getStatus());
         assertEquals("Acme", saved.getCustomer().getName());
         assertEquals(9, saved.getUser().getId());
         assertEquals(0, new BigDecimal("25.50").compareTo(saved.getTotal()));
@@ -309,7 +316,7 @@ class SalesOrdersViewModelTest {
     void selectOrderLoadsAndClearsLines() {
         Product product = product(1, "Teclado", "10.00");
         SalesOrder order = new SalesOrder(5, java.time.LocalDateTime.now(),
-                SalesOrder.STATUS_PENDING, new BigDecimal("20.00"), ACME, user(), List.of());
+                OrderStatus.PENDING, new BigDecimal("20.00"), ACME, user(), List.of());
         salesOrderRepository.withOrder(order)
                 .withLine(5, new SalesOrderLine(2, new BigDecimal("10.00"), product));
 
@@ -326,7 +333,7 @@ class SalesOrdersViewModelTest {
     void selectOrderReportsDatabaseError() {
         salesOrderRepository.failOn("findLines");
         SalesOrder order = new SalesOrder(5, java.time.LocalDateTime.now(),
-                SalesOrder.STATUS_PENDING, BigDecimal.ZERO, ACME, user(), List.of());
+                OrderStatus.PENDING, BigDecimal.ZERO, ACME, user(), List.of());
 
         viewModel.selectOrder(order);
 
@@ -334,9 +341,43 @@ class SalesOrdersViewModelTest {
         assertEquals(SalesOrdersViewModel.DATABASE_ERROR, viewModel.errorMessageProperty().get());
     }
 
+    @Test
+    @DisplayName("Dos clics seguidos en Guardar envían un solo pedido")
+    void doubleClickSavesOnlyOnce() throws Exception {
+        Deque<Runnable> pending = new ArrayDeque<>();
+        SalesOrdersViewModel deferred = new SalesOrdersViewModel(salesOrderRepository,
+                customerRepository, productRepository, stockRepository, user(), null,
+                new BackgroundTasks() {
+                    @Override
+                    public <T> void submit(Callable<T> task, Consumer<T> onSuccess,
+                                           Consumer<Throwable> onFailure) {
+                        pending.add(() -> {
+                            try {
+                                onSuccess.accept(task.call());
+                            } catch (Exception failure) {
+                                onFailure.accept(failure);
+                            }
+                        });
+                    }
+                });
+        deferred.load();
+        deferred.selectedCustomerProperty().set(customerRepository.findActive().get(0));
+        deferred.selectedProductProperty().set(productRepository.findAll().get(0));
+        deferred.quantityProperty().set("1");
+        deferred.addLine();
+        int before = salesOrderRepository.findAll().size();
+
+        deferred.save();
+        deferred.save();
+
+        assertEquals(1, pending.size());
+        pending.removeFirst().run();
+        assertEquals(before + 1, salesOrderRepository.findAll().size());
+    }
+
     // --- RF-08: status change -------------------------------------------
 
-    private SalesOrder selectStoredOrder(String status) {
+    private SalesOrder selectStoredOrder(OrderStatus status) {
         salesOrderRepository.withOrder(new SalesOrder(0, LocalDateTime.now(), status,
                 new BigDecimal("20.00"), ACME, user(), List.of()));
         viewModel.load();
@@ -351,16 +392,16 @@ class SalesOrdersViewModelTest {
     void availableTransitionsReflectTheSelectedOrder() {
         assertEquals(List.of(), viewModel.availableTransitions());
 
-        selectStoredOrder(SalesOrder.STATUS_PENDING);
+        selectStoredOrder(OrderStatus.PENDING);
 
-        assertEquals(List.of(SalesOrder.STATUS_SHIPPED, SalesOrder.STATUS_CANCELLED),
+        assertEquals(List.of(OrderStatus.SHIPPED, OrderStatus.CANCELLED),
                 viewModel.availableTransitions());
     }
 
     @Test
     @DisplayName("RF-08: availableTransitions vacío para un pedido terminal")
     void availableTransitionsAreEmptyForTerminalOrders() {
-        selectStoredOrder(SalesOrder.STATUS_DELIVERED);
+        selectStoredOrder(OrderStatus.DELIVERED);
 
         assertEquals(List.of(), viewModel.availableTransitions());
     }
@@ -368,7 +409,7 @@ class SalesOrdersViewModelTest {
     @Test
     @DisplayName("RF-08: load limpia availableTransitions junto con la selección")
     void loadClearsAvailableTransitions() {
-        selectStoredOrder(SalesOrder.STATUS_PENDING);
+        selectStoredOrder(OrderStatus.PENDING);
         assertEquals(2, viewModel.availableTransitions().size());
 
         viewModel.load();
@@ -381,7 +422,7 @@ class SalesOrdersViewModelTest {
     void changeStatusWithoutSelectionFails() {
         salesOrderRepository.failOn("changeStatus");
 
-        viewModel.changeStatus(SalesOrder.STATUS_SHIPPED);
+        viewModel.changeStatus(OrderStatus.SHIPPED);
 
         assertEquals(SalesOrdersViewModel.ORDER_REQUIRED, viewModel.errorMessageProperty().get());
     }
@@ -389,10 +430,10 @@ class SalesOrdersViewModelTest {
     @Test
     @DisplayName("RF-08: changeStatus con transición no permitida avisa y no toca el repositorio")
     void changeStatusWithInvalidTransitionFailsBeforeTheRepository() {
-        selectStoredOrder(SalesOrder.STATUS_DELIVERED);
+        selectStoredOrder(OrderStatus.DELIVERED);
         salesOrderRepository.failOn("changeStatus");
 
-        viewModel.changeStatus(SalesOrder.STATUS_CANCELLED);
+        viewModel.changeStatus(OrderStatus.CANCELLED);
 
         assertEquals(String.format(SalesOrdersViewModel.INVALID_TRANSITION, "Entregado", "Cancelado"),
                 viewModel.errorMessageProperty().get());
@@ -401,34 +442,34 @@ class SalesOrdersViewModelTest {
     @Test
     @DisplayName("RF-08: changeStatus válido persiste, recarga el histórico, re-selecciona y recalcula")
     void changeStatusPersistsAndReloads() {
-        SalesOrder selected = selectStoredOrder(SalesOrder.STATUS_PENDING);
+        SalesOrder selected = selectStoredOrder(OrderStatus.PENDING);
         int id = selected.getId();
 
-        viewModel.changeStatus(SalesOrder.STATUS_SHIPPED);
+        viewModel.changeStatus(OrderStatus.SHIPPED);
 
         assertEquals("", viewModel.errorMessageProperty().get());
         assertTrue(viewModel.statusMessageProperty().get().contains("Pedido #" + id));
         assertTrue(viewModel.statusMessageProperty().get().contains("Enviado"));
         assertEquals(1, viewModel.orders().size());
-        assertEquals(SalesOrder.STATUS_SHIPPED, viewModel.orders().get(0).getStatus());
+        assertEquals(OrderStatus.SHIPPED, viewModel.orders().get(0).getStatus());
         assertEquals(id, viewModel.selectedOrderProperty().get().getId());
-        assertEquals(SalesOrder.STATUS_SHIPPED, viewModel.selectedOrderProperty().get().getStatus());
-        assertEquals(List.of(SalesOrder.STATUS_DELIVERED, SalesOrder.STATUS_CANCELLED),
+        assertEquals(OrderStatus.SHIPPED, viewModel.selectedOrderProperty().get().getStatus());
+        assertEquals(List.of(OrderStatus.DELIVERED, OrderStatus.CANCELLED),
                 viewModel.availableTransitions());
     }
 
     @Test
     @DisplayName("RF-08: changeStatus con 0 filas avisa del conflicto y recarga el histórico")
     void changeStatusWithZeroRowsReportsConflict() throws SQLException {
-        SalesOrder selected = selectStoredOrder(SalesOrder.STATUS_PENDING);
+        SalesOrder selected = selectStoredOrder(OrderStatus.PENDING);
         // A concurrent transaction moves the order after it was loaded.
-        salesOrderRepository.changeStatus(selected.getId(), SalesOrder.STATUS_PENDING,
-                SalesOrder.STATUS_SHIPPED);
+        salesOrderRepository.changeStatus(selected.getId(), OrderStatus.PENDING,
+                OrderStatus.SHIPPED);
 
-        viewModel.changeStatus(SalesOrder.STATUS_CANCELLED);
+        viewModel.changeStatus(OrderStatus.CANCELLED);
 
         assertEquals(SalesOrdersViewModel.CONFLICT, viewModel.errorMessageProperty().get());
-        assertEquals(SalesOrder.STATUS_SHIPPED, viewModel.orders().get(0).getStatus());
+        assertEquals(OrderStatus.SHIPPED, viewModel.orders().get(0).getStatus());
     }
 
     @Test
@@ -586,7 +627,7 @@ class SalesOrdersViewModelTest {
     void selectOrderLoadsAndClearsIssues() {
         Product product = product(1, "Teclado", "10.00");
         SalesOrderLine line = new SalesOrderLine(4, 2, new BigDecimal("10.00"), product);
-        SalesOrder order = new SalesOrder(5, LocalDateTime.now(), SalesOrder.STATUS_PENDING,
+        SalesOrder order = new SalesOrder(5, LocalDateTime.now(), OrderStatus.PENDING,
                 new BigDecimal("20.00"), ACME, user(), List.of());
         salesOrderRepository.withOrder(order).withLine(5, line)
                 .withIssue(5, new StockIssue(2, line, lot(product, 10)));
@@ -602,16 +643,16 @@ class SalesOrdersViewModelTest {
     @Test
     @DisplayName("RF-09/D2: cancelar un pedido limpia sus lotes consumidos")
     void cancellingRemovesTheIssues() throws SQLException {
-        SalesOrder selected = selectStoredOrder(SalesOrder.STATUS_PENDING);
+        SalesOrder selected = selectStoredOrder(OrderStatus.PENDING);
         Product product = product(1, "Teclado", "10.00");
         SalesOrderLine line = new SalesOrderLine(4, 2, new BigDecimal("10.00"), product);
         salesOrderRepository.withIssue(selected.getId(), new StockIssue(2, line, lot(product, 10)));
         viewModel.selectOrder(selected);
         assertEquals(1, viewModel.selectedOrderIssues().size());
 
-        viewModel.changeStatus(SalesOrder.STATUS_CANCELLED);
+        viewModel.changeStatus(OrderStatus.CANCELLED);
 
-        assertEquals(SalesOrder.STATUS_CANCELLED, viewModel.orders().get(0).getStatus());
+        assertEquals(OrderStatus.CANCELLED, viewModel.orders().get(0).getStatus());
         assertEquals(0, viewModel.selectedOrderIssues().size());
     }
 
@@ -636,7 +677,7 @@ class SalesOrdersViewModelTest {
 
     // --- History filters (queried in the database) ----------------------
 
-    private SalesOrder storeOrder(LocalDate date, Customer customer, String status) {
+    private SalesOrder storeOrder(LocalDate date, Customer customer, OrderStatus status) {
         SalesOrder order = new SalesOrder(0, date.atTime(10, 0), status,
                 new BigDecimal("20.00"), customer, user(), List.of());
         salesOrderRepository.withOrder(order);
@@ -645,9 +686,9 @@ class SalesOrdersViewModelTest {
 
     /** Three orders in two months, from three customers, in three statuses. */
     private void loadThreeOrders() {
-        storeOrder(LocalDate.of(2024, 1, 15), ACME, SalesOrder.STATUS_PENDING);
-        storeOrder(LocalDate.of(2024, 2, 15), GLOBEX, SalesOrder.STATUS_SHIPPED);
-        storeOrder(LocalDate.of(2024, 2, 29), INACTIVE, SalesOrder.STATUS_DELIVERED);
+        storeOrder(LocalDate.of(2024, 1, 15), ACME, OrderStatus.PENDING);
+        storeOrder(LocalDate.of(2024, 2, 15), GLOBEX, OrderStatus.SHIPPED);
+        storeOrder(LocalDate.of(2024, 2, 29), INACTIVE, OrderStatus.DELIVERED);
         viewModel.load();
     }
 
@@ -710,10 +751,10 @@ class SalesOrdersViewModelTest {
     void statusFilterIsQueried() {
         loadThreeOrders();
 
-        viewModel.statusFilterProperty().set(SalesOrder.STATUS_SHIPPED);
+        viewModel.statusFilterProperty().set(OrderStatus.SHIPPED);
 
         assertEquals(1, viewModel.orders().size());
-        assertEquals(SalesOrder.STATUS_SHIPPED, salesOrderRepository.lastFilter().status());
+        assertEquals(OrderStatus.SHIPPED, salesOrderRepository.lastFilter().status());
     }
 
     @Test
@@ -724,12 +765,12 @@ class SalesOrdersViewModelTest {
 
         viewModel.fromDateProperty().set(LocalDate.of(2024, 2, 1));
         viewModel.customerFilterProperty().set(GLOBEX);
-        viewModel.statusFilterProperty().set(SalesOrder.STATUS_SHIPPED);
+        viewModel.statusFilterProperty().set(OrderStatus.SHIPPED);
 
         assertEquals(1, viewModel.orders().size());
         assertEquals(calls + 3, salesOrderRepository.findAllCalls());
         assertEquals(SalesOrderFilter.of(LocalDate.of(2024, 2, 1), null, GLOBEX.getId(),
-                SalesOrder.STATUS_SHIPPED), salesOrderRepository.lastFilter());
+                OrderStatus.SHIPPED), salesOrderRepository.lastFilter());
     }
 
     @Test
@@ -755,13 +796,13 @@ class SalesOrdersViewModelTest {
     void filteringDropsTheSelectionOfAHiddenOrder() {
         loadThreeOrders();
         SalesOrder pending = viewModel.orders().stream()
-                .filter(order -> SalesOrder.STATUS_PENDING.equals(order.getStatus()))
+                .filter(order -> OrderStatus.PENDING.equals(order.getStatus()))
                 .findFirst().orElseThrow();
         viewModel.selectedOrderProperty().set(pending);
         viewModel.selectOrder(pending);
         assertEquals(2, viewModel.availableTransitions().size());
 
-        viewModel.statusFilterProperty().set(SalesOrder.STATUS_SHIPPED);
+        viewModel.statusFilterProperty().set(OrderStatus.SHIPPED);
 
         assertNull(viewModel.selectedOrderProperty().get());
         assertEquals(0, viewModel.availableTransitions().size());
@@ -774,7 +815,7 @@ class SalesOrdersViewModelTest {
         loadThreeOrders();
         salesOrderRepository.failOn("findAll");
 
-        viewModel.statusFilterProperty().set(SalesOrder.STATUS_SHIPPED);
+        viewModel.statusFilterProperty().set(OrderStatus.SHIPPED);
 
         assertEquals(SalesOrdersViewModel.DATABASE_ERROR, viewModel.errorMessageProperty().get());
         assertEquals(0, viewModel.orders().size());
@@ -783,30 +824,30 @@ class SalesOrdersViewModelTest {
     @Test
     @DisplayName("Guardar mantiene el filtro activo en la recarga del histórico")
     void saveReloadsWithTheActiveFilter() {
-        viewModel.statusFilterProperty().set(SalesOrder.STATUS_PENDING);
+        viewModel.statusFilterProperty().set(OrderStatus.PENDING);
         viewModel.selectedCustomerProperty().set(ACME);
         addLine("Teclado", "1");
 
         viewModel.save();
 
         assertEquals(1, viewModel.orders().size());
-        assertEquals(SalesOrder.STATUS_PENDING, salesOrderRepository.lastFilter().status());
+        assertEquals(OrderStatus.PENDING, salesOrderRepository.lastFilter().status());
     }
 
     @Test
     @DisplayName("Cambiar el estado recarga respetando el filtro y confirma aunque oculte la fila")
     void changeStatusKeepsTheActiveFilter() {
         loadThreeOrders();
-        viewModel.statusFilterProperty().set(SalesOrder.STATUS_PENDING);
+        viewModel.statusFilterProperty().set(OrderStatus.PENDING);
         SalesOrder pending = viewModel.orders().get(0);
         viewModel.selectedOrderProperty().set(pending);
         viewModel.selectOrder(pending);
 
-        viewModel.changeStatus(SalesOrder.STATUS_SHIPPED);
+        viewModel.changeStatus(OrderStatus.SHIPPED);
 
         assertEquals("", viewModel.errorMessageProperty().get());
         assertTrue(viewModel.statusMessageProperty().get().contains("marcado como Enviado"));
         assertEquals(0, viewModel.orders().size());
-        assertEquals(SalesOrder.STATUS_PENDING, salesOrderRepository.lastFilter().status());
+        assertEquals(OrderStatus.PENDING, salesOrderRepository.lastFilter().status());
     }
 }

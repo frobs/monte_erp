@@ -3,6 +3,7 @@ package com.entidaddesconocida.monte_erp.view;
 import com.entidaddesconocida.monte_erp.app.AppShell;
 import com.entidaddesconocida.monte_erp.domain.model.Product;
 import com.entidaddesconocida.monte_erp.domain.model.Purchase;
+import com.entidaddesconocida.monte_erp.domain.model.PurchaseStatus;
 import com.entidaddesconocida.monte_erp.domain.model.Stock;
 import com.entidaddesconocida.monte_erp.domain.model.Supplier;
 import com.entidaddesconocida.monte_erp.viewmodel.PurchasesViewModel;
@@ -79,7 +80,7 @@ public class PurchasesView implements FxmlView<PurchasesViewModel> {
     private ComboBox<Supplier> supplierFilterCombo;
 
     @FXML
-    private ComboBox<String> statusFilterCombo;
+    private ComboBox<PurchaseStatus> statusFilterCombo;
 
     @FXML
     private TableColumn<Purchase, String> purchaseIdColumn;
@@ -249,7 +250,7 @@ public class PurchasesView implements FxmlView<PurchasesViewModel> {
 
         statusFilterCombo.setItems(withAllOption(viewModel.statusFilterOptions()));
         SearchableCombos.install(statusFilterCombo,
-                status -> status == null ? ALL_STATUSES : Purchase.labelFor(status));
+                status -> status == null ? ALL_STATUSES : status.label());
         statusFilterCombo.valueProperty().bindBidirectional(viewModel.statusFilterProperty());
         selectAllOption(statusFilterCombo);
     }
@@ -271,15 +272,15 @@ public class PurchasesView implements FxmlView<PurchasesViewModel> {
             }
             HBox actions = new HBox(6.0);
             actions.setAlignment(Pos.CENTER_LEFT);
-            if (purchase.canTransitionTo(Purchase.STATUS_RECEIVED)) {
+            if (purchase.canTransitionTo(PurchaseStatus.RECEIVED)) {
                 actions.getChildren().add(actionButton("Recibir", false,
                         () -> onMarkReceived(purchase)));
             }
-            if (purchase.canTransitionTo(Purchase.STATUS_RETURNED)) {
+            if (purchase.canTransitionTo(PurchaseStatus.RETURNED)) {
                 actions.getChildren().add(actionButton("Devolver", true,
                         () -> onReturnPurchase(purchase)));
             }
-            if (purchase.canTransitionTo(Purchase.STATUS_CANCELLED)) {
+            if (purchase.canTransitionTo(PurchaseStatus.CANCELLED)) {
                 actions.getChildren().add(actionButton("Cancelar", true,
                         () -> onCancelPurchase(purchase)));
             }
@@ -309,7 +310,7 @@ public class PurchasesView implements FxmlView<PurchasesViewModel> {
     }
 
     /** Selects the row the button belongs to, then delegates the transition. */
-    private void changeStatus(Purchase purchase, String newStatus) {
+    private void changeStatus(Purchase purchase, PurchaseStatus newStatus) {
         viewModel.selectedPurchaseProperty().set(purchase);
         viewModel.changeStatus(newStatus);
     }
@@ -369,7 +370,7 @@ public class PurchasesView implements FxmlView<PurchasesViewModel> {
 
     /** Marks the given purchase as received (only offered while pending). */
     private void onMarkReceived(Purchase purchase) {
-        changeStatus(purchase, Purchase.STATUS_RECEIVED);
+        changeStatus(purchase, PurchaseStatus.RECEIVED);
     }
 
     /** Returns the given purchase to the supplier after a destructive confirmation. */
@@ -382,7 +383,7 @@ public class PurchasesView implements FxmlView<PurchasesViewModel> {
                 + " ¿Quieres continuar?");
         alert.showAndWait()
                 .filter(button -> button == ButtonType.OK)
-                .ifPresent(button -> changeStatus(purchase, Purchase.STATUS_RETURNED));
+                .ifPresent(button -> changeStatus(purchase, PurchaseStatus.RETURNED));
     }
 
     /** Cancels the given purchase after a destructive confirmation (RNF-05). */
@@ -394,7 +395,7 @@ public class PurchasesView implements FxmlView<PurchasesViewModel> {
                 + " ¿Quieres continuar?");
         alert.showAndWait()
                 .filter(button -> button == ButtonType.OK)
-                .ifPresent(button -> changeStatus(purchase, Purchase.STATUS_CANCELLED));
+                .ifPresent(button -> changeStatus(purchase, PurchaseStatus.CANCELLED));
     }
 
     @FXML
@@ -419,7 +420,7 @@ public class PurchasesView implements FxmlView<PurchasesViewModel> {
         supplierFilterCombo.setValue(supplier);
         selectAllOption(supplierFilterCombo);
 
-        String status = statusFilterCombo.getValue();
+        PurchaseStatus status = statusFilterCombo.getValue();
         statusFilterCombo.setItems(withAllOption(viewModel.statusFilterOptions()));
         statusFilterCombo.setValue(status);
         selectAllOption(statusFilterCombo);

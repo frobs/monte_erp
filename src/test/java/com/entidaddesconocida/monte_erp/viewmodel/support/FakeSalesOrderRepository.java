@@ -1,5 +1,6 @@
 package com.entidaddesconocida.monte_erp.viewmodel.support;
 
+import com.entidaddesconocida.monte_erp.domain.model.OrderStatus;
 import com.entidaddesconocida.monte_erp.domain.model.Customer;
 import com.entidaddesconocida.monte_erp.domain.model.Product;
 import com.entidaddesconocida.monte_erp.domain.model.Purchase;
@@ -211,17 +212,18 @@ public class FakeSalesOrderRepository implements SalesOrderRepository {
     }
 
     @Override
-    public int changeStatus(int id, String currentStatus, String newStatus) throws SQLException {
+    public int changeStatus(int id, OrderStatus currentStatus, OrderStatus newStatus)
+            throws SQLException {
         maybeThrow("changeStatus");
         SalesOrder stored = orders.get(id);
-        if (stored == null || !currentStatus.equals(stored.getStatus())) {
+        if (stored == null || currentStatus != stored.getStatus()) {
             return 0;
         }
         // A fresh copy with the full constructor (there is no public setStatus).
         orders.put(id, new SalesOrder(stored.getId(), stored.getOrderDate(), newStatus,
                 stored.getTotal(), copy(stored.getCustomer()), copy(stored.getUser()),
                 copyLines(linesByOrder.getOrDefault(id, List.of()))));
-        if (SalesOrder.STATUS_CANCELLED.equals(newStatus)) {
+        if (newStatus == OrderStatus.CANCELLED) {
             // Cancelling gives the units back: the issues of the order disappear
             // (the counterpart of the reversion in the real repository, D2).
             issuesByOrder.remove(id);

@@ -1,5 +1,6 @@
 package com.entidaddesconocida.monte_erp.viewmodel;
 
+import com.entidaddesconocida.monte_erp.domain.model.Role;
 import com.entidaddesconocida.monte_erp.domain.model.User;
 import com.entidaddesconocida.monte_erp.security.PasswordHasher;
 import com.entidaddesconocida.monte_erp.viewmodel.support.FakeUserRepository;
@@ -14,7 +15,6 @@ import java.util.concurrent.atomic.AtomicReference;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -35,7 +35,7 @@ class LoginViewModelTest {
     @BeforeEach
     void setUp() {
         fakeRepository = new FakeUserRepository()
-                .withUser(new User("Ana", VALID_USER, VALID_HASH, User.ROLE_ADMIN, true));
+                .withUser(new User("Ana", VALID_USER, VALID_HASH, Role.ADMIN, true));
         viewModel = new LoginViewModel(fakeRepository);
     }
 
@@ -68,7 +68,7 @@ class LoginViewModelTest {
     @Test
     @DisplayName("Usuario desactivado: mismo mensaje genérico y contraseña limpiada")
     void deactivatedUserShowsGenericError() {
-        fakeRepository.withUser(new User("Bob", "bob", PasswordHasher.hash("bob123"), User.ROLE_EMPLOYEE, false));
+        fakeRepository.withUser(new User("Bob", "bob", PasswordHasher.hash("bob123"), Role.EMPLOYEE, false));
         viewModel.usernameProperty().set("bob");
         viewModel.passwordProperty().set("bob123");
 

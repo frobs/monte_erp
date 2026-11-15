@@ -15,6 +15,7 @@ import org.junit.jupiter.api.Test;
 import java.sql.SQLException;
 import java.sql.SQLIntegrityConstraintViolationException;
 import java.util.List;
+import java.util.concurrent.Callable;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -250,13 +251,15 @@ class CrudViewModelTest {
         }
 
         @Override
-        protected List<FakeCrudItem> loadActive() throws SQLException {
-            return repository.findActive(searchText.get());
+        protected Callable<List<FakeCrudItem>> activeQuery() {
+            String search = searchText.get();
+            return () -> repository.findActive(search);
         }
 
         @Override
-        protected List<FakeCrudItem> loadInactive() throws SQLException {
-            return repository.findInactive(searchText.get());
+        protected Callable<List<FakeCrudItem>> inactiveQuery() {
+            String search = searchText.get();
+            return () -> repository.findInactive(search);
         }
 
         @Override
