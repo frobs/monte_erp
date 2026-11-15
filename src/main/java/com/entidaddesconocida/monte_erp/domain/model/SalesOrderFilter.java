@@ -1,8 +1,6 @@
 package com.entidaddesconocida.monte_erp.domain.model;
 
 import java.time.LocalDate;
-import java.util.Objects;
-import java.util.Set;
 
 /**
  * Immutable value object holding the criteria the sales-order history is
@@ -21,26 +19,19 @@ import java.util.Set;
  * status and a non-positive customer id <em>before</em> any query is issued, so
  * the ViewModel can show a validation message without touching the database.</p>
  */
-public final class SalesOrderFilter {
-
-    /** The four statuses of the domain, the only ones a filter may ask for. */
-    private static final Set<String> STATUSES = Set.of(
-            SalesOrder.STATUS_PENDING,
-            SalesOrder.STATUS_SHIPPED,
-            SalesOrder.STATUS_DELIVERED,
-            SalesOrder.STATUS_CANCELLED);
+public record SalesOrderFilter(ReportPeriod period, Integer customerId, OrderStatus status) {
 
     private static final SalesOrderFilter ALL =
             new SalesOrderFilter(ReportPeriod.all(), null, null);
 
-    private final ReportPeriod period;
-    private final Integer customerId;
-    private final String status;
-
-    private SalesOrderFilter(ReportPeriod period, Integer customerId, String status) {
-        this.period = period;
-        this.customerId = customerId;
-        this.status = status;
+    /**
+     * @throws IllegalArgumentException when the customer id is not positive
+     */
+    public SalesOrderFilter {
+        if (customerId != null && customerId <= 0) {
+            throw new IllegalArgumentException(
+                    "El identificador del cliente debe ser positivo: " + customerId);
+        }
     }
 
     /** Whole history: no date range, no customer and no status. */
@@ -54,39 +45,17 @@ public final class SalesOrderFilter {
      * @param from       lower bound (inclusive) of the order date or {@code null}
      * @param to         upper bound (inclusive) of the order date or {@code null}
      * @param customerId customer to filter by or {@code null} for every customer
-     * @param status     one of the {@code SalesOrder.STATUS_*} constants or {@code null}
-     * @throws IllegalArgumentException when the range is inverted, the status is
-     *                                  unknown or the customer id is not positive
+     * @param status     an {@link OrderStatus} or {@code null} for every status
+     * @throws IllegalArgumentException when the range is inverted or the customer
+     *                                  id is not positive
      */
     public static SalesOrderFilter of(LocalDate from, LocalDate to, Integer customerId,
-                                      String status) {
+                                      OrderStatus status) {
         ReportPeriod period = ReportPeriod.of(from, to);
-        if (customerId != null && customerId <= 0) {
-            throw new IllegalArgumentException(
-                    "El identificador del cliente debe ser positivo: " + customerId);
-        }
-        if (status != null && !STATUSES.contains(status)) {
-            throw new IllegalArgumentException("Estado de pedido desconocido: " + status);
-        }
         if (period.isEmpty() && customerId == null && status == null) {
             return ALL;
         }
         return new SalesOrderFilter(period, customerId, status);
-    }
-
-    /** Date range applied to {@code SALES_ORDER.order_date}; never {@code null}. */
-    public ReportPeriod period() {
-        return period;
-    }
-
-    /** Customer id or {@code null} when every customer is listed. */
-    public Integer customerId() {
-        return customerId;
-    }
-
-    /** Order status or {@code null} when every status is listed. */
-    public String status() {
-        return status;
     }
 
     /** Whether at least one criterion narrows the history. */
@@ -113,7 +82,7 @@ public final class SalesOrderFilter {
         }
         if (status != null) {
             appendSeparator(label);
-            label.append(SalesOrder.labelFor(status));
+            label.append(status.label());
         }
         return label.toString();
     }
@@ -122,24 +91,6 @@ public final class SalesOrderFilter {
         if (label.length() > 0) {
             label.append(" · ");
         }
-    }
-
-    @Override
-    public boolean equals(Object other) {
-        if (this == other) {
-            return true;
-        }
-        if (!(other instanceof SalesOrderFilter filter)) {
-            return false;
-        }
-        return period.equals(filter.period)
-                && Objects.equals(customerId, filter.customerId)
-                && Objects.equals(status, filter.status);
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(period, customerId, status);
     }
 
     @Override

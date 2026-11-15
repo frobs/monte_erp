@@ -3,7 +3,6 @@ package com.entidaddesconocida.monte_erp.domain.model;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.Objects;
 
 /**
  * Immutable value object holding the period a report is generated for
@@ -15,22 +14,29 @@ import java.util.Objects;
  * rule the SQL adapter mirrors with
  * {@code entry_date >= from AND entry_date < to + 1 day}.</p>
  *
- * <p>The factory rejects an inverted period ({@code from > to}) with an
- * {@link IllegalArgumentException} <em>before</em> any query is issued, so the
+ * <p>The canonical constructor rejects an inverted period ({@code from > to}) with
+ * an {@link IllegalArgumentException} <em>before</em> any query is issued, so the
  * ViewModel can show a validation message without touching the database.</p>
+ *
+ * @param from lower bound (inclusive) or {@code null} when there is none
+ * @param to   upper bound (inclusive) or {@code null} when there is none
  */
-public final class ReportPeriod {
+public record ReportPeriod(LocalDate from, LocalDate to) {
 
     private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("dd/MM/yyyy");
 
     private static final ReportPeriod ALL = new ReportPeriod(null, null);
 
-    private final LocalDate from;
-    private final LocalDate to;
-
-    private ReportPeriod(LocalDate from, LocalDate to) {
-        this.from = from;
-        this.to = to;
+    /**
+     * @throws IllegalArgumentException when both bounds are present and
+     *                                  {@code from} is after {@code to}
+     */
+    public ReportPeriod {
+        if (from != null && to != null && from.isAfter(to)) {
+            throw new IllegalArgumentException(
+                    "La fecha inicial del período no puede ser posterior a la final: "
+                            + from + " > " + to);
+        }
     }
 
     /** Whole history: no lower nor upper bound. */
@@ -45,25 +51,7 @@ public final class ReportPeriod {
      *                                  {@code from} is after {@code to}
      */
     public static ReportPeriod of(LocalDate from, LocalDate to) {
-        if (from != null && to != null && from.isAfter(to)) {
-            throw new IllegalArgumentException(
-                    "La fecha inicial del período no puede ser posterior a la final: "
-                            + from + " > " + to);
-        }
-        if (from == null && to == null) {
-            return ALL;
-        }
-        return new ReportPeriod(from, to);
-    }
-
-    /** Lower bound (inclusive) or {@code null} when there is none. */
-    public LocalDate from() {
-        return from;
-    }
-
-    /** Upper bound (inclusive) or {@code null} when there is none. */
-    public LocalDate to() {
-        return to;
+        return from == null && to == null ? ALL : new ReportPeriod(from, to);
     }
 
     /** Whether the period has no bound at all (the whole history). */
@@ -94,22 +82,6 @@ public final class ReportPeriod {
         String fromLabel = from == null ? "…" : DATE_FORMAT.format(from);
         String toLabel = to == null ? "…" : DATE_FORMAT.format(to);
         return fromLabel + " – " + toLabel;
-    }
-
-    @Override
-    public boolean equals(Object other) {
-        if (this == other) {
-            return true;
-        }
-        if (!(other instanceof ReportPeriod period)) {
-            return false;
-        }
-        return Objects.equals(from, period.from) && Objects.equals(to, period.to);
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(from, to);
     }
 
     @Override

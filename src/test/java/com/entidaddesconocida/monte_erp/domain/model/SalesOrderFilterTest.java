@@ -54,13 +54,6 @@ class SalesOrderFilterTest {
     }
 
     @Test
-    @DisplayName("Un estado desconocido se rechaza porque nunca devolvería filas")
-    void unknownStatusIsRejected() {
-        assertThrows(IllegalArgumentException.class,
-                () -> SalesOrderFilter.of(null, null, null, "lost"));
-    }
-
-    @Test
     @DisplayName("Un id de cliente no positivo se rechaza")
     void nonPositiveCustomerIsRejected() {
         assertThrows(IllegalArgumentException.class,
@@ -72,7 +65,7 @@ class SalesOrderFilterTest {
     @Test
     @DisplayName("La etiqueta compone período, cliente y estado")
     void labelComposesEveryCriterion() {
-        SalesOrderFilter filter = SalesOrderFilter.of(FROM, TO, 3, SalesOrder.STATUS_PENDING);
+        SalesOrderFilter filter = SalesOrderFilter.of(FROM, TO, 3, OrderStatus.PENDING);
 
         assertEquals("01/01/2025 – 31/01/2025 · Cliente #3 · Pendiente", filter.label());
     }
@@ -80,13 +73,13 @@ class SalesOrderFilterTest {
     @Test
     @DisplayName("Dos filtros con los mismos criterios son iguales")
     void equalityUsesEveryCriterion() {
-        SalesOrderFilter filter = SalesOrderFilter.of(FROM, null, 3, SalesOrder.STATUS_SHIPPED);
+        SalesOrderFilter filter = SalesOrderFilter.of(FROM, null, 3, OrderStatus.SHIPPED);
 
-        assertEquals(filter, SalesOrderFilter.of(FROM, null, 3, SalesOrder.STATUS_SHIPPED));
-        assertFalse(filter.equals(SalesOrderFilter.of(TO, null, 3, SalesOrder.STATUS_SHIPPED)));
-        assertFalse(filter.equals(SalesOrderFilter.of(FROM, null, 4, SalesOrder.STATUS_SHIPPED)));
-        assertFalse(filter.equals(SalesOrderFilter.of(FROM, null, 3, SalesOrder.STATUS_PENDING)));
+        assertEquals(filter, SalesOrderFilter.of(FROM, null, 3, OrderStatus.SHIPPED));
+        assertFalse(filter.equals(SalesOrderFilter.of(TO, null, 3, OrderStatus.SHIPPED)));
+        assertFalse(filter.equals(SalesOrderFilter.of(FROM, null, 4, OrderStatus.SHIPPED)));
+        assertFalse(filter.equals(SalesOrderFilter.of(FROM, null, 3, OrderStatus.PENDING)));
         assertEquals(filter.hashCode(),
-                SalesOrderFilter.of(FROM, null, 3, SalesOrder.STATUS_SHIPPED).hashCode());
+                SalesOrderFilter.of(FROM, null, 3, OrderStatus.SHIPPED).hashCode());
     }
 }

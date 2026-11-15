@@ -1,8 +1,6 @@
 package com.entidaddesconocida.monte_erp.domain.model;
 
 import java.time.LocalDate;
-import java.util.Objects;
-import java.util.Set;
 
 /**
  * Immutable value object holding the criteria the purchase history is filtered
@@ -21,26 +19,19 @@ import java.util.Set;
  * status and a non-positive supplier id <em>before</em> any query is issued, so
  * the ViewModel can show a validation message without touching the database.</p>
  */
-public final class PurchaseFilter {
-
-    /** The four statuses of the domain, the only ones a filter may ask for. */
-    private static final Set<String> STATUSES = Set.of(
-            Purchase.STATUS_PENDING,
-            Purchase.STATUS_RECEIVED,
-            Purchase.STATUS_CANCELLED,
-            Purchase.STATUS_RETURNED);
+public record PurchaseFilter(ReportPeriod period, Integer supplierId, PurchaseStatus status) {
 
     private static final PurchaseFilter ALL =
             new PurchaseFilter(ReportPeriod.all(), null, null);
 
-    private final ReportPeriod period;
-    private final Integer supplierId;
-    private final String status;
-
-    private PurchaseFilter(ReportPeriod period, Integer supplierId, String status) {
-        this.period = period;
-        this.supplierId = supplierId;
-        this.status = status;
+    /**
+     * @throws IllegalArgumentException when the supplier id is not positive
+     */
+    public PurchaseFilter {
+        if (supplierId != null && supplierId <= 0) {
+            throw new IllegalArgumentException(
+                    "El identificador del proveedor debe ser positivo: " + supplierId);
+        }
     }
 
     /** Whole history: no date range, no supplier and no status. */
@@ -54,19 +45,16 @@ public final class PurchaseFilter {
      * @param from       lower bound (inclusive) of the purchase date or {@code null}
      * @param to         upper bound (inclusive) of the purchase date or {@code null}
      * @param supplierId supplier to filter by or {@code null} for every supplier
-     * @param status     one of the {@code Purchase.STATUS_*} constants or {@code null}
-     * @throws IllegalArgumentException when the range is inverted, the status is
-     *                                  unknown or the supplier id is not positive
+     * @param status     a {@link PurchaseStatus} or {@code null} for every status
+     * @throws IllegalArgumentException when the range is inverted or the supplier
+     *                                  id is not positive
      */
     public static PurchaseFilter of(LocalDate from, LocalDate to, Integer supplierId,
-                                    String status) {
+                                    PurchaseStatus status) {
         ReportPeriod period = ReportPeriod.of(from, to);
         if (supplierId != null && supplierId <= 0) {
             throw new IllegalArgumentException(
                     "El identificador del proveedor debe ser positivo: " + supplierId);
-        }
-        if (status != null && !STATUSES.contains(status)) {
-            throw new IllegalArgumentException("Estado de compra desconocido: " + status);
         }
         if (period.isEmpty() && supplierId == null && status == null) {
             return ALL;
@@ -85,7 +73,7 @@ public final class PurchaseFilter {
     }
 
     /** Purchase status or {@code null} when every status is listed. */
-    public String status() {
+    public PurchaseStatus status() {
         return status;
     }
 
@@ -113,7 +101,7 @@ public final class PurchaseFilter {
         }
         if (status != null) {
             appendSeparator(label);
-            label.append(Purchase.labelFor(status));
+            label.append(status.label());
         }
         return label.toString();
     }
@@ -122,24 +110,6 @@ public final class PurchaseFilter {
         if (label.length() > 0) {
             label.append(" · ");
         }
-    }
-
-    @Override
-    public boolean equals(Object other) {
-        if (this == other) {
-            return true;
-        }
-        if (!(other instanceof PurchaseFilter filter)) {
-            return false;
-        }
-        return period.equals(filter.period)
-                && Objects.equals(supplierId, filter.supplierId)
-                && Objects.equals(status, filter.status);
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(period, supplierId, status);
     }
 
     @Override

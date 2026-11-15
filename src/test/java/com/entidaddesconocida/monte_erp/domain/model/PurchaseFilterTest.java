@@ -54,13 +54,6 @@ class PurchaseFilterTest {
     }
 
     @Test
-    @DisplayName("Un estado desconocido se rechaza porque nunca devolvería filas")
-    void unknownStatusIsRejected() {
-        assertThrows(IllegalArgumentException.class,
-                () -> PurchaseFilter.of(null, null, null, "lost"));
-    }
-
-    @Test
     @DisplayName("Un id de proveedor no positivo se rechaza")
     void nonPositiveSupplierIsRejected() {
         assertThrows(IllegalArgumentException.class,
@@ -72,7 +65,7 @@ class PurchaseFilterTest {
     @Test
     @DisplayName("La etiqueta compone período, proveedor y estado")
     void labelComposesEveryCriterion() {
-        PurchaseFilter filter = PurchaseFilter.of(FROM, TO, 3, Purchase.STATUS_PENDING);
+        PurchaseFilter filter = PurchaseFilter.of(FROM, TO, 3, PurchaseStatus.PENDING);
 
         assertEquals("01/01/2025 – 31/01/2025 · Proveedor #3 · Pendiente", filter.label());
     }
@@ -80,13 +73,13 @@ class PurchaseFilterTest {
     @Test
     @DisplayName("Dos filtros con los mismos criterios son iguales")
     void equalityUsesEveryCriterion() {
-        PurchaseFilter filter = PurchaseFilter.of(FROM, null, 3, Purchase.STATUS_RECEIVED);
+        PurchaseFilter filter = PurchaseFilter.of(FROM, null, 3, PurchaseStatus.RECEIVED);
 
-        assertEquals(filter, PurchaseFilter.of(FROM, null, 3, Purchase.STATUS_RECEIVED));
-        assertFalse(filter.equals(PurchaseFilter.of(TO, null, 3, Purchase.STATUS_RECEIVED)));
-        assertFalse(filter.equals(PurchaseFilter.of(FROM, null, 4, Purchase.STATUS_RECEIVED)));
-        assertFalse(filter.equals(PurchaseFilter.of(FROM, null, 3, Purchase.STATUS_PENDING)));
+        assertEquals(filter, PurchaseFilter.of(FROM, null, 3, PurchaseStatus.RECEIVED));
+        assertFalse(filter.equals(PurchaseFilter.of(TO, null, 3, PurchaseStatus.RECEIVED)));
+        assertFalse(filter.equals(PurchaseFilter.of(FROM, null, 4, PurchaseStatus.RECEIVED)));
+        assertFalse(filter.equals(PurchaseFilter.of(FROM, null, 3, PurchaseStatus.PENDING)));
         assertEquals(filter.hashCode(),
-                PurchaseFilter.of(FROM, null, 3, Purchase.STATUS_RECEIVED).hashCode());
+                PurchaseFilter.of(FROM, null, 3, PurchaseStatus.RECEIVED).hashCode());
     }
 }
