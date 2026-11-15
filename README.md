@@ -7,11 +7,12 @@ Aplicación de escritorio ERP construida con **Java 25** y **JavaFX 21**, gestio
 ## Tabla de contenidos
 
 1. [Requisitos previos](#requisitos-previos)
-2. [Estructura del proyecto](#estructura-del-proyecto)
-3. [Compilar y empaquetar](#compilar-y-empaquetar)
-4. [Ejecutar la aplicación](#ejecutar-la-aplicación)
-5. [Base de datos MySQL con Docker](#base-de-datos-mysql-con-docker)
-6. [Conexión de la aplicación a MySQL](#conexión-de-la-aplicación-a-mysql)
+2. [Dependencias del sistema para JavaFX y los tests de interfaz](#dependencias-del-sistema-para-javafx-y-los-tests-de-interfaz)
+3. [Estructura del proyecto](#estructura-del-proyecto)
+4. [Compilar y empaquetar](#compilar-y-empaquetar)
+5. [Ejecutar la aplicación](#ejecutar-la-aplicación)
+6. [Base de datos MySQL con Docker](#base-de-datos-mysql-con-docker)
+7. [Conexión de la aplicación a MySQL](#conexión-de-la-aplicación-a-mysql)
 
 ---
 
@@ -24,6 +25,209 @@ Aplicación de escritorio ERP construida con **Java 25** y **JavaFX 21**, gestio
 | Docker          | 24+              | [Docker Desktop](https://www.docker.com/products/docker-desktop/)                                   |
 
 > **Nota:** El proyecto incluye el wrapper de Maven (`mvnw` / `mvnw.cmd`), por lo que **no es necesario instalar Maven** globalmente. Basta con tener el JDK.
+
+---
+
+## Dependencias del sistema para JavaFX y los tests de interfaz
+
+JavaFX y TestFX se descargan como dependencias de Maven: **no hace falta instalar
+el SDK de JavaFX**. Lo que sí debe estar disponible en el sistema operativo son
+las bibliotecas nativas que carga JavaFX 21 y, para los tests de interfaz, Docker
+y un servidor gráfico.
+
+Además:
+
+- La aplicación necesita un **MySQL 8.0** accesible (ver
+  [Base de datos MySQL con Docker](#base-de-datos-mysql-con-docker)) y un
+  **keyring del sistema** para guardar la contraseña de la base de datos.
+- Los tests de interfaz **levantan su propio MySQL efímero** con Docker; no usan
+  el MySQL de la aplicación ni el keyring real (inyectan un
+  `FakeCredentialStore`).
+- Los tests usan el robot `glass` de JavaFX y renderizado software
+  (`prism.order=sw`), así que no necesitan GPU.
+
+### Resumen por sistema operativo
+
+| Sistema | Arrancar la app (`javafx:run`) | Ejecutar los tests de interfaz |
+| --- | --- | --- |
+| Windows 10/11 x64 | JDK 25. JavaFX aporta sus DLL nativas; no hay paquetes extra. | Docker Desktop con contenedores Linux + sesión de escritorio interactiva. |
+| macOS 11+ (Intel o Apple Silicon) | JDK 25. JavaFX aporta sus `.dylib`; no hay paquetes extra. | Docker Desktop + sesión de escritorio interactiva (y permiso de Accesibilidad si el robot no envía eventos). |
+| Linux x86_64/aarch64 | JDK 25 + GTK 3.8+ + X11/XWayland + `libGL` (o renderizado software). | Docker + GTK 3 + Xvfb + `xauth` (+ `xdpyinfo` si no hay `xvfb-run`). |
+
+> En Windows y macOS, para los tests bastan el JDK, el wrapper de Maven y Docker
+> Desktop. En Linux, una instalación de escritorio completa ya trae GTK 3 y el
+> keyring; las listas siguientes son para instalaciones mínimas, servidores o
+> contenedores.
+
+> **Fat JAR y plataforma:** `target/monte_erp-1.0-SNAPSHOT.jar` solo contiene las
+> bibliotecas nativas de JavaFX de la plataforma donde se ejecutó `mvn package`.
+> Para verlo en otro sistema operativo hay que empaquetarlo en ese sistema (o
+> generar una imagen con `javafx:jlink` en el destino); `./mvnw javafx:run` siempre
+> usa las nativas de la plataforma actual.
+
+### Linux
+
+JavaFX 21 en Linux exige **GTK 3.8 o superior** y se ejecuta sobre **X11**; en una
+sesión Wayland lo hace a través de **XWayland** (JavaFX fuerza `GDK_BACKEND=x11`).
+Maven descarga automáticamente el artefacto nativo `linux` o `linux-aarch64`
+según la arquitectura del JDK, así que no hay que instalar JavaFX aparte.
+
+Las bibliotecas que enlaza directamente JavaFX son, entre otras, `libgtk-3`,
+`libX11`, `libxcb`, `libXxf86vm`, `libXtst`, `libGL`, FreeType y fontconfig.
+`libgtk-3` arrastra la mayoría de dependencias (Pango, Cairo, GDK Pixbuf, ATK…),
+pero `libXtst` y `libXxf86vm` suelen ser paquetes independientes.
+
+#### Debian 12 / Ubuntu 22.04
+
+```bash
+sudo apt update
+sudo apt install libgtk-3-0 libx11-6 libxcb1 libxxf86vm1 libxtst6 \
+  libgl1 libfreetype6 libfontconfig1 fonts-dejavu-core
+
+# Tests de interfaz en modo headless
+sudo apt install xvfb xauth x11-utils
+```
+
+En **Debian 13 / Ubuntu 24.04 o posterior** los paquetes `t64` sustituyen a los
+anteriores:
+
+```bash
+sudo apt install libgtk-3-0t64 libx11-6 libxcb1 libxxf86vm1 libxtst6 \
+  libgl1 libfreetype6 libfontconfig1 fonts-dejavu-core
+```
+
+#### Fedora / RHEL 9+
+
+```bash
+sudo dnf install gtk3 libX11 libxcb libXxf86vm libXtst mesa-libGL \
+  freetype fontconfig dejavu-sans-fonts
+
+# Tests de interfaz en modo headless
+sudo dnf install xorg-x11-server-Xvfb xorg-x11-xauth xdpyinfo
+```
+
+#### openSUSE Leap / Tumbleweed
+
+```bash
+sudo zypper install libgtk-3-0 libX11-6 libxcb1 libXxf86vm1 libXtst6 \
+  libglvnd libfreetype6 libfontconfig1 dejavu-fonts
+
+# Tests de interfaz en modo headless
+sudo zypper install xorg-x11-server-Xvfb xvfb-run xauth xdpyinfo
+```
+
+#### Arch Linux / Manjaro
+
+```bash
+sudo pacman -S --needed gtk3 libx11 libxcb libxxf86vm libxtst libglvnd \
+  freetype2 fontconfig ttf-dejavu
+
+# Tests de interfaz en modo headless
+sudo pacman -S --needed xorg-server-xvfb xorg-xauth xorg-xdpyinfo
+```
+
+En cualquier otra distribución con glibc, instala los paquetes equivalentes a
+estas bibliotecas; los nombres cambian, pero JavaFX enlaza contra las mismas.
+
+#### Keyring en Linux (solo para la app)
+
+La aplicación guarda la contraseña de MySQL en el keyring del sistema. Necesita
+una sesión **D-Bus** y un proveedor de **Secret Service**, normalmente
+`gnome-keyring`. Sin él la app arranca, pero no puede guardar la conexión.
+
+| Distribución | Instalación |
+| --- | --- |
+| Debian / Ubuntu | `sudo apt install dbus-user-session gnome-keyring` |
+| Fedora / RHEL | `sudo dnf install dbus-daemon gnome-keyring` |
+| openSUSE | `sudo zypper install dbus-1-daemon gnome-keyring` |
+| Arch / Manjaro | `sudo pacman -S --needed dbus gnome-keyring` |
+
+En un escritorio GNOME/KDE completo suele estar ya activo. `java-keyring` 1.0.4
+usa **KWallet 5** en KDE; si el guardado falla en KDE 6, instala y arranca
+`gnome-keyring`, que implementa Secret Service. Los tests de interfaz no
+necesitan keyring.
+
+#### Notas de Linux
+
+- **Sin GPU / escritorio remoto / VM:** usa renderizado software con
+  `JAVA_TOOL_OPTIONS=-Dprism.order=sw ./mvnw clean javafx:run` o, con el JAR,
+  `java -Dprism.order=sw -jar target/monte_erp-1.0-SNAPSHOT.jar`.
+- **Docker sin `sudo`:** el usuario que ejecuta los tests debe poder hablar con
+  el daemon (`docker info` sin error). En Linux, añádelo al grupo `docker` o usa
+  un daemon rootless.
+- **Alpine y otras distribuciones con musl:** los binarios oficiales de JavaFX
+  son para glibc; no funcionan en Alpine sin una capa de compatibilidad. Usa una
+  distribución glibc o un contenedor con glibc.
+
+### Windows
+
+- **JDK 25 x64** (Temurin, Microsoft Build of OpenJDK u Oracle JDK) y el wrapper
+  `mvnw.cmd` incluido.
+- JavaFX incluye sus DLL nativas en los artefactos de Maven; no hay que instalar
+  el SDK de JavaFX.
+- La app se arranca desde una sesión de escritorio normal:
+
+  ```bat
+  mvnw.cmd clean javafx:run
+  ```
+
+- Para los tests de interfaz hacen falta **Docker Desktop** con contenedores
+  Linux en ejecución y una **sesión de escritorio interactiva** (TestFX conduce
+  la ventana real; no hay Xvfb nativo en Windows):
+
+  ```bat
+  mvnw.cmd test -Pui-tests
+  ```
+
+- Si necesitas ejecutar los tests sin escritorio (CI), usa **WSL2 con una
+  distribución Linux** y sigue los pasos de Linux (`scripts/run-ui-tests.sh`
+  dentro de WSL2, con integración de Docker Desktop).
+- Las credenciales de MySQL se guardan en el **Administrador de credenciales de
+  Windows**, incluido en el sistema.
+
+### macOS
+
+- **macOS 11 o superior** (mínimo de JavaFX 21) con un JDK 25 para Intel o Apple
+  Silicon; Maven elige el artefacto `mac` o `mac-aarch64`. Comprueba además que
+  tu versión de macOS esté soportada por el JDK 25.
+- No hacen falta paquetes nativos adicionales: JavaFX incluye sus `.dylib`.
+- La app se arranca desde una sesión gráfica:
+
+  ```bash
+  ./mvnw clean javafx:run
+  ```
+
+- Tests de interfaz con Docker Desktop (contenedores Linux) y sesión de
+  escritorio iniciada:
+
+  ```bash
+  ./mvnw test -Pui-tests
+  ```
+
+- Si el robot no mueve el ratón ni escribe, concede permiso de **Accesibilidad**
+  al terminal o al IDE en *Ajustes del Sistema → Privacidad y seguridad →
+  Accesibilidad*.
+- `scripts/run-ui-tests.sh` está pensado para Linux (usa Xvfb y `DISPLAY`); en
+  macOS ejecuta directamente Maven.
+- Las credenciales se guardan en el **Llavero** del usuario.
+
+### Requisitos comunes de los tests de interfaz
+
+Independientemente del sistema, la suite `-Pui-tests` necesita:
+
+1. **Docker** con el daemon accesible (`docker info`). La primera ejecución
+   descarga la imagen `mysql:8.0` y crea un contenedor efímero.
+2. **Un display**: una sesión gráfica real o, en Linux, Xvfb. El perfil ya fija
+   `prism.order=sw` y `testfx.robot=glass`, por lo que no hace falta GPU.
+3. **GTK 3 y las bibliotecas de JavaFX** indicadas arriba. En Linux headless,
+   además `xvfb`/`xvfb-run`, `xauth` y `xdpyinfo` (si no existe `xvfb-run`).
+4. **Maven Wrapper** (`./mvnw` o `mvnw.cmd`) y JDK 25; no hace falta Maven global.
+
+Con un display ya disponible se puede ejecutar directamente
+`./mvnw test -Pui-tests` (o `mvnw.cmd test -Pui-tests` en Windows); en Linux sin
+pantalla, `scripts/run-ui-tests.sh` arranca un Xvfb privado y limpia el
+contenedor al terminar. En macOS y Windows no se usa Xvfb: ejecuta Maven desde
+una sesión de escritorio.
 
 ---
 
@@ -312,10 +516,12 @@ baseline antes de cada test**, de modo que todos los tests ven exactamente el
 mismo dataset aunque alguno cree o modifique datos. El contenedor se elimina al
 final de la ejecución (hook de apagado y limpieza del script).
 
-Requisitos del entorno: Docker y las librerías de GTK3 que necesita JavaFX en
-Linux. Para usar el script en un servidor sin pantalla hacen falta `xvfb` o
-`xvfb-run` (si no está `xvfb-run`, el script arranca `Xvfb` directamente). Para
-ejecutar sobre el display actual: `UI_USE_EXISTING_DISPLAY=1 scripts/run-ui-tests.sh`.
+Requisitos del entorno: los descritos en
+[Dependencias del sistema para JavaFX y los tests de interfaz](#dependencias-del-sistema-para-javafx-y-los-tests-de-interfaz).
+Para usar el script en un servidor sin pantalla hacen falta `xvfb` o
+`xvfb-run` (si no está `xvfb-run`, el script arranca `Xvfb` directamente y usa
+`xdpyinfo` para comprobar que está listo). Para ejecutar sobre el display actual:
+`UI_USE_EXISTING_DISPLAY=1 scripts/run-ui-tests.sh`.
 
 La suite cubre las 12 pantallas y los casos de uso de negocio completos:
 login/onboarding, menú por rol, usuarios, categorías, proveedores, clientes,
