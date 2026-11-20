@@ -2,10 +2,9 @@ package com.entidaddesconocida.monte_erp.app;
 
 import de.saxsys.mvvmfx.ViewTuple;
 
-import javafx.application.Platform;
 import javafx.beans.property.ObjectProperty;
 import javafx.beans.property.SimpleObjectProperty;
-import javafx.geometry.Dimension2D;
+import javafx.geometry.Rectangle2D;
 import javafx.scene.Node;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
@@ -25,9 +24,11 @@ import javafx.stage.Stage;
  * resizable, so the sizes below are only used for the very first scene, while
  * the stage is not maximized.</p>
  *
- * <p>Since a maximized window is restored (system button) to the bounds it had
- * before being maximized, the stage is given a size that makes sense on its
- * screen before maximizing: restoring the window never brings back the small
+ * <p>A maximized window is restored to the bounds it had just before being
+ * maximized, and the platform does it not only with the system button but also
+ * whenever a modal dialog takes the focus. The stage therefore fills its screen
+ * before maximizing: whatever restores it brings back the very same size, so
+ * the confirmation dialogs never resize the window nor bring back the small
  * login/setup size.</p>
  */
 public final class SceneNavigator {
@@ -57,18 +58,10 @@ public final class SceneNavigator {
     public static final double REPORTS_WIDTH = 1180;
     public static final double REPORTS_HEIGHT = 720;
 
-    /**
-     * Share of the screen used when the window is restored with the system
-     * button, so it is large enough to read the tables and forms.
-     */
-    private static final double RESTORE_SCREEN_RATIO = 0.85;
-
     /** Key of the scene owned by this navigator inside {@link Stage#getProperties()}. */
     private static final String SCENE_PROPERTY = "monte-erp.scene";
     /** Key of the action currently bound to ESC inside {@link Scene#getProperties()}. */
     private static final String ESCAPE_PROPERTY = "monte-erp.on-escape";
-    /** Key of the flag marking the restored size as already fixed once. */
-    private static final String RESTORE_FIXED_PROPERTY = "monte-erp.restore-fixed";
 
     private SceneNavigator() {
         // Utility class: never instantiated.
@@ -110,15 +103,7 @@ public final class SceneNavigator {
             stage.getProperties().put(SCENE_PROPERTY, scene);
             stage.setScene(scene);
             if (!stage.isShowing()) {
-                // Full screen by default, but never a non-resizable window: if the
-                // user restores or resizes it, the choice is respected from then on.
-                stage.setResizable(true);
-                // The platform restores a maximized window to the bounds it had
-                // before being maximized, so give it a sensible size first: this
-                // is what the user sees after pressing the restore button.
-                applySensibleSize(stage);
-                keepSensibleSizeOnRestore(stage);
-                stage.setMaximized(true);
+                openMaximized(stage);
             }
         } else {
             // Same scene, new root: the stage size never changes, so there is no
@@ -135,59 +120,27 @@ public final class SceneNavigator {
     }
 
     /**
-     * Sizes the stage as if it had just been restored from a maximized state:
-     * a large part of its screen, but never smaller than the main menu.
+     * Opens the window full screen: it is maximized but stays resizable, so the
+     * user can restore, move or resize it from then on.
+     *
+     * <p>Before maximizing, the stage is given the whole usable area of its
+     * screen. That is the size the platform remembers as the "restored" one, and
+     * the platform goes back to it whenever the window is restored, including
+     * when a modal dialog takes the focus: starting from the screen makes that
+     * restore invisible, so opening a confirmation dialog never resizes the
+     * window.</p>
      */
-    private static void applySensibleSize(Stage stage) {
-        Dimension2D size = sensibleSize(screenOf(stage));
-        stage.setWidth(size.getWidth());
-        stage.setHeight(size.getHeight());
+    public static void openMaximized(Stage stage) {
+        stage.setResizable(true);
+        fillScreen(stage);
+        stage.setMaximized(true);
     }
 
-    /**
-     * Safety net for platforms that ignore the size set before maximizing: the
-     * first time the window is restored, if it came back too small to be usable,
-     * it is enlarged and centred. Later restores keep the size the user chose.
-     */
-    private static void keepSensibleSizeOnRestore(Stage stage) {
-        stage.maximizedProperty().addListener((observable, wasMaximized, isMaximized) -> {
-            if (!wasMaximized || isMaximized
-                    || stage.getProperties().containsKey(RESTORE_FIXED_PROPERTY)) {
-                return;
-            }
-            stage.getProperties().put(RESTORE_FIXED_PROPERTY, Boolean.TRUE);
-            // Let the platform finish restoring before measuring the window.
-            Platform.runLater(() -> enlargeAndCenter(stage));
-        });
-    }
-
-    /** Grows a restored window that ended up smaller than a sensible size. */
-    private static void enlargeAndCenter(Stage stage) {
-        Screen screen = screenOf(stage);
-        Dimension2D size = sensibleSize(screen);
-        if (stage.getWidth() >= size.getWidth() && stage.getHeight() >= size.getHeight()) {
-            return;
-        }
-        stage.setWidth(Math.max(stage.getWidth(), size.getWidth()));
-        stage.setHeight(Math.max(stage.getHeight(), size.getHeight()));
-        stage.setX(screen.getVisualBounds().getMinX() + (screen.getVisualBounds().getWidth()
-                - stage.getWidth()) / 2);
-        stage.setY(screen.getVisualBounds().getMinY() + (screen.getVisualBounds().getHeight()
-                - stage.getHeight()) / 2);
-    }
-
-    /**
-     * Size that makes sense for a restored window: most of the screen, but never
-     * smaller than the main menu and never larger than the available area.
-     */
-    private static Dimension2D sensibleSize(Screen screen) {
-        double availableWidth = screen.getVisualBounds().getWidth();
-        double availableHeight = screen.getVisualBounds().getHeight();
-        double width = Math.min(availableWidth,
-                Math.max(MAIN_WIDTH, Math.round(availableWidth * RESTORE_SCREEN_RATIO)));
-        double height = Math.min(availableHeight,
-                Math.max(MAIN_HEIGHT, Math.round(availableHeight * RESTORE_SCREEN_RATIO)));
-        return new Dimension2D(width, height);
+    /** Gives the stage the usable area of its screen, like a maximized window. */
+    private static void fillScreen(Stage stage) {
+        Rectangle2D screen = screenOf(stage).getVisualBounds();
+        stage.setWidth(screen.getWidth());
+        stage.setHeight(screen.getHeight());
     }
 
     /** The screen the stage is on, or the primary one before it is shown. */
