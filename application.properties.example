@@ -1,0 +1,19 @@
+# Monte ERP - database configuration sample (ASCII / UTF-8, no credentials).
+#
+# This file is only documentation: the application creates and rewrites its own
+# `application.properties`, never this example. Copy the keys you need from here
+# instead of editing the example in place.
+#
+# Where the real file lives:
+#   development : <working directory>/application.properties
+#   packaged    : per-user config directory
+#                 (%APPDATA%\Monte ERP, ~/Library/Application Support/Monte ERP,
+#                  $XDG_CONFIG_HOME/monte-erp or ~/.config/monte-erp)
+#   override    : -Dmonte.erp.config.dir=<dir> or MONTE_ERP_CONFIG_DIR=<dir>
+#
+# The database user and password are NOT stored here: they live in the operating
+# system keyring (accounts "db.user" and "db.password").
+#
+# Keep the file ASCII or UTF-8: it is read and written with StandardCharsets.UTF_8.
+
+db.url=jdbc:mysql://localhost:3306/monte_erp?useUnicode=true&connectionTimeZone=Europe/Madrid

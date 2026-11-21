@@ -4,7 +4,9 @@ import com.entidaddesconocida.monte_erp.domain.model.ConnectionSettings;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.OutputStream;
+import java.io.Reader;
+import java.io.Writer;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -220,10 +222,17 @@ public final class DatabaseConfig {
     private void writeUrl(String url) throws IOException {
         Properties properties = new Properties();
         if (Files.isRegularFile(configFile)) {
-            try (InputStream in = Files.newInputStream(configFile)) {
+            try (Reader in = Files.newBufferedReader(configFile, StandardCharsets.UTF_8)) {
                 properties.load(in);
             } catch (IOException e) {
-                // A broken file is replaced by a fresh one.
+                // A legacy ISO-8859-1 file (or a broken one) is retried leniently
+                // with the JDK default decoding, or replaced by a fresh one.
+                properties.clear();
+                try (InputStream in = Files.newInputStream(configFile)) {
+                    properties.load(in);
+                } catch (IOException ignored) {
+                    properties.clear();
+                }
             }
         }
         properties.setProperty(KEY_URL, url == null ? "" : url.trim());
@@ -232,8 +241,11 @@ public final class DatabaseConfig {
         Files.createDirectories(parent);
         Path temporaryFile = Files.createTempFile(parent, CONFIG_FILE_NAME, ".tmp");
         try {
-            try (OutputStream out = Files.newOutputStream(temporaryFile)) {
-                properties.store(out, "Monte ERP · database connection URL");
+            // Properties.store(OutputStream, ...) writes the comment in ISO-8859-1
+            // (S5): write through a UTF-8 writer and keep the comment ASCII so the
+            // file always matches the project.build.sourceEncoding in the POM.
+            try (Writer out = Files.newBufferedWriter(temporaryFile, StandardCharsets.UTF_8)) {
+                properties.store(out, "Monte ERP database connection URL");
             }
             try {
                 Files.move(temporaryFile, absoluteFile, StandardCopyOption.ATOMIC_MOVE,

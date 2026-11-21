@@ -37,3 +37,8 @@ build/
 
 ### Mac OS ###
 .DS_Store
+
+### Monte ERP ###
+# Runtime configuration written on every launch (see S5 in docs/revision_tecnica.md).
+# `application.properties.example` documents the keys and stays versioned.
+/application.properties

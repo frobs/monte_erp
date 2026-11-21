@@ -7,6 +7,9 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.nio.charset.CodingErrorAction;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Properties;
@@ -100,6 +103,49 @@ class DatabaseConfigTest {
 
         Properties properties = new Properties();
         try (var in = Files.newInputStream(file)) {
+            properties.load(in);
+        }
+        assertEquals("valor", properties.getProperty("otra.clave"));
+        assertEquals("jdbc:mysql://localhost/monte_erp", properties.getProperty(DatabaseConfig.KEY_URL));
+    }
+
+    @Test
+    @DisplayName("save escribe el archivo en UTF-8 con un comentario ASCII (S5)")
+    void saveWritesUtf8WithoutNonAsciiBytes() throws IOException {
+        DatabaseConfig config = config(new FakeCredentialStore());
+
+        config.save(new ConnectionSettings("jdbc:mysql://localhost/monte_erp", "erp_user", "erp_pass"));
+
+        byte[] bytes = Files.readAllBytes(config.configFile());
+        String text = StandardCharsets.UTF_8.newDecoder()
+                .onMalformedInput(CodingErrorAction.REPORT)
+                .onUnmappableCharacter(CodingErrorAction.REPORT)
+                .decode(ByteBuffer.wrap(bytes))
+                .toString();
+        for (byte b : bytes) {
+            assertTrue(b >= 0, "byte no ASCII en el archivo: 0x" + Integer.toHexString(b & 0xFF));
+        }
+        assertTrue(text.contains("Monte ERP database connection URL"), text);
+        assertEquals("jdbc:mysql://localhost/monte_erp", config.load().url());
+    }
+
+    @Test
+    @DisplayName("save reescribe en UTF-8 un archivo legado ISO-8859-1 sin perder claves")
+    void saveMigratesLegacyIsoFile() throws IOException {
+        Path file = tempDir.resolve("application.properties");
+        Files.write(file, ("# Monte ERP \u00b7 database connection URL\n"
+                + "otra.clave=valor\n"
+                + "db.url=jdbc:mysql://viejo:3306/monte_erp\n").getBytes(StandardCharsets.ISO_8859_1));
+
+        config(new FakeCredentialStore())
+                .save(new ConnectionSettings("jdbc:mysql://localhost/monte_erp", "erp_user", "erp_pass"));
+
+        byte[] bytes = Files.readAllBytes(file);
+        for (byte b : bytes) {
+            assertTrue(b >= 0, "byte no ASCII tras migrar: 0x" + Integer.toHexString(b & 0xFF));
+        }
+        Properties properties = new Properties();
+        try (var in = Files.newBufferedReader(file, StandardCharsets.UTF_8)) {
             properties.load(in);
         }
         assertEquals("valor", properties.getProperty("otra.clave"));
