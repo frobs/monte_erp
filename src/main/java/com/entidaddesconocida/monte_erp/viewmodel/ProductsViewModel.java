@@ -283,7 +283,7 @@ public class ProductsViewModel extends FilterableCrudViewModel<Product> {
     }
 
     @Override
-    protected void write() throws SQLException {
+    protected Callable<Void> write() {
         String nameValue = trimmed(name.get());
         String skuValue = trimmed(sku.get());
         String descriptionValue = blankToNull(trimmed(description.get()));
@@ -293,16 +293,21 @@ public class ProductsViewModel extends FilterableCrudViewModel<Product> {
         if (selected == null) {
             Product product = new Product(nameValue, skuValue, descriptionValue, priceValue, minStockValue,
                     category.get(), true);
-            productRepository.insert(product);
-        } else {
-            // Persist a detached copy: a failed write must never leave the
-            // rendered row with values that are not in the database. The
-            // description and min_stock are edited in the form.
-            Product updated = new Product(nameValue, skuValue, descriptionValue,
-                    priceValue, minStockValue, category.get(), selected.isActive());
-            updated.setId(selected.getId());
-            productRepository.update(updated);
+            return () -> {
+                productRepository.insert(product);
+                return null;
+            };
         }
+        // Persist a detached copy: a failed write must never leave the
+        // rendered row with values that are not in the database. The
+        // description and min_stock are edited in the form.
+        Product updated = new Product(nameValue, skuValue, descriptionValue,
+                priceValue, minStockValue, category.get(), selected.isActive());
+        updated.setId(selected.getId());
+        return () -> {
+            productRepository.update(updated);
+            return null;
+        };
     }
 
     @Override

@@ -1,5 +1,6 @@
 package com.entidaddesconocida.monte_erp.viewmodel;
 
+import com.entidaddesconocida.monte_erp.app.BackgroundTasks;
 import com.entidaddesconocida.monte_erp.viewmodel.support.FakeCrudItem;
 import com.entidaddesconocida.monte_erp.viewmodel.support.FakeCrudRepository;
 
@@ -14,8 +15,11 @@ import org.junit.jupiter.api.Test;
 
 import java.sql.SQLException;
 import java.sql.SQLIntegrityConstraintViolationException;
+import java.util.ArrayDeque;
+import java.util.Deque;
 import java.util.List;
 import java.util.concurrent.Callable;
+import java.util.function.Consumer;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -30,7 +34,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * this suite covers the template itself with a minimal fake entity and an
  * in-memory repository, without a database or the JavaFX toolkit. It pins the
  * parts that are easy to break while refactoring the base: the save template
- * (field validation, business rules and integrity violation), the
+ * (field validation, business rules, integrity violation and the deferred write
+ * with its "one write at a time" guard), the
  * deactivate/activate guards, the reload failure message, the toggle state and
  * the live validation, plus the filterable layer (search and the
  * "show inactive" rollback).</p>
@@ -236,6 +241,92 @@ class CrudViewModelTest {
         assertEquals("Dos", viewModel.items.get(0).getName());
     }
 
+    @Test
+    @DisplayName("save() encola la escritura: el bloqueo ocurre en el callback, no en el hilo de UI")
+    void saveRunsTheWriteInTheBackground() {
+        Deque<Runnable> pending = new ArrayDeque<>();
+        TestViewModel deferred = new TestViewModel(repository, deferredTasks(pending));
+        deferred.load();
+        pending.clear();
+        deferred.nameProperty().set("Dos");
+
+        deferred.save();
+
+        // Nothing has been written yet: the JDBC call waits in the executor.
+        assertEquals(1, repository.count());
+        assertEquals("", deferred.statusMessageProperty().get());
+
+        drain(pending);
+
+        assertEquals(2, repository.count());
+        assertEquals("Elemento guardado correctamente.",
+                deferred.statusMessageProperty().get());
+        assertEquals(2, deferred.items.size());
+    }
+
+    @Test
+    @DisplayName("Dos clics seguidos en guardar envían una sola escritura")
+    void doubleClickSavesOnlyOnce() {
+        Deque<Runnable> pending = new ArrayDeque<>();
+        TestViewModel deferred = new TestViewModel(repository, deferredTasks(pending));
+        deferred.load();
+        pending.clear();
+        deferred.nameProperty().set("Dos");
+
+        deferred.save();
+        deferred.save();
+
+        assertEquals(1, pending.size());
+        drain(pending);
+        assertEquals(2, repository.count());
+    }
+
+    @Test
+    @DisplayName("Una escritura fallida libera la guarda y deja reintentar")
+    void failedWriteReleasesTheGuard() {
+        Deque<Runnable> pending = new ArrayDeque<>();
+        TestViewModel deferred = new TestViewModel(repository, deferredTasks(pending));
+        deferred.load();
+        pending.clear();
+        deferred.nameProperty().set("Dos");
+        repository.failOn("insert");
+
+        deferred.save();
+        drain(pending);
+
+        assertTrue(deferred.errorMessageProperty().get().contains("No se pudo conectar"));
+        // The guard is released even on failure, so the retry is submitted.
+        deferred.save();
+        assertEquals(1, pending.size());
+    }
+
+    /**
+     * Executor whose tasks wait until the test runs them, like a query that is
+     * still in flight while the UI thread keeps running.
+     */
+    private static BackgroundTasks deferredTasks(Deque<Runnable> pending) {
+        return new BackgroundTasks() {
+            @Override
+            public <T> void submit(Callable<T> task, Consumer<T> onSuccess,
+                                   Consumer<Throwable> onFailure) {
+                pending.add(() -> {
+                    try {
+                        onSuccess.accept(task.call());
+                    } catch (Exception failure) {
+                        onFailure.accept(failure);
+                    }
+                });
+            }
+        };
+    }
+
+    /** Runs every queued task, including the ones they queue themselves. */
+    private static void drain(Deque<Runnable> pending) {
+        while (!pending.isEmpty()) {
+            pending.removeFirst().run();
+        }
+    }
+
     /**
      * Minimal concrete ViewModel: the entity specific hooks that the real
      * screens implement, with a single validated field.
@@ -250,6 +341,11 @@ class CrudViewModelTest {
         private int countTextCalls;
 
         TestViewModel(FakeCrudRepository repository) {
+            this(repository, BackgroundTasks.synchronous());
+        }
+
+        TestViewModel(FakeCrudRepository repository, BackgroundTasks backgroundTasks) {
+            super(null, backgroundTasks);
             this.repository = repository;
             bindFilter(searchText);
             watchFields(name);
@@ -277,16 +373,22 @@ class CrudViewModelTest {
         }
 
         @Override
-        protected void write() throws SQLException {
+        protected Callable<Void> write() {
             String nameValue = trimmed(name.get());
             FakeCrudItem selected = selectedItem.get();
             if (selected == null) {
-                repository.insert(new FakeCrudItem(nameValue));
-            } else {
-                FakeCrudItem updated = new FakeCrudItem(nameValue, selected.isActive());
-                updated.setId(selected.getId());
-                repository.update(updated);
+                FakeCrudItem created = new FakeCrudItem(nameValue);
+                return () -> {
+                    repository.insert(created);
+                    return null;
+                };
             }
+            FakeCrudItem updated = new FakeCrudItem(nameValue, selected.isActive());
+            updated.setId(selected.getId());
+            return () -> {
+                repository.update(updated);
+                return null;
+            };
         }
 
         @Override

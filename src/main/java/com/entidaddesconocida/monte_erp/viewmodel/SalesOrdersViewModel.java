@@ -9,7 +9,6 @@ import com.entidaddesconocida.monte_erp.domain.model.Product;
 import com.entidaddesconocida.monte_erp.domain.model.SalesOrder;
 import com.entidaddesconocida.monte_erp.domain.model.SalesOrderFilter;
 import com.entidaddesconocida.monte_erp.domain.model.SalesOrderLine;
-import com.entidaddesconocida.monte_erp.domain.model.Stock;
 import com.entidaddesconocida.monte_erp.domain.model.StockIssue;
 import com.entidaddesconocida.monte_erp.domain.repository.CustomerRepository;
 import com.entidaddesconocida.monte_erp.domain.repository.ProductRepository;
@@ -59,6 +58,13 @@ import java.util.logging.Logger;
  * impossible line, while {@link #save()} is the authority (the repository
  * re-reads the lots under lock and may still reject the order). The detail of a
  * selected order also loads the consumed lots ({@link SalesOrderRepository#findIssues(int)}, RF-15).</p>
+ *
+ * <p>Every query of the screen — the insert, the status change, the detail of the
+ * selected order, the stock of the chosen product and the pre-check of
+ * {@link #addLine()} — runs off the JavaFX thread through
+ * {@link BackgroundTasks}; only the state updates come back to it. The three
+ * detail/stock queries are guarded by a generation counter so a slow response
+ * for a previous selection can never overwrite the current one.</p>
  *
  * <p>The history can be filtered by date range, customer and status. The criteria
  * travel to the database as a {@link SalesOrderFilter}: every change runs
@@ -172,6 +178,25 @@ public class SalesOrdersViewModel implements ViewModel {
      */
     private boolean writeInFlight;
 
+    /**
+     * Guards the pre-check of {@link #addLine()}: while the stock query runs, a
+     * second click must not submit it twice (it would add the line twice).
+     */
+    private boolean lineCheckInFlight;
+
+    /**
+     * Sequence of the detail queries (lines and lots of the selected order). Only
+     * the newest submission is applied, so a slow query for a previous order can
+     * never paint its detail over the current one.
+     */
+    private long detailGeneration;
+
+    /**
+     * Sequence of the available-stock queries. Same rule: the response of a
+     * product the user has already left behind is discarded.
+     */
+    private long stockGeneration;
+
     private final StringProperty errorMessage = new SimpleStringProperty("");
     private final StringProperty statusMessage = new SimpleStringProperty("");
     private final ReadOnlyStringWrapper customerError = new ReadOnlyStringWrapper("");
@@ -200,8 +225,10 @@ public class SalesOrdersViewModel implements ViewModel {
     }
 
     /**
-     * @param backgroundTasks executor of the insert and the status change (both
-     *                        lock rows and can wait for another session); {@link
+     * @param backgroundTasks executor of the insert, the status change, the order
+     *                        detail, the available stock and the stock pre-check
+     *                        (all of them query the database and can wait for
+     *                        another session); {@link
      *                        BackgroundTasks#synchronous()} in tests and a
      *                        virtual-thread executor in the application
      */
@@ -445,6 +472,8 @@ public class SalesOrdersViewModel implements ViewModel {
     }
 
     private void clearSelection() {
+        // Any detail query in flight belongs to the previous selection.
+        detailGeneration++;
         selectedOrder.set(null);
         selectedOrderLines.clear();
         selectedOrderIssues.clear();
@@ -454,7 +483,8 @@ public class SalesOrdersViewModel implements ViewModel {
     /**
      * Adds the chosen product to the draft order with the given quantity and the
      * product price snapshot. Validates the product, the quantity and the "one
-     * line per product" rule (D3).
+     * line per product" rule (D3) on the UI thread, then pre-checks the available
+     * lots off it: the line is added in the callback.
      */
     public void addLine() {
         if (!ensureActiveSession()) {
@@ -483,11 +513,46 @@ public class SalesOrdersViewModel implements ViewModel {
             return;
         }
 
-        if (!stockCovers(product, parsedQuantity)) {
+        if (lineCheckInFlight) {
             return;
         }
+        int requested = parsedQuantity;
+        int productId = product.getId();
+        // The pre-check reads the lots with a query, so it runs in the background
+        // and the line is added once the answer arrives.
+        lineCheckInFlight = true;
+        backgroundTasks.submit(
+                () -> FifoAllocator.availableTotal(stockRepository.findAvailable(productId)),
+                available -> {
+                    lineCheckInFlight = false;
+                    onStockChecked(product, requested, available);
+                },
+                failure -> {
+                    lineCheckInFlight = false;
+                    LOGGER.log(Level.SEVERE, "Could not check the available stock", failure);
+                    fail(DATABASE_ERROR);
+                });
+    }
 
-        SalesOrderLine line = new SalesOrderLine(parsedQuantity, product.getPrice(), product);
+    /**
+     * Adds the line once the pre-check of {@link #addLine()} confirms that the
+     * available lots cover the quantity. The duplicate rule is checked again
+     * because a line could have been added while the query was running.
+     */
+    private void onStockChecked(Product product, int requested, int available) {
+        if (containsProduct(product)) {
+            productError.set(DUPLICATED_PRODUCT);
+            fail(DUPLICATED_PRODUCT);
+            return;
+        }
+        if (available < requested) {
+            String message = InsufficientStockException.formatMessage(product.getName(),
+                    requested, available);
+            stockError.set(message);
+            fail(message);
+            return;
+        }
+        SalesOrderLine line = new SalesOrderLine(requested, product.getPrice(), product);
         BigDecimal nextTotal = calculateDraftTotal().add(line.subtotal());
         if (nextTotal.compareTo(MAX_STORED_TOTAL) > 0) {
             fail(TOTAL_LIMIT_ERROR);
@@ -496,8 +561,12 @@ public class SalesOrdersViewModel implements ViewModel {
         draftLines.add(line);
         orderTotal.set(nextTotal);
         clearFieldErrors();
-        selectedProduct.set(null);
-        quantity.set("");
+        // The form is cleared only when it still holds what was checked: the user
+        // may have chosen another product while the query was running.
+        if (selectedProduct.get() == product) {
+            selectedProduct.set(null);
+            quantity.set("");
+        }
         succeed("Línea añadida.");
     }
 
@@ -595,26 +664,45 @@ public class SalesOrdersViewModel implements ViewModel {
         fail(DATABASE_ERROR);
     }
 
-    /** Loads the lines of the selected order; a {@code null} order clears them. */
+    /**
+     * Loads the lines and the consumed lots of the selected order; a {@code null}
+     * order clears them. The two queries run in the background and only the
+     * newest submission is applied, so a slow answer for a previous order never
+     * paints its detail over the current one.
+     */
     public void selectOrder(SalesOrder order) {
         if (!ensureActiveSession()) {
             return;
         }
         updateAvailableTransitions(order);
+        long generation = ++detailGeneration;
         if (order == null) {
             selectedOrderLines.clear();
             selectedOrderIssues.clear();
             return;
         }
-        try {
-            selectedOrderLines.setAll(salesOrderRepository.findLines(order.getId()));
-            selectedOrderIssues.setAll(salesOrderRepository.findIssues(order.getId()));
-        } catch (SQLException e) {
-            LOGGER.log(Level.SEVERE, "Could not load the order lines", e);
-            selectedOrderLines.clear();
-            selectedOrderIssues.clear();
-            fail(DATABASE_ERROR);
-        }
+        int orderId = order.getId();
+        backgroundTasks.submit(
+                () -> new OrderDetail(salesOrderRepository.findLines(orderId),
+                        salesOrderRepository.findIssues(orderId)),
+                detail -> {
+                    if (generation == detailGeneration) {
+                        selectedOrderLines.setAll(detail.lines());
+                        selectedOrderIssues.setAll(detail.issues());
+                    }
+                },
+                failure -> {
+                    if (generation == detailGeneration) {
+                        LOGGER.log(Level.SEVERE, "Could not load the order lines", failure);
+                        selectedOrderLines.clear();
+                        selectedOrderIssues.clear();
+                        fail(DATABASE_ERROR);
+                    }
+                });
+    }
+
+    /** Lines and consumed lots of one order, read together in the background. */
+    private record OrderDetail(List<SalesOrderLine> lines, List<StockIssue> issues) {
     }
 
     /**
@@ -730,10 +818,13 @@ public class SalesOrdersViewModel implements ViewModel {
 
     /**
      * Reloads the available units of the given product (0 for {@code null}) and
-     * caps the typed quantity to it. A database failure is reported as a
-     * connection error and leaves the stock at 0 so no impossible line is added.
+     * caps the typed quantity to it. The query runs in the background; a response
+     * for a product that is no longer selected is discarded. A database failure is
+     * reported as a connection error and leaves the stock at 0 so no impossible
+     * line is added.
      */
     private void refreshAvailableStock(Product product) {
+        long generation = ++stockGeneration;
         if (product == null) {
             availableStock.set(0);
             return;
@@ -742,15 +833,26 @@ public class SalesOrdersViewModel implements ViewModel {
             availableStock.set(0);
             return;
         }
-        int available;
-        try {
-            available = FifoAllocator.availableTotal(stockRepository.findAvailable(product.getId()));
-        } catch (SQLException e) {
-            LOGGER.log(Level.SEVERE, "Could not load the available stock", e);
-            availableStock.set(0);
-            fail(DATABASE_ERROR);
-            return;
-        }
+        int productId = product.getId();
+        backgroundTasks.submit(
+                () -> FifoAllocator.availableTotal(stockRepository.findAvailable(productId)),
+                available -> {
+                    if (generation == stockGeneration) {
+                        applyAvailableStock(available);
+                    }
+                },
+                failure -> {
+                    if (generation != stockGeneration) {
+                        return;
+                    }
+                    LOGGER.log(Level.SEVERE, "Could not load the available stock", failure);
+                    availableStock.set(0);
+                    fail(DATABASE_ERROR);
+                });
+    }
+
+    /** Publishes the stock of the selected product and caps the typed quantity. */
+    private void applyAvailableStock(int available) {
         availableStock.set(available);
         // The field mask stops the user from typing more than the stock, but a
         // product change can leave an already typed quantity above the new stock.
@@ -758,36 +860,6 @@ public class SalesOrdersViewModel implements ViewModel {
         if (typed != null && typed > available) {
             quantity.set(available > 0 ? String.valueOf(available) : "");
         }
-    }
-
-    /**
-     * Pre-checks the available lots of the product before adding the line
-     * (decision D4): when they do not cover the quantity, warns and leaves the
-     * draft untouched. A database failure is reported as a connection error.
-     *
-     * @return {@code true} when the line can be added
-     */
-    private boolean stockCovers(Product product, int requested) {
-        if (product == null) {
-            return false;
-        }
-        int available;
-        try {
-            List<Stock> lots = stockRepository.findAvailable(product.getId());
-            available = FifoAllocator.availableTotal(lots);
-        } catch (SQLException e) {
-            LOGGER.log(Level.SEVERE, "Could not check the available stock", e);
-            fail(DATABASE_ERROR);
-            return false;
-        }
-        if (available < requested) {
-            String message = InsufficientStockException.formatMessage(product.getName(),
-                    requested, available);
-            stockError.set(message);
-            fail(message);
-            return false;
-        }
-        return true;
     }
 
     private boolean containsProduct(Product product) {

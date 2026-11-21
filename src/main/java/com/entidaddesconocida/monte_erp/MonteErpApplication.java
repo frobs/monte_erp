@@ -3,6 +3,7 @@ package com.entidaddesconocida.monte_erp;
 import com.entidaddesconocida.monte_erp.app.AppContext;
 import com.entidaddesconocida.monte_erp.app.BackgroundTasks;
 import com.entidaddesconocida.monte_erp.app.AppShell;
+import com.entidaddesconocida.monte_erp.app.SceneNavigator;
 import com.entidaddesconocida.monte_erp.app.SessionState;
 import com.entidaddesconocida.monte_erp.domain.model.ConnectionSettings;
 import com.entidaddesconocida.monte_erp.domain.repository.CategoryRepository;
@@ -32,6 +33,13 @@ import com.entidaddesconocida.monte_erp.infrastructure.config.MigrationRunner;
 import de.saxsys.mvvmfx.MvvmFX;
 
 import javafx.application.Application;
+import javafx.application.Platform;
+import javafx.geometry.Pos;
+import javafx.scene.Parent;
+import javafx.scene.control.Label;
+import javafx.scene.control.ProgressIndicator;
+import javafx.scene.layout.StackPane;
+import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
 
 import java.util.logging.Level;
@@ -49,10 +57,28 @@ import java.util.logging.Logger;
  * missing or incomplete, the onboarding screen is shown. Otherwise the pending
  * migrations are applied and the login screen opens (or onboarding again when
  * no administrator user exists yet, e.g. after the database was recreated).</p>
+ *
+ * <p>The window is shown <strong>before</strong> any of that happens: opening the
+ * connection, applying the migrations and probing the administrator are JDBC
+ * calls that can take seconds (or wait for a MySQL timeout), so they run on a
+ * virtual thread while the stage paints a progress screen, and only the chosen
+ * view is loaded back on the JavaFX thread.</p>
  */
 public class MonteErpApplication extends Application {
 
     private static final Logger LOGGER = Logger.getLogger(MonteErpApplication.class.getName());
+
+    private static final String STARTUP_TITLE = "Monte ERP · Preparando la base de datos";
+
+    /** Screen the session opens with, decided off the JavaFX thread. */
+    enum FirstScreen {
+        /** Configuration complete and the schema migrated: ask for the credentials. */
+        LOGIN,
+        /** First run (no configuration, or no administrator yet): create them. */
+        ONBOARDING,
+        /** Configuration present but unusable: let the user fix the connection. */
+        SETUP
+    }
 
     @Override
     public void start(Stage stage) {
@@ -78,36 +104,72 @@ public class MonteErpApplication extends Application {
         MvvmFX.setCustomDependencyInjector(context::create);
         appShell.setStage(stage);
 
-        try {
-            databaseConfig.ensureFileExists();
-            ConnectionSettings settings = databaseConfig.load();
-            if (!settings.isComplete()) {
-                appShell.showSetup(true);
-            } else {
-                prepareDatabase(setupService, settings, appShell);
-            }
-        } catch (Exception e) {
-            LOGGER.log(Level.SEVERE, "Could not read the database configuration", e);
-            appShell.showSetup(true);
-        }
-
+        // The window is painted before the database is touched, so the user sees
+        // the application starting instead of nothing while MySQL answers.
+        SceneNavigator.show(stage, preparingRoot(), STARTUP_TITLE,
+                SceneNavigator.LOGIN_WIDTH, SceneNavigator.LOGIN_HEIGHT);
         stage.show();
+
+        Thread.startVirtualThread(() -> {
+            FirstScreen first = firstScreen(databaseConfig, setupService);
+            // Loading a view touches the JavaFX scene graph: back to the UI thread.
+            Platform.runLater(() -> show(appShell, first));
+        });
     }
 
-    private void prepareDatabase(SetupService setupService, ConnectionSettings settings,
-                                 AppShell appShell) throws Exception {
+    /**
+     * Decides which screen opens the session, applying the pending migrations and
+     * probing the administrator on the way.
+     *
+     * <p>Blocking on purpose: it is called from a virtual thread, never from the
+     * JavaFX thread. It always returns a screen to show, so a failure leaves the
+     * user in the setup screen with its message instead of a dead window.</p>
+     */
+    static FirstScreen firstScreen(DatabaseConfig databaseConfig, SetupService setupService) {
+        ConnectionSettings settings;
+        try {
+            databaseConfig.ensureFileExists();
+            settings = databaseConfig.load();
+        } catch (Exception e) {
+            LOGGER.log(Level.SEVERE, "Could not read the database configuration", e);
+            return FirstScreen.ONBOARDING;
+        }
+        if (!settings.isComplete()) {
+            return FirstScreen.ONBOARDING;
+        }
         try {
             DatabaseConnection.configure(settings.url(), settings.user(), settings.password());
             MigrationRunner.migrate();
-            if (!setupService.hasAdminUser()) {
-                appShell.showSetup(true);
-            } else {
-                appShell.showLogin();
-            }
+            return setupService.hasAdminUser() ? FirstScreen.LOGIN : FirstScreen.ONBOARDING;
         } catch (Exception e) {
             LOGGER.log(Level.SEVERE, "Could not prepare the database", e);
             // The configuration exists but is wrong or unreachable: let the user fix it.
-            appShell.showSetup(false);
+            return FirstScreen.SETUP;
         }
+    }
+
+    /** Loads the view of the chosen screen; runs on the JavaFX thread. */
+    private static void show(AppShell appShell, FirstScreen first) {
+        switch (first) {
+            case LOGIN -> appShell.showLogin();
+            case ONBOARDING -> appShell.showSetup(true);
+            case SETUP -> appShell.showSetup(false);
+        }
+    }
+
+    /**
+     * Root of the scene shown while {@link #firstScreen} runs: a spinner and a
+     * message, with no ViewModel and no FXML, so it can be painted before the
+     * dependency injector has been used for the first time.
+     */
+    private static Parent preparingRoot() {
+        ProgressIndicator spinner = new ProgressIndicator();
+        spinner.setPrefSize(48, 48);
+        Label message = new Label("Preparando la base de datos…");
+        VBox box = new VBox(16, spinner, message);
+        box.setAlignment(Pos.CENTER);
+        StackPane root = new StackPane(box);
+        root.setId("startup-progress");
+        return root;
     }
 }

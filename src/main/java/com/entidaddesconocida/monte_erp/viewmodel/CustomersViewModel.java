@@ -153,7 +153,7 @@ public class CustomersViewModel extends FilterableCrudViewModel<Customer> {
     }
 
     @Override
-    protected void write() throws SQLException {
+    protected Callable<Void> write() {
         String nameValue = trimmed(name.get());
         String phoneValue = blankToNull(trimmed(phone.get()));
         String emailValue = blankToNull(trimmed(email.get()));
@@ -161,13 +161,20 @@ public class CustomersViewModel extends FilterableCrudViewModel<Customer> {
         Customer selected = selectedItem.get();
         if (selected == null) {
             // A brand new customer is born active (see Customer(String, String, String, String)).
-            customerRepository.insert(new Customer(nameValue, phoneValue, emailValue, addressValue));
-        } else {
-            // Persist a detached copy: a failed write must never leave the
-            // rendered row with values that are not in the database.
-            customerRepository.update(new Customer(selected.getId(), nameValue, phoneValue,
-                    emailValue, addressValue, selected.isActive()));
+            Customer created = new Customer(nameValue, phoneValue, emailValue, addressValue);
+            return () -> {
+                customerRepository.insert(created);
+                return null;
+            };
         }
+        // Persist a detached copy: a failed write must never leave the
+        // rendered row with values that are not in the database.
+        Customer updated = new Customer(selected.getId(), nameValue, phoneValue,
+                emailValue, addressValue, selected.isActive());
+        return () -> {
+            customerRepository.update(updated);
+            return null;
+        };
     }
 
     @Override

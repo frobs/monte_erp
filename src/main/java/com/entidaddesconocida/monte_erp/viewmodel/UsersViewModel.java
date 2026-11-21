@@ -72,6 +72,13 @@ public class UsersViewModel extends CrudViewModel<User> {
     private final ReadOnlyStringWrapper usernameError = new ReadOnlyStringWrapper("");
     private final ReadOnlyStringWrapper passwordError = new ReadOnlyStringWrapper("");
 
+    /**
+     * Account persisted by the write in flight when it is the signed-in one, or
+     * {@code null}. The write runs in the background, so the exact copy that was
+     * saved is captured here and handed to {@link #afterWrite()}.
+     */
+    private User persistForSession;
+
     public UsersViewModel(UserRepository userRepository, SessionUser currentUser) {
         this(userRepository, currentUser, null);
     }
@@ -159,28 +166,54 @@ public class UsersViewModel extends CrudViewModel<User> {
     }
 
     @Override
-    protected void write() throws SQLException {
+    protected Callable<Void> write() {
         String nameValue = trimmed(name.get());
         String usernameValue = trimmed(username.get());
         String passwordValue = password.get() == null ? "" : password.get();
         User selected = selectedItem.get();
         Role roleValue = toRole(roleLabel.get());
+        persistForSession = null;
         if (selected == null) {
-            User user = new User(nameValue, usernameValue,
-                    PasswordHasher.hash(passwordValue), roleValue, true);
-            userRepository.insert(user);
-        } else {
-            // Persist a detached copy first: a failed write must never leave
-            // the rendered row with values that are not in the database.
-            // A blank password keeps the stored hash untouched.
-            User updated = new User(nameValue, usernameValue, selected.getPasswordHash(),
-                    roleValue, selected.isActive());
-            updated.setId(selected.getId());
+            // The hash is PBKDF2 with 210 000 iterations: it must be computed
+            // inside the task, not while the UI thread is building the lambda.
+            return () -> {
+                userRepository.insert(new User(nameValue, usernameValue,
+                        PasswordHasher.hash(passwordValue), roleValue, true));
+                return null;
+            };
+        }
+        // Persist a detached copy first: a failed write must never leave
+        // the rendered row with values that are not in the database.
+        // A blank password keeps the stored hash untouched.
+        User updated = new User(nameValue, usernameValue, selected.getPasswordHash(),
+                roleValue, selected.isActive());
+        updated.setId(selected.getId());
+        // Only the account being edited can be the signed-in one; a new user
+        // never is. Captured here so the session is synchronized with exactly
+        // what was written, even if the form changes while the write is queued.
+        if (isCurrentUser(updated)) {
+            persistForSession = updated;
+        }
+        return () -> {
             if (!passwordValue.isEmpty()) {
                 updated.setPasswordHash(PasswordHasher.hash(passwordValue));
             }
             userRepository.update(updated);
-            syncCurrentUser(updated);
+            return null;
+        };
+    }
+
+    /**
+     * Keeps the session snapshot in step when the administrator edited their own
+     * account, so the top bar of the main screen is not stale. Runs after the
+     * write is committed and before the reload, on the UI thread.
+     */
+    @Override
+    protected void afterWrite() {
+        User saved = persistForSession;
+        persistForSession = null;
+        if (saved != null) {
+            syncCurrentUser(saved);
         }
     }
 

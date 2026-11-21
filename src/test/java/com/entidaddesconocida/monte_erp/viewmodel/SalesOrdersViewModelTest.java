@@ -351,6 +351,129 @@ class SalesOrdersViewModelTest {
     @DisplayName("Dos clics seguidos en Guardar envían un solo pedido")
     void doubleClickSavesOnlyOnce() throws Exception {
         Deque<Runnable> pending = new ArrayDeque<>();
+        SalesOrdersViewModel deferred = deferredViewModel(pending);
+        deferred.selectedCustomerProperty().set(customerRepository.findActive().get(0));
+        deferred.selectedProductProperty().set(productRepository.findAll().get(0));
+        deferred.quantityProperty().set("1");
+        deferred.addLine();
+        drain(pending);
+        assertEquals(1, deferred.draftLines().size());
+        int before = salesOrderRepository.findAll().size();
+
+        deferred.save();
+        deferred.save();
+
+        assertEquals(1, pending.size());
+        pending.removeFirst().run();
+        assertEquals(before + 1, salesOrderRepository.findAll().size());
+    }
+
+    // --- A1d: detalle y stock en segundo plano ----------------------------
+
+    @Test
+    @DisplayName("A1d: la línea se añade cuando llega la respuesta del stock, no antes")
+    void addLineWaitsForTheStockQuery() throws Exception {
+        Deque<Runnable> pending = new ArrayDeque<>();
+        SalesOrdersViewModel deferred = deferredViewModel(pending);
+        deferred.selectedProductProperty().set(teclado());
+        deferred.quantityProperty().set("2");
+        pending.clear();
+
+        deferred.addLine();
+
+        // The lots are still being read: the draft is untouched.
+        assertEquals(0, deferred.draftLines().size());
+        assertEquals(1, pending.size());
+
+        drain(pending);
+
+        assertEquals(1, deferred.draftLines().size());
+        assertEquals(0, new BigDecimal("20.00")
+                .compareTo(deferred.orderTotalProperty().get()));
+        assertEquals("Línea añadida.", deferred.statusMessageProperty().get());
+    }
+
+    @Test
+    @DisplayName("A1d: dos clics en añadir línea con el stock en vuelo añaden una sola línea")
+    void doubleClickAddsOneLineOnly() throws Exception {
+        Deque<Runnable> pending = new ArrayDeque<>();
+        SalesOrdersViewModel deferred = deferredViewModel(pending);
+        deferred.selectedProductProperty().set(teclado());
+        deferred.quantityProperty().set("1");
+        pending.clear();
+
+        deferred.addLine();
+        deferred.addLine();
+
+        assertEquals(1, pending.size());
+        drain(pending);
+        assertEquals(1, deferred.draftLines().size());
+    }
+
+    @Test
+    @DisplayName("A1d: la respuesta de stock de un producto ya abandonado se descarta")
+    void staleStockResponseIsDiscarded() throws Exception {
+        Deque<Runnable> pending = new ArrayDeque<>();
+        SalesOrdersViewModel deferred = deferredViewModel(pending);
+        pending.clear();
+
+        deferred.selectedProductProperty().set(productRepository.findAll().get(0));
+        deferred.selectedProductProperty().set(null);
+
+        // The first query resolves last: its stock must not come back.
+        drain(pending);
+
+        assertEquals(0, deferred.availableStockProperty().get());
+    }
+
+    @Test
+    @DisplayName("A1d: el detalle de un pedido anterior no pisa el del seleccionado")
+    void staleOrderDetailIsDiscarded() {
+        Product product = product(1, "Teclado", "10.00");
+        SalesOrder older = new SalesOrder(5, LocalDateTime.now(), OrderStatus.PENDING,
+                new BigDecimal("10.00"), ACME, user(), List.of());
+        SalesOrder newer = new SalesOrder(6, LocalDateTime.now(), OrderStatus.PENDING,
+                new BigDecimal("20.00"), ACME, user(), List.of());
+        salesOrderRepository.withOrder(older)
+                .withOrder(newer)
+                .withLine(5, new SalesOrderLine(1, new BigDecimal("10.00"), product))
+                .withLine(6, new SalesOrderLine(2, new BigDecimal("10.00"), product));
+        Deque<Runnable> pending = new ArrayDeque<>();
+        SalesOrdersViewModel deferred = deferredViewModel(pending);
+        pending.clear();
+
+        deferred.selectOrder(older);
+        deferred.selectOrder(newer);
+
+        // Resolve the first selection last: the newest order must win.
+        pending.removeLast().run();
+        drain(pending);
+
+        assertEquals(1, deferred.selectedOrderLines().size());
+        assertEquals(2, deferred.selectedOrderLines().get(0).getQuantity());
+    }
+
+    @Test
+    @DisplayName("A1d: el detalle en vuelo se descarta cuando se limpia la selección")
+    void detailInFlightIsDroppedWhenTheSelectionIsCleared() {
+        Product product = product(1, "Teclado", "10.00");
+        SalesOrder order = new SalesOrder(5, LocalDateTime.now(), OrderStatus.PENDING,
+                new BigDecimal("10.00"), ACME, user(), List.of());
+        salesOrderRepository.withOrder(order)
+                .withLine(5, new SalesOrderLine(1, new BigDecimal("10.00"), product));
+        Deque<Runnable> pending = new ArrayDeque<>();
+        SalesOrdersViewModel deferred = deferredViewModel(pending);
+        pending.clear();
+
+        deferred.selectOrder(order);
+        deferred.load();
+        drain(pending);
+
+        assertEquals(0, deferred.selectedOrderLines().size());
+    }
+
+    /** ViewModel whose tasks wait until the test runs them, like a slow query. */
+    private SalesOrdersViewModel deferredViewModel(Deque<Runnable> pending) {
         SalesOrdersViewModel deferred = new SalesOrdersViewModel(salesOrderRepository,
                 customerRepository, productRepository, stockRepository, sessionUser(), null,
                 new BackgroundTasks() {
@@ -367,18 +490,20 @@ class SalesOrdersViewModelTest {
                     }
                 });
         deferred.load();
-        deferred.selectedCustomerProperty().set(customerRepository.findActive().get(0));
-        deferred.selectedProductProperty().set(productRepository.findAll().get(0));
-        deferred.quantityProperty().set("1");
-        deferred.addLine();
-        int before = salesOrderRepository.findAll().size();
+        return deferred;
+    }
 
-        deferred.save();
-        deferred.save();
+    /** Runs every queued task, including the ones they queue themselves. */
+    private static void drain(Deque<Runnable> pending) {
+        while (!pending.isEmpty()) {
+            pending.removeFirst().run();
+        }
+    }
 
-        assertEquals(1, pending.size());
-        pending.removeFirst().run();
-        assertEquals(before + 1, salesOrderRepository.findAll().size());
+    private Product teclado() throws Exception {
+        return productRepository.findAll().stream()
+                .filter(candidate -> candidate.getName().equals("Teclado"))
+                .findFirst().orElseThrow();
     }
 
     // --- RF-08: status change -------------------------------------------

@@ -129,19 +129,26 @@ public class CategoriesViewModel extends FilterableCrudViewModel<Category> {
     }
 
     @Override
-    protected void write() throws SQLException {
+    protected Callable<Void> write() {
         String nameValue = trimmed(name.get());
         String descriptionValue = blankToNull(trimmed(description.get()));
         Category selected = selectedItem.get();
         if (selected == null) {
             // A brand new category is born active (see Category(String, String)).
-            categoryRepository.insert(new Category(nameValue, descriptionValue));
-        } else {
-            // Persist a detached copy: a failed write must never leave the
-            // rendered row with values that are not in the database.
-            categoryRepository.update(new Category(selected.getId(), nameValue, descriptionValue,
-                    selected.isActive()));
+            Category created = new Category(nameValue, descriptionValue);
+            return () -> {
+                categoryRepository.insert(created);
+                return null;
+            };
         }
+        // Persist a detached copy: a failed write must never leave the
+        // rendered row with values that are not in the database.
+        Category updated = new Category(selected.getId(), nameValue, descriptionValue,
+                selected.isActive());
+        return () -> {
+            categoryRepository.update(updated);
+            return null;
+        };
     }
 
     @Override

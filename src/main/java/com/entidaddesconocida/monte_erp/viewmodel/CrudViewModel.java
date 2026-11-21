@@ -39,6 +39,13 @@ import java.util.logging.Logger;
  * reload), {@link #deactivate()} / {@link #activate()} (selection and state
  * guards → write → reload) and {@link #reloadAfterWrite(String)}.</p>
  *
+ * <p>The save itself runs <strong>off the JavaFX thread</strong>: the subclass
+ * builds the blocking write in {@link #write()} (that is where the form fields
+ * are read and, for the users screen, where the PBKDF2 hash is computed) and
+ * the template hands it to {@link BackgroundTasks}. Only the list query was
+ * asynchronous before, so saving a user froze the window for the hundreds of
+ * milliseconds the hash takes.</p>
+ *
  * <p>Everything entity specific is a hook: how to load the list, how to write,
  * how to map an item to its id/active flag, which labels and messages to show
  * and how to fill/clear the form. A hook is added here only when at least two
@@ -87,6 +94,14 @@ public abstract class CrudViewModel<T> implements ViewModel {
      * otherwise overwrite the rows of the current one.
      */
     private long queryGeneration;
+
+    /**
+     * Guards a write in flight. The write ran on the UI thread before, which made
+     * a double click impossible; now that it runs in the background this flag
+     * stops a second save, deactivation or activation from being submitted while
+     * the first one is still running.
+     */
+    private boolean writeInFlight;
 
     /**
      * Live re-validation once the user has already tried to save. The summary
@@ -266,6 +281,11 @@ public abstract class CrudViewModel<T> implements ViewModel {
      * Creates the item typed in the form, or updates the selected one. The
      * template is: validate the fields → business rules (duplicates, own rules)
      * → {@link #write()} → reload.
+     *
+     * <p>Validation and the rules stay on the UI thread (they read the form and
+     * need the immediate feedback); the {@link Callable} built by
+     * {@link #write()} is what runs in the background, and the reload happens in
+     * its success callback, back on the UI thread.</p>
      */
     public final void save() {
         if (!ensureActiveSession()) {
@@ -277,29 +297,53 @@ public abstract class CrudViewModel<T> implements ViewModel {
             fail(fieldErrorsSummary());
             return;
         }
+        if (writeInFlight) {
+            return;
+        }
 
+        Callable<Void> write;
         try {
             if (!validateBusinessRules()) {
                 return;
             }
-            write();
-        } catch (SQLIntegrityConstraintViolationException e) {
-            // The unique constraint is the safety net if the check above races
-            // with another insert.
-            LOGGER.log(Level.WARNING, "Integrity constraint violation on save", e);
-            handleIntegrityViolation();
-            return;
+            // Built here on purpose: write() reads the form fields and captures
+            // the entity to persist; the JDBC call it returns is what blocks.
+            write = write();
         } catch (SQLException e) {
             LOGGER.log(Level.SEVERE, "Could not save the item", e);
             fail(DATABASE_ERROR);
             return;
         }
-        reloadAfterWrite(saveSuccessMessage());
+        writeInFlight = true;
+        backgroundTasks.submit(
+                write,
+                ignored -> {
+                    writeInFlight = false;
+                    afterWrite();
+                    reloadAfterWrite(saveSuccessMessage());
+                },
+                this::onWriteFailure);
+    }
+
+    /**
+     * Reports a rejected write. The unique constraint is the safety net if the
+     * duplicate check of {@link #validateBusinessRules()} raced with another
+     * insert; anything else is a connection problem.
+     */
+    private void onWriteFailure(Throwable failure) {
+        writeInFlight = false;
+        if (failure instanceof SQLIntegrityConstraintViolationException) {
+            LOGGER.log(Level.WARNING, "Integrity constraint violation on save", failure);
+            handleIntegrityViolation();
+            return;
+        }
+        LOGGER.log(Level.SEVERE, "Could not save the item", failure);
+        fail(DATABASE_ERROR);
     }
 
     /** Logical deletion of the selected item (never a physical delete). */
     public final void deactivate() {
-        if (!ensureActiveSession()) {
+        if (!ensureActiveSession() || writeInFlight) {
             return;
         }
         T selected = selectedItem.get();
@@ -326,7 +370,7 @@ public abstract class CrudViewModel<T> implements ViewModel {
 
     /** Brings a previously deleted item back to active. */
     public final void activate() {
-        if (!ensureActiveSession()) {
+        if (!ensureActiveSession() || writeInFlight) {
             return;
         }
         T selected = selectedItem.get();
@@ -527,8 +571,26 @@ public abstract class CrudViewModel<T> implements ViewModel {
     protected void loadAuxiliaryData() throws SQLException {
     }
 
-    /** Inserts when there is no selection, updates the selected row otherwise. */
-    protected abstract void write() throws SQLException;
+    /**
+     * Builds the blocking write from the values currently typed in the form.
+     *
+     * <p>Runs on the UI thread, so the form fields can be read here and the entity
+     * to persist can be captured; the returned {@link Callable} runs on a
+     * background thread, so <strong>every</strong> JDBC call (and any expensive
+     * computation, like the PBKDF2 hash of a new password) must be inside it.</p>
+     *
+     * <p>Insert when there is no selection, update the selected row otherwise.</p>
+     */
+    protected abstract Callable<Void> write() throws SQLException;
+
+    /**
+     * Runs on the UI thread once the write of {@link #save()} is committed and
+     * before the list is reloaded. Screens with a side effect that must happen
+     * after the commit (the users screen refreshes the session snapshot) override
+     * it; the default does nothing.
+     */
+    protected void afterWrite() {
+    }
 
     /** Extra business checks (duplicates, own rules) run after the field validation. */
     protected abstract boolean validateBusinessRules() throws SQLException;

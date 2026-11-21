@@ -92,7 +92,25 @@ public final class SceneNavigator {
      */
     public static void show(Stage stage, ViewTuple<?, ?> tuple, String title,
                             double width, double height, Runnable onEscape) {
-        Parent view = tuple.getView();
+        showRoot(stage, tuple.getView(), title, width, height, onEscape);
+    }
+
+    /**
+     * Same as {@link #show(Stage, ViewTuple, String, double, double)} for a plain
+     * root node instead of a loaded view.
+     *
+     * <p>Used by the startup progress screen, which is shown before the first
+     * real view exists (the migrations and the administrator probe run in the
+     * background) and is replaced by the login or the setup view afterwards.</p>
+     */
+    public static void show(Stage stage, Parent root, String title,
+                            double width, double height) {
+        showRoot(stage, root, title, width, height, null);
+    }
+
+    /** Shares the single-scene/root-swap logic between views and plain roots. */
+    private static void showRoot(Stage stage, Parent view, String title,
+                                 double width, double height, Runnable onEscape) {
         Scene scene = sceneOf(stage);
         stage.setTitle(title);
         if (scene == null) {

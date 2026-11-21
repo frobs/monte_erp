@@ -1,5 +1,6 @@
 package com.entidaddesconocida.monte_erp.viewmodel;
 
+import com.entidaddesconocida.monte_erp.app.BackgroundTasks;
 import com.entidaddesconocida.monte_erp.domain.model.Role;
 import com.entidaddesconocida.monte_erp.app.SessionState;
 import com.entidaddesconocida.monte_erp.app.SessionUser;
@@ -14,6 +15,10 @@ import org.junit.jupiter.api.Test;
 
 import java.sql.SQLException;
 import java.sql.SQLIntegrityConstraintViolationException;
+import java.util.ArrayDeque;
+import java.util.Deque;
+import java.util.concurrent.Callable;
+import java.util.function.Consumer;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -273,6 +278,80 @@ class UsersViewModelTest {
 
         assertEquals("Ana María", session.currentUser().name());
         assertEquals("Ana María", fakeRepository.findByUsername("ana").getName());
+    }
+
+    @Test
+    @DisplayName("A1b: el alta no hashea ni inserta hasta que la tarea de fondo se ejecuta")
+    void creatingAUserHashesOffTheCallerThread() throws Exception {
+        Deque<Runnable> pending = new ArrayDeque<>();
+        UsersViewModel deferred = new UsersViewModel(fakeRepository, SessionUser.of(admin),
+                null, deferredTasks(pending));
+        deferred.load();
+        pending.clear();
+        deferred.nameProperty().set("Nuevo Usuario");
+        deferred.usernameProperty().set("nuevo");
+        deferred.passwordProperty().set("clave123");
+
+        deferred.save();
+
+        // PBKDF2 (210 000 iterations) and the INSERT are inside the task, so the
+        // caller returns immediately and the user does not exist yet.
+        assertNull(fakeRepository.findByUsername("nuevo"));
+        assertEquals("", deferred.statusMessageProperty().get());
+
+        drain(pending);
+
+        User created = fakeRepository.findByUsername("nuevo");
+        assertTrue(PasswordHasher.verify("clave123", created.getPasswordHash()));
+        assertEquals("Usuario guardado correctamente.", deferred.statusMessageProperty().get());
+    }
+
+    @Test
+    @DisplayName("A1b: el snapshot de sesión se sincroniza cuando la escritura está confirmada")
+    void sessionIsSyncedOnlyAfterTheWriteCommits() throws Exception {
+        SessionState session = new SessionState();
+        session.signIn(admin);
+        Deque<Runnable> pending = new ArrayDeque<>();
+        UsersViewModel deferred = new UsersViewModel(fakeRepository, SessionUser.of(admin),
+                new SessionValidator(session, fakeRepository), deferredTasks(pending));
+        deferred.load();
+        pending.clear();
+        deferred.selectedUserProperty().set(admin);
+        deferred.nameProperty().set("Ana María");
+
+        deferred.save();
+
+        // Still not committed: the top bar must not show a name that is not saved.
+        assertEquals("Ana", session.currentUser().name());
+
+        drain(pending);
+
+        assertEquals("Ana María", session.currentUser().name());
+        assertEquals("Ana María", fakeRepository.findByUsername("ana").getName());
+    }
+
+    /** ViewModel whose tasks wait until the test runs them, like a slow write. */
+    private static BackgroundTasks deferredTasks(Deque<Runnable> pending) {
+        return new BackgroundTasks() {
+            @Override
+            public <T> void submit(Callable<T> task, Consumer<T> onSuccess,
+                                   Consumer<Throwable> onFailure) {
+                pending.add(() -> {
+                    try {
+                        onSuccess.accept(task.call());
+                    } catch (Exception failure) {
+                        onFailure.accept(failure);
+                    }
+                });
+            }
+        };
+    }
+
+    /** Runs every queued task, including the ones they queue themselves. */
+    private static void drain(Deque<Runnable> pending) {
+        while (!pending.isEmpty()) {
+            pending.removeFirst().run();
+        }
     }
 
     @Test

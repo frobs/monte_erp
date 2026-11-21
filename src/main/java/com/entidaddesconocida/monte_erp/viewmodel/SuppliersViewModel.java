@@ -153,7 +153,7 @@ public class SuppliersViewModel extends FilterableCrudViewModel<Supplier> {
     }
 
     @Override
-    protected void write() throws SQLException {
+    protected Callable<Void> write() {
         String nameValue = trimmed(name.get());
         String phoneValue = blankToNull(trimmed(phone.get()));
         String emailValue = blankToNull(trimmed(email.get()));
@@ -161,13 +161,20 @@ public class SuppliersViewModel extends FilterableCrudViewModel<Supplier> {
         Supplier selected = selectedItem.get();
         if (selected == null) {
             // A brand new supplier is born active (see Supplier(String, String, String, String)).
-            supplierRepository.insert(new Supplier(nameValue, phoneValue, emailValue, addressValue));
-        } else {
-            // Persist a detached copy: a failed write must never leave the
-            // rendered row with values that are not in the database.
-            supplierRepository.update(new Supplier(selected.getId(), nameValue, phoneValue,
-                    emailValue, addressValue, selected.isActive()));
+            Supplier created = new Supplier(nameValue, phoneValue, emailValue, addressValue);
+            return () -> {
+                supplierRepository.insert(created);
+                return null;
+            };
         }
+        // Persist a detached copy: a failed write must never leave the
+        // rendered row with values that are not in the database.
+        Supplier updated = new Supplier(selected.getId(), nameValue, phoneValue,
+                emailValue, addressValue, selected.isActive());
+        return () -> {
+            supplierRepository.update(updated);
+            return null;
+        };
     }
 
     @Override
