@@ -6,8 +6,9 @@ aplicación de principio a fin con capturas reales de la ventana.
 
 > **Las capturas de este manual las genera la propia aplicación.** Se obtienen
 > recorriendo la interfaz con los tests de TestFX (`ManualCaptureUiTest`), así que
-> siempre muestran pantallas reales y nunca un mockup. En la documentación de despliegue se
-> explica cómo regenerarlas.
+> siempre muestran pantallas reales y nunca un mockup. En el
+> [manual de despliegue](../manual_de_despliege/manual.md) se explica cómo
+> regenerarlas.
 
 ## Índice
 
@@ -100,8 +101,11 @@ Ya dentro de la aplicación, el botón **Sesión** de la cabecera abre dos opcio
 ## 4. Configuración de la base de datos
 
 La configuración se guarda en dos sitios: la **URL** en el fichero
-`application.properties` que acompaña al ejecutable y las **credenciales** en el
-keyring del sistema.
+`application.properties` y las **credenciales** en el keyring del sistema. En la
+versión empaquetada con `jpackage`, el fichero vive en la carpeta de
+configuración del usuario (`%APPDATA%\Monte ERP`,
+`~/Library/Application Support/Monte ERP` o `$XDG_CONFIG_HOME/monte-erp`), no en
+la carpeta de instalación.
 
 ### 4.1. Primera ejecución (*onboarding*)
 

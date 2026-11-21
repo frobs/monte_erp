@@ -107,6 +107,57 @@ class DatabaseConfigTest {
     }
 
     @Test
+    @DisplayName("ensureFileExists crea los directorios intermedios del directorio de configuración")
+    void ensureFileExistsCreatesParentDirectories() throws IOException {
+        Path file = tempDir.resolve("nested/config/application.properties");
+        DatabaseConfig config = new DatabaseConfig(new FakeCredentialStore(), file);
+
+        config.ensureFileExists();
+
+        assertTrue(Files.isRegularFile(file));
+    }
+
+    @Test
+    @DisplayName("El constructor por defecto acepta un directorio de configuración explícito")
+    void defaultConstructorUsesExplicitConfigDirectory() {
+        String previous = System.getProperty(DatabaseConfig.CONFIG_DIR_PROPERTY);
+        try {
+            System.setProperty(DatabaseConfig.CONFIG_DIR_PROPERTY, tempDir.toString());
+
+            DatabaseConfig config = new DatabaseConfig(new FakeCredentialStore());
+
+            assertEquals(tempDir.resolve(DatabaseConfig.CONFIG_FILE_NAME), config.configFile());
+        } finally {
+            if (previous == null) {
+                System.clearProperty(DatabaseConfig.CONFIG_DIR_PROPERTY);
+            } else {
+                System.setProperty(DatabaseConfig.CONFIG_DIR_PROPERTY, previous);
+            }
+        }
+    }
+
+    @Test
+    @DisplayName("Un directorio de configuración vacío resuelve al directorio del usuario")
+    void blankConfigDirectoryUsesPerUserDirectory() {
+        String previous = System.getProperty(DatabaseConfig.CONFIG_DIR_PROPERTY);
+        try {
+            System.setProperty(DatabaseConfig.CONFIG_DIR_PROPERTY, "");
+
+            Path file = DatabaseConfig.defaultConfigFile();
+
+            assertTrue(file.isAbsolute());
+            assertEquals(DatabaseConfig.CONFIG_FILE_NAME, file.getFileName().toString());
+            assertFalse(file.equals(Path.of(DatabaseConfig.CONFIG_FILE_NAME).toAbsolutePath()));
+        } finally {
+            if (previous == null) {
+                System.clearProperty(DatabaseConfig.CONFIG_DIR_PROPERTY);
+            } else {
+                System.setProperty(DatabaseConfig.CONFIG_DIR_PROPERTY, previous);
+            }
+        }
+    }
+
+    @Test
     @DisplayName("ensureFileExists es idempotente si el archivo ya existe")
     void ensureFileExistsIsIdempotent() throws IOException {
         Path file = tempDir.resolve("application.properties");

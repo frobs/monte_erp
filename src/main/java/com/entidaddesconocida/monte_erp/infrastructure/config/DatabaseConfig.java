@@ -9,13 +9,24 @@ import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.util.Locale;
 import java.util.Properties;
 
 /**
  * Persistence of the database configuration.
  *
- * <p>The JDBC URL lives in a properties file next to the application (the
- * working directory), under the {@code db.url} key. The database credentials
+ * <p>The JDBC URL lives in an {@code application.properties} file under the
+ * {@code db.url} key. In development it lives in the working directory, as it
+ * always did. A packaged application uses the per-user configuration directory
+ * instead, because the installation directory is usually read-only:
+ * {@code %APPDATA%\Monte ERP} on Windows, {@code ~/Library/Application
+ * Support/Monte ERP} on macOS and {@code $XDG_CONFIG_HOME/monte-erp} (or
+ * {@code ~/.config/monte-erp}) on Linux.</p>
+ *
+ * <p>The location can be overridden with the {@code monte.erp.config.dir}
+ * system property or the {@code MONTE_ERP_CONFIG_DIR} environment variable. An
+ * empty override asks for the platform default above, unless the other source
+ * has a non-blank value. The database credentials
  * live in the operating system keyring (through {@link CredentialStore}); they
  * never touch the properties file.</p>
  *
@@ -27,6 +38,12 @@ public final class DatabaseConfig {
     public static final String CONFIG_FILE_NAME = "application.properties";
     public static final String KEY_URL = "db.url";
 
+    /** Directory override used by packaged launchers and tests. */
+    public static final String CONFIG_DIR_PROPERTY = "monte.erp.config.dir";
+
+    /** Environment override for launches where a system property is inconvenient. */
+    public static final String CONFIG_DIR_ENV = "MONTE_ERP_CONFIG_DIR";
+
     private static final String ACCOUNT_USER = "db.user";
     private static final String ACCOUNT_PASSWORD = "db.password";
 
@@ -34,7 +51,55 @@ public final class DatabaseConfig {
     private final Path configFile;
 
     public DatabaseConfig(CredentialStore credentialStore) {
-        this(credentialStore, Path.of(CONFIG_FILE_NAME).toAbsolutePath());
+        this(credentialStore, defaultConfigFile());
+    }
+
+    /**
+     * Resolves the properties file used when no explicit path is given.
+     *
+     * <p>Precedence:</p>
+     * <ol>
+     *   <li>a non-blank {@code monte.erp.config.dir} system property;</li>
+     *   <li>a non-blank {@code MONTE_ERP_CONFIG_DIR} environment variable;</li>
+     *   <li>the platform per-user configuration directory when either override
+     *       is present but blank (this is what the packaged launchers pass);</li>
+     *   <li>the working directory, preserving the development behaviour.</li>
+     * </ol>
+     */
+    public static Path defaultConfigFile() {
+        String property = System.getProperty(CONFIG_DIR_PROPERTY);
+        String environment = System.getenv(CONFIG_DIR_ENV);
+        if (property != null && !property.isBlank()) {
+            return Path.of(property).toAbsolutePath().resolve(CONFIG_FILE_NAME);
+        }
+        if (environment != null && !environment.isBlank()) {
+            return Path.of(environment).toAbsolutePath().resolve(CONFIG_FILE_NAME);
+        }
+        if (property != null || environment != null) {
+            return defaultUserConfigDirectory().resolve(CONFIG_FILE_NAME);
+        }
+        return Path.of(CONFIG_FILE_NAME).toAbsolutePath();
+    }
+
+    /** Per-user configuration directory of the current platform. */
+    static Path defaultUserConfigDirectory() {
+        String os = System.getProperty("os.name", "").toLowerCase(Locale.ROOT);
+        Path home = Path.of(System.getProperty("user.home", ".")).toAbsolutePath();
+        if (os.contains("win")) {
+            String appData = System.getenv("APPDATA");
+            Path base = appData == null || appData.isBlank()
+                    ? home.resolve("AppData").resolve("Roaming")
+                    : Path.of(appData);
+            return base.toAbsolutePath().resolve("Monte ERP");
+        }
+        if (os.contains("mac") || os.contains("darwin")) {
+            return home.resolve("Library").resolve("Application Support").resolve("Monte ERP");
+        }
+        String xdgConfigHome = System.getenv("XDG_CONFIG_HOME");
+        Path base = xdgConfigHome == null || xdgConfigHome.isBlank()
+                ? home.resolve(".config")
+                : Path.of(xdgConfigHome);
+        return base.toAbsolutePath().resolve("monte-erp");
     }
 
     /** Visible for tests: lets them point at a temporary file. */
@@ -48,8 +113,12 @@ public final class DatabaseConfig {
         return configFile;
     }
 
-    /** Creates the properties file when it does not exist yet. */
+    /** Creates the parent directory and the properties file when they do not exist yet. */
     public void ensureFileExists() throws IOException {
+        Path parent = configFile.toAbsolutePath().getParent();
+        if (parent != null) {
+            Files.createDirectories(parent);
+        }
         if (!Files.exists(configFile)) {
             Files.createFile(configFile);
         }

@@ -62,9 +62,12 @@ Además:
 
 > **Fat JAR y plataforma:** `target/monte_erp-1.0-SNAPSHOT.jar` solo contiene las
 > bibliotecas nativas de JavaFX de la plataforma donde se ejecutó `mvn package`.
-> Para verlo en otro sistema operativo hay que empaquetarlo en ese sistema (o
-> generar una imagen con `javafx:jlink` en el destino); `./mvnw javafx:run` siempre
-> usa las nativas de la plataforma actual.
+> Para verlo en otro sistema operativo hay que empaquetarlo en ese sistema.
+> `javafx:jlink` no está operativo con los módulos automáticos actuales
+> (`java.keyring`, `mysql-connector-j`, mvvmFX, OpenPDF). Para una distribución
+> autocontenida se usa **jpackage** sobre el fat JAR (ver
+> [Empaquetar con jpackage](#empaquetar-con-jpackage)); `./mvnw javafx:run`
+> siempre usa las nativas de la plataforma actual.
 
 ### Linux
 
@@ -273,8 +276,11 @@ monte_erp/
 │   │           ├── StockView.fxml                 # vista de stock y alertas (RF-09/RF-10)
 │   │           └── ReportsView.fxml               # vista de informes (RF-12)
 │   └── test/java/...                              # Pruebas JUnit 5: unitarias y ui/ (TestFX)
-├── docs/manual_de_usuario/                                   # Manual de usuario (Markdown + capturas reales)
+├── docs/manual_de_usuario/                        # Manual de usuario (Markdown + capturas reales)
+├── docs/manual_de_despliege/                      # Manual de despliegue, operación y decisiones técnicas
 ├── scripts/run-ui-tests.sh                        # Suite de interfaz con Xvfb + MySQL efímero
+├── scripts/package-app-image.sh                   # Empaquetado jpackage en Linux/macOS
+├── scripts/package-app-image.ps1                  # Empaquetado jpackage en Windows
 └── target/                  # Artefactos generados (tras compilar)
 ```
 
@@ -291,6 +297,13 @@ tests de TestFX.
 ```bash
 scripts/run-ui-tests.sh --manual   # regenera docs/manual_de_usuario/img/*.png
 ```
+
+## Manual de despliegue
+
+La instalación, la configuración de MySQL y del keyring, el empaquetado con
+`jpackage`, las actualizaciones, la operación y las decisiones técnicas (mvvmFX,
+persistencia, migraciones, pruebas unitarias y TestFX) están en
+[`docs/manual_de_despliege/manual.md`](docs/manual_de_despliege/manual.md).
 
 ---
 
@@ -311,6 +324,47 @@ Esto genera dos archivos en `target/`:
 | `monte_erp-1.0-SNAPSHOT.jar`           | **Fat JAR** — contiene todo lo necesario para ejecutar |
 | `original-monte_erp-1.0-SNAPSHOT.jar`  | JAR original sin dependencias (no usar directamente)   |
 
+### Empaquetar con jpackage
+
+El proyecto incluye dos lanzadores que generan una **app-image** autocontenida
+(con runtime) y, si se pide, un instalador nativo. Por defecto son equivalentes
+a ejecutar `jpackage` sobre el fat JAR:
+
+```bash
+scripts/package-app-image.sh              # Linux/macOS: app-image
+scripts/package-app-image.sh --type deb   # Debian/Ubuntu
+scripts/package-app-image.sh --type rpm   # openSUSE/Fedora/RHEL
+scripts/package-app-image.sh --type dmg   # macOS
+```
+
+```powershell
+.\scripts\package-app-image.ps1                 # Windows: app-image
+.\scripts\package-app-image.ps1 -Type msi       # Windows: instalador MSI
+.\scripts\package-app-image.ps1 -Type exe       # Windows: instalador EXE
+```
+
+Los scripts ejecutan por defecto `mvnw clean verify`; usa `--skip-tests` o
+`-SkipTests` después de haber pasado la suite. El resultado queda en
+`target/jpackage/`. La app-image incluye el runtime, así que el destino no
+necesita un JDK. Los instaladores nativos requieren las herramientas de cada
+plataforma (`dpkg-deb`/`fakeroot`, `rpmbuild` o WiX Toolset) y deben generarse en
+el sistema operativo de destino.
+
+La disponibilidad de tipos la decide el `jpackage` de cada JDK; compruébala con
+`jpackage --help`. En Linux suele haber `app-image`, `deb` y `rpm`; en macOS,
+`app-image`, `dmg` y `pkg`; en Windows, `app-image`, `msi` y `exe`. Si `rpm` no
+aparece, usa `app-image`/`deb` o un JDK 25 con soporte RPM. Si `jpackage` dice
+`Invalid or unsupported type: [rpm]`, en openSUSE falta `rpmbuild`:
+
+```bash
+sudo zypper install rpm-build
+```
+
+La configuración de la app empaquetada se guarda en el directorio de usuario
+(`%APPDATA%\Monte ERP`, `~/Library/Application Support/Monte ERP` o
+`$XDG_CONFIG_HOME/monte-erp`), no en el directorio de instalación. Se puede
+forzar con `MONTE_ERP_CONFIG_DIR` o `-Dmonte.erp.config.dir`.
+
 ### Ejecutar los tests
 
 ```bash
@@ -327,9 +381,23 @@ Esto genera dos archivos en `target/`:
 
 ### Desde el JAR empaquetado
 
-> ```bash
-> java -jar target/monte_erp-1.0-SNAPSHOT.jar
-> ```
+```bash
+java -jar target/monte_erp-1.0-SNAPSHOT.jar
+```
+
+### Desde la app-image de jpackage
+
+```bash
+# Linux/macOS
+./target/jpackage/MonteERP/bin/MonteERP
+
+# Windows
+.\target\jpackage\MonteERP\MonteERP.exe
+```
+
+La app-image no necesita JDK en el destino. En macOS el lanzador está dentro de
+`target/jpackage/MonteERP.app/Contents/MacOS/`.
+
 ---
 
 ## Base de datos MySQL con Docker
@@ -426,8 +494,12 @@ de aviso de productos activos sin existencias.
 
 La configuración vive en dos sitios:
 
-- La **URL** (`db.url`) en un `application.properties` **junto al JAR** (en el
-  directorio de trabajo), gestionado por `DatabaseConfig`.
+- La **URL** (`db.url`) en un `application.properties`, gestionado por
+  `DatabaseConfig`. En desarrollo vive en el **directorio de trabajo**; en una
+  app empaquetada con jpackage, en el **directorio de configuración del
+  usuario** (`%APPDATA%\Monte ERP`,
+  `~/Library/Application Support/Monte ERP` o `$XDG_CONFIG_HOME/monte-erp`). Se
+  puede forzar con `MONTE_ERP_CONFIG_DIR` o `-Dmonte.erp.config.dir`.
 - El **usuario y la contraseña** de la base de datos en el **keyring del sistema
   operativo** (java-keyring, vía `KeyringCredentialStore`), nunca en el repositorio.
 - La URL JDBC no debe incluir credenciales ni parámetros sensibles. La pantalla de
