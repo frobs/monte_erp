@@ -232,8 +232,8 @@ class CrudViewModelTest {
 
         viewModel.searchTextProperty().set("dos");
 
-        assertEquals(1, viewModel.filteredItems.size());
-        assertEquals("Dos", viewModel.filteredItems.get(0).getName());
+        assertEquals(1, viewModel.items.size());
+        assertEquals("Dos", viewModel.items.get(0).getName());
     }
 
     /**
@@ -367,7 +367,7 @@ class CrudViewModelTest {
         @Override
         protected String countText() {
             countTextCalls++;
-            return "Elementos: " + filteredItems.size();
+            return "Elementos: " + items.size();
         }
 
         @Override

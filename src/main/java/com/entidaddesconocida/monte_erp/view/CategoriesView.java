@@ -81,7 +81,7 @@ public class CategoriesView extends CrudView<Category> implements FxmlView<Categ
 
     @FXML
     private void initialize() {
-        categoriesTable.setItems(viewModel.filteredCategories());
+        categoriesTable.setItems(viewModel.categories());
         initCommon();
     }
 

@@ -8,7 +8,6 @@ import javafx.beans.property.SimpleBooleanProperty;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.beans.property.StringProperty;
 import javafx.beans.value.ObservableValue;
-import javafx.collections.transformation.FilteredList;
 
 import java.util.List;
 import java.util.concurrent.Callable;
@@ -22,10 +21,11 @@ import java.util.logging.Logger;
  *
  * <p>Every filter travels to the database: changing the search text or a combo
  * reloads the master list with the criteria in the {@code WHERE}, so no row is
- * discarded in memory. {@link #filteredItems} is still the list bound to the
- * table (and the counter), but it no longer carries a {@code Predicate}. If a
- * reload fails while toggling the checkbox, the checkbox is rolled back so it
- * never disagrees with the rows still on screen.</p>
+ * discarded in memory. There is no in-memory filtered view: the list bound to
+ * the table (and read by the counter) is the master list itself, exposed by
+ * each subclass through an {@code ObservableList} accessor. If a reload fails
+ * while toggling the checkbox, the checkbox is rolled back so it never
+ * disagrees with the rows still on screen.</p>
  *
  * <p>The subclass builds its queries through {@link #activeQuery()} /
  * {@link #inactiveQuery()}; {@link #bindFilter} only registers the reload
@@ -37,9 +37,6 @@ import java.util.logging.Logger;
 public abstract class FilterableCrudViewModel<T> extends CrudViewModel<T> {
 
     private static final Logger LOGGER = Logger.getLogger(FilterableCrudViewModel.class.getName());
-
-    /** List bound to the table; the database already applied the filters. */
-    protected final FilteredList<T> filteredItems = new FilteredList<>(items);
 
     /** Free text sent to the repository query. */
     protected final StringProperty searchText = new SimpleStringProperty("");
@@ -99,8 +96,8 @@ public abstract class FilterableCrudViewModel<T> extends CrudViewModel<T> {
                 }
             });
         }
-        // Only the master list is watched: filteredItems derives from it, so a
-        // listener on both would recompute the counter twice for every change.
+        // Only the master list exists: the table binds to it directly, so a
+        // single listener keeps the counter in sync with every change.
         watchItemsForCount();
     }
 

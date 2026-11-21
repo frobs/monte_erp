@@ -11,7 +11,6 @@ import javafx.beans.property.ReadOnlyStringWrapper;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.beans.property.StringProperty;
 import javafx.collections.ObservableList;
-import javafx.collections.transformation.FilteredList;
 
 import java.sql.SQLException;
 import java.util.List;
@@ -80,11 +79,6 @@ public class CategoriesViewModel extends FilterableCrudViewModel<Category> {
     /** Master list currently loaded (active or inactive categories). */
     public ObservableList<Category> categories() {
         return items;
-    }
-
-    /** Filtered view bound to the table. */
-    public FilteredList<Category> filteredCategories() {
-        return filteredItems;
     }
 
     /** Currently selected category, or {@code null} when none is selected. */
@@ -235,7 +229,7 @@ public class CategoriesViewModel extends FilterableCrudViewModel<Category> {
 
     @Override
     protected String countText() {
-        return "Categorías: " + filteredItems.size();
+        return "Categorías: " + items.size();
     }
 
     @Override

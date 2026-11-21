@@ -127,7 +127,7 @@ public class ProductsView extends CrudView<Product> implements FxmlView<Products
 
     @FXML
     private void initialize() {
-        productsTable.setItems(viewModel.filteredProducts());
+        productsTable.setItems(viewModel.products());
         initCommon();
     }
 

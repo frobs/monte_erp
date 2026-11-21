@@ -50,7 +50,7 @@ public abstract class CrudView<T> {
     /** The concrete ViewModel, injected in the subclass with {@code @InjectViewModel}. */
     protected abstract CrudViewModel<T> viewModel();
 
-    /** Table bound to the master (or filtered) list. */
+    /** Table bound to the master list (the filters travel to the query). */
     protected abstract TableView<T> table();
 
     /** Activate/deactivate button. */

@@ -98,7 +98,7 @@ public class SuppliersView extends CrudView<Supplier> implements FxmlView<Suppli
 
     @FXML
     private void initialize() {
-        suppliersTable.setItems(viewModel.filteredSuppliers());
+        suppliersTable.setItems(viewModel.suppliers());
         initCommon();
     }
 

@@ -72,23 +72,23 @@ class StockViewModelTest {
     void onlyBelowMinimumFiltersTheTable() {
         viewModel.onlyBelowMinimumProperty().set(true);
 
-        assertEquals(1, viewModel.filteredLevels().size());
-        assertEquals("Teclado", viewModel.filteredLevels().get(0).getProduct().getName());
+        assertEquals(1, viewModel.levels().size());
+        assertEquals("Teclado", viewModel.levels().get(0).getProduct().getName());
     }
 
     @Test
     @DisplayName("La búsqueda por nombre o SKU acota la tabla")
     void searchFiltersByNameOrSku() {
         viewModel.searchTextProperty().set("rat");
-        assertEquals(1, viewModel.filteredLevels().size());
-        assertEquals("Ratón", viewModel.filteredLevels().get(0).getProduct().getName());
+        assertEquals(1, viewModel.levels().size());
+        assertEquals("Ratón", viewModel.levels().get(0).getProduct().getName());
 
         viewModel.searchTextProperty().set("SKU-1");
-        assertEquals(1, viewModel.filteredLevels().size());
-        assertEquals("Teclado", viewModel.filteredLevels().get(0).getProduct().getName());
+        assertEquals(1, viewModel.levels().size());
+        assertEquals("Teclado", viewModel.levels().get(0).getProduct().getName());
 
         viewModel.searchTextProperty().set("");
-        assertEquals(2, viewModel.filteredLevels().size());
+        assertEquals(2, viewModel.levels().size());
     }
 
     @Test
@@ -96,8 +96,8 @@ class StockViewModelTest {
     void searchIsAccentInsensitive() {
         viewModel.searchTextProperty().set("raton");
 
-        assertEquals(1, viewModel.filteredLevels().size());
-        assertEquals("Ratón", viewModel.filteredLevels().get(0).getProduct().getName());
+        assertEquals(1, viewModel.levels().size());
+        assertEquals("Ratón", viewModel.levels().get(0).getProduct().getName());
     }
 
     @Test

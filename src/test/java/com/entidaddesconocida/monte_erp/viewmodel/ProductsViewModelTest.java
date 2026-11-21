@@ -430,15 +430,15 @@ class ProductsViewModelTest {
         viewModel.load();
 
         viewModel.searchTextProperty().set("agu");
-        assertEquals(1, viewModel.filteredProducts().size());
-        assertEquals("Agua mineral", viewModel.filteredProducts().get(0).getName());
+        assertEquals(1, viewModel.products().size());
+        assertEquals("Agua mineral", viewModel.products().get(0).getName());
 
         viewModel.searchTextProperty().set("caf-001");
-        assertEquals(1, viewModel.filteredProducts().size());
-        assertEquals("Café molido", viewModel.filteredProducts().get(0).getName());
+        assertEquals(1, viewModel.products().size());
+        assertEquals("Café molido", viewModel.products().get(0).getName());
 
         viewModel.searchTextProperty().set("");
-        assertEquals(2, viewModel.filteredProducts().size());
+        assertEquals(2, viewModel.products().size());
     }
 
     @Test
@@ -451,11 +451,11 @@ class ProductsViewModelTest {
         viewModel.load();
 
         viewModel.categoryFilterProperty().set(snacks);
-        assertEquals(1, viewModel.filteredProducts().size());
-        assertEquals("Patatas", viewModel.filteredProducts().get(0).getName());
+        assertEquals(1, viewModel.products().size());
+        assertEquals("Patatas", viewModel.products().get(0).getName());
 
         viewModel.categoryFilterProperty().set(null);
-        assertEquals(2, viewModel.filteredProducts().size());
+        assertEquals(2, viewModel.products().size());
     }
 
     @Test
@@ -805,7 +805,7 @@ class ProductsViewModelTest {
                 .anyMatch(option -> option.getId() == retired.getId()));
 
         viewModel.categoryFilterProperty().set(retired);
-        assertEquals(1, viewModel.filteredProducts().size());
+        assertEquals(1, viewModel.products().size());
     }
 
     @Test
@@ -856,12 +856,12 @@ class ProductsViewModelTest {
         fakeRepository.withProduct(product("1", "Café", "CAF-001", "3.00", 0, true, DRINKS));
         fakeRepository.withProduct(product("2", "Agua", "AGU-001", "0.60", 0, true, null));
         viewModel.load();
-        assertEquals(2, viewModel.filteredProducts().size());
+        assertEquals(2, viewModel.products().size());
 
         viewModel.categoryFilterProperty().set(DRINKS);
 
-        assertEquals(1, viewModel.filteredProducts().size());
-        assertEquals("CAF-001", viewModel.filteredProducts().get(0).getSku());
+        assertEquals(1, viewModel.products().size());
+        assertEquals("CAF-001", viewModel.products().get(0).getSku());
     }
 
     @Test
@@ -874,7 +874,7 @@ class ProductsViewModelTest {
 
         viewModel.searchTextProperty().set("caf");
 
-        assertEquals(1, viewModel.filteredProducts().size());
+        assertEquals(1, viewModel.products().size());
         assertEquals("Productos: 1", viewModel.productCountProperty().get());
     }
 
@@ -886,8 +886,8 @@ class ProductsViewModelTest {
 
         viewModel.searchTextProperty().set("cafe");
 
-        assertEquals(1, viewModel.filteredProducts().size());
-        assertEquals("Café molido", viewModel.filteredProducts().get(0).getName());
+        assertEquals(1, viewModel.products().size());
+        assertEquals("Café molido", viewModel.products().get(0).getName());
     }
 
     @Test
@@ -908,12 +908,12 @@ class ProductsViewModelTest {
         boughtFrom(ACME, agua, 5);
         boughtFrom(GLOBEX, cafe, 5);
         viewModel.load();
-        assertEquals(2, viewModel.filteredProducts().size());
+        assertEquals(2, viewModel.products().size());
 
         viewModel.supplierFilterProperty().set(ACME);
 
-        assertEquals(1, viewModel.filteredProducts().size());
-        assertEquals("AGU-001", viewModel.filteredProducts().get(0).getSku());
+        assertEquals(1, viewModel.products().size());
+        assertEquals("AGU-001", viewModel.products().get(0).getSku());
     }
 
     @Test
@@ -927,8 +927,8 @@ class ProductsViewModelTest {
 
         viewModel.supplierFilterProperty().set(ACME);
 
-        assertEquals(1, viewModel.filteredProducts().size());
-        assertEquals("AGU-001", viewModel.filteredProducts().get(0).getSku());
+        assertEquals(1, viewModel.products().size());
+        assertEquals("AGU-001", viewModel.products().get(0).getSku());
     }
 
     @Test
@@ -941,7 +941,7 @@ class ProductsViewModelTest {
 
         viewModel.supplierFilterProperty().set(ACME);
 
-        assertEquals(1, viewModel.filteredProducts().size());
+        assertEquals(1, viewModel.products().size());
     }
 
     @Test
@@ -957,7 +957,7 @@ class ProductsViewModelTest {
         assertTrue(viewModel.supplierFilterOptions().stream()
                 .anyMatch(option -> option.getId() == retired.getId()));
         viewModel.supplierFilterProperty().set(retired);
-        assertEquals(1, viewModel.filteredProducts().size());
+        assertEquals(1, viewModel.products().size());
     }
 
     @Test
@@ -978,8 +978,8 @@ class ProductsViewModelTest {
         viewModel.categoryFilterProperty().set(snacks);
         viewModel.supplierFilterProperty().set(ACME);
 
-        assertEquals(1, viewModel.filteredProducts().size());
-        assertEquals("SNK-001", viewModel.filteredProducts().get(0).getSku());
+        assertEquals(1, viewModel.products().size());
+        assertEquals("SNK-001", viewModel.products().get(0).getSku());
     }
 
     @Test
@@ -996,7 +996,7 @@ class ProductsViewModelTest {
         viewModel.supplierFilterProperty().set(ACME);
         viewModel.showInactiveProperty().set(true);
         // The inactive list holds only "Viejo", which does not match "caf".
-        assertEquals(0, viewModel.filteredProducts().size());
+        assertEquals(0, viewModel.products().size());
 
         viewModel.clearFilters();
 
@@ -1004,7 +1004,7 @@ class ProductsViewModelTest {
         assertNull(viewModel.categoryFilterProperty().get());
         assertNull(viewModel.supplierFilterProperty().get());
         assertFalse(viewModel.showInactiveProperty().get());
-        assertTrue(viewModel.filteredProducts().size() >= 1);
+        assertTrue(viewModel.products().size() >= 1);
         assertEquals("Productos: 1", viewModel.productCountProperty().get());
     }
 }

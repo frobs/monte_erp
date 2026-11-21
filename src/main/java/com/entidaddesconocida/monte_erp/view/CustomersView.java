@@ -98,7 +98,7 @@ public class CustomersView extends CrudView<Customer> implements FxmlView<Custom
 
     @FXML
     private void initialize() {
-        customersTable.setItems(viewModel.filteredCustomers());
+        customersTable.setItems(viewModel.customers());
         initCommon();
     }
 

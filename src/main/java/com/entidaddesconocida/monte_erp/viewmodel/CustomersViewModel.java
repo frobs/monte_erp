@@ -11,7 +11,6 @@ import javafx.beans.property.ReadOnlyStringWrapper;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.beans.property.StringProperty;
 import javafx.collections.ObservableList;
-import javafx.collections.transformation.FilteredList;
 
 import java.sql.SQLException;
 import java.util.List;
@@ -84,11 +83,6 @@ public class CustomersViewModel extends FilterableCrudViewModel<Customer> {
     /** Master list currently loaded (active or inactive customers). */
     public ObservableList<Customer> customers() {
         return items;
-    }
-
-    /** Filtered view bound to the table. */
-    public FilteredList<Customer> filteredCustomers() {
-        return filteredItems;
     }
 
     /** Currently selected customer, or {@code null} when none is selected. */
@@ -270,7 +264,7 @@ public class CustomersViewModel extends FilterableCrudViewModel<Customer> {
 
     @Override
     protected String countText() {
-        return "Clientes: " + filteredItems.size();
+        return "Clientes: " + items.size();
     }
 
     @Override

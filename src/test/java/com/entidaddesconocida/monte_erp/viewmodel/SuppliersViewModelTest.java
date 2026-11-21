@@ -411,11 +411,11 @@ class SuppliersViewModelTest {
 
         viewModel.searchTextProperty().set("glo");
 
-        assertEquals(1, viewModel.filteredSuppliers().size());
-        assertEquals("Globex", viewModel.filteredSuppliers().get(0).getName());
+        assertEquals(1, viewModel.suppliers().size());
+        assertEquals("Globex", viewModel.suppliers().get(0).getName());
 
         viewModel.searchTextProperty().set("");
-        assertEquals(2, viewModel.filteredSuppliers().size());
+        assertEquals(2, viewModel.suppliers().size());
     }
 
     @Test
@@ -426,8 +426,8 @@ class SuppliersViewModelTest {
 
         viewModel.searchTextProperty().set("600333444");
 
-        assertEquals(1, viewModel.filteredSuppliers().size());
-        assertEquals("Globex", viewModel.filteredSuppliers().get(0).getName());
+        assertEquals(1, viewModel.suppliers().size());
+        assertEquals("Globex", viewModel.suppliers().get(0).getName());
     }
 
     @Test
@@ -438,8 +438,8 @@ class SuppliersViewModelTest {
 
         viewModel.searchTextProperty().set("globex@");
 
-        assertEquals(1, viewModel.filteredSuppliers().size());
-        assertEquals("Globex", viewModel.filteredSuppliers().get(0).getName());
+        assertEquals(1, viewModel.suppliers().size());
+        assertEquals("Globex", viewModel.suppliers().get(0).getName());
     }
 
     @Test

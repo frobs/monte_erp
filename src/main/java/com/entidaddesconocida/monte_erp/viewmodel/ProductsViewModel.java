@@ -18,7 +18,6 @@ import javafx.beans.property.SimpleStringProperty;
 import javafx.beans.property.StringProperty;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
-import javafx.collections.transformation.FilteredList;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -125,11 +124,6 @@ public class ProductsViewModel extends FilterableCrudViewModel<Product> {
     /** Master list currently loaded (active or inactive products). */
     public ObservableList<Product> products() {
         return items;
-    }
-
-    /** Filtered view bound to the table. */
-    public FilteredList<Product> filteredProducts() {
-        return filteredItems;
     }
 
     /** Currently selected product, or {@code null} when none is selected. */
@@ -415,7 +409,7 @@ public class ProductsViewModel extends FilterableCrudViewModel<Product> {
 
     @Override
     protected String countText() {
-        return "Productos: " + filteredItems.size();
+        return "Productos: " + items.size();
     }
 
     @Override

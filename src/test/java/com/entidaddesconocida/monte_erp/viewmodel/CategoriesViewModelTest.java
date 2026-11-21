@@ -153,7 +153,7 @@ class CategoriesViewModelTest {
 
         viewModel.searchTextProperty().set("snack");
 
-        assertEquals(1, viewModel.filteredCategories().size());
+        assertEquals(1, viewModel.categories().size());
         assertEquals("Categorías: 1", viewModel.categoryCountProperty().get());
     }
 
@@ -301,11 +301,11 @@ class CategoriesViewModelTest {
 
         viewModel.searchTextProperty().set("sna");
 
-        assertEquals(1, viewModel.filteredCategories().size());
-        assertEquals("Snacks", viewModel.filteredCategories().get(0).getName());
+        assertEquals(1, viewModel.categories().size());
+        assertEquals("Snacks", viewModel.categories().get(0).getName());
 
         viewModel.searchTextProperty().set("");
-        assertEquals(2, viewModel.filteredCategories().size());
+        assertEquals(2, viewModel.categories().size());
     }
 
     @Test
@@ -316,13 +316,13 @@ class CategoriesViewModelTest {
 
         viewModel.searchTextProperty().set("aperitivos");
 
-        assertEquals(1, viewModel.filteredCategories().size());
-        assertEquals("Snacks", viewModel.filteredCategories().get(0).getName());
+        assertEquals(1, viewModel.categories().size());
+        assertEquals("Snacks", viewModel.categories().get(0).getName());
 
         // La búsqueda ignora mayúsculas y acentos, igual que MySQL (utf8mb4_unicode_ci).
         viewModel.searchTextProperty().set("REFRÉSCOS");
-        assertEquals(1, viewModel.filteredCategories().size());
-        assertEquals("Bebidas", viewModel.filteredCategories().get(0).getName());
+        assertEquals(1, viewModel.categories().size());
+        assertEquals("Bebidas", viewModel.categories().get(0).getName());
     }
 
     @Test

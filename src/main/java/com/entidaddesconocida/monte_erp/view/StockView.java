@@ -141,14 +141,14 @@ public class StockView implements FxmlView<StockViewModel> {
                 cell.getValue().getPurchase() == null || cell.getValue().getPurchase().getId() == 0
                         ? "" : "#" + cell.getValue().getPurchase().getId()));
 
-        levelsTable.setItems(viewModel.filteredLevels());
+        levelsTable.setItems(viewModel.levels());
         lotsTable.setItems(viewModel.selectedLots());
 
         searchField.textProperty().bindBidirectional(viewModel.searchTextProperty());
         onlyBelowMinimumCheck.selectedProperty()
                 .bindBidirectional(viewModel.onlyBelowMinimumProperty());
         alertCountLabel.textProperty().bind(viewModel.alertCountProperty());
-        countLabel.textProperty().bind(Bindings.size(viewModel.filteredLevels()).asString("%d productos"));
+        countLabel.textProperty().bind(Bindings.size(viewModel.levels()).asString("%d productos"));
     }
 
     private void bindSelection() {

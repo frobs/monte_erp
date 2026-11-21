@@ -18,7 +18,6 @@ import javafx.beans.property.SimpleStringProperty;
 import javafx.beans.property.StringProperty;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
-import javafx.collections.transformation.FilteredList;
 
 import java.sql.SQLException;
 import java.util.List;
@@ -53,7 +52,6 @@ public class StockViewModel implements ViewModel {
     private final BackgroundTasks backgroundTasks;
 
     private final ObservableList<StockLevel> levels = FXCollections.observableArrayList();
-    private final FilteredList<StockLevel> filteredLevels = new FilteredList<>(levels);
     private final StringProperty searchText = new SimpleStringProperty("");
     private final BooleanProperty onlyBelowMinimum = new SimpleBooleanProperty(false);
     private final ObjectProperty<StockLevel> selectedLevel = new SimpleObjectProperty<>();
@@ -90,14 +88,13 @@ public class StockViewModel implements ViewModel {
         onlyBelowMinimum.addListener((observable, oldValue, newValue) -> reloadLevels());
     }
 
-    /** Master list of stock levels (product + available quantity). */
+    /**
+     * Master list of stock levels (product + available quantity), bound to the
+     * table. The search text and the "below minimum" toggle are applied in the
+     * query, so this is not a filtered view.
+     */
     public ObservableList<StockLevel> levels() {
         return levels;
-    }
-
-    /** Filtered view bound to the table. */
-    public FilteredList<StockLevel> filteredLevels() {
-        return filteredLevels;
     }
 
     public StringProperty searchTextProperty() {

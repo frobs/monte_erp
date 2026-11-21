@@ -11,7 +11,6 @@ import javafx.beans.property.ReadOnlyStringWrapper;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.beans.property.StringProperty;
 import javafx.collections.ObservableList;
-import javafx.collections.transformation.FilteredList;
 
 import java.sql.SQLException;
 import java.util.List;
@@ -84,11 +83,6 @@ public class SuppliersViewModel extends FilterableCrudViewModel<Supplier> {
     /** Master list currently loaded (active or inactive suppliers). */
     public ObservableList<Supplier> suppliers() {
         return items;
-    }
-
-    /** Filtered view bound to the table. */
-    public FilteredList<Supplier> filteredSuppliers() {
-        return filteredItems;
     }
 
     /** Currently selected supplier, or {@code null} when none is selected. */
@@ -270,7 +264,7 @@ public class SuppliersViewModel extends FilterableCrudViewModel<Supplier> {
 
     @Override
     protected String countText() {
-        return "Proveedores: " + filteredItems.size();
+        return "Proveedores: " + items.size();
     }
 
     @Override
