@@ -13,6 +13,7 @@ Aplicación de escritorio ERP construida con **Java 25** y **JavaFX 21**, gestio
 5. [Ejecutar la aplicación](#ejecutar-la-aplicación)
 6. [Base de datos MySQL con Docker](#base-de-datos-mysql-con-docker)
 7. [Conexión de la aplicación a MySQL](#conexión-de-la-aplicación-a-mysql)
+8. [Manual de usuario](#manual-de-usuario)
 
 ---
 
@@ -272,8 +273,23 @@ monte_erp/
 │   │           ├── StockView.fxml                 # vista de stock y alertas (RF-09/RF-10)
 │   │           └── ReportsView.fxml               # vista de informes (RF-12)
 │   └── test/java/...                              # Pruebas JUnit 5: unitarias y ui/ (TestFX)
+├── docs/manual_de_usuario/                                   # Manual de usuario (Markdown + capturas reales)
 ├── scripts/run-ui-tests.sh                        # Suite de interfaz con Xvfb + MySQL efímero
 └── target/                  # Artefactos generados (tras compilar)
+```
+
+---
+
+## Manual de usuario
+
+El manual de uso de la aplicación, con capturas de todas las pantallas, está en
+[`docs/manual_de_usuario/manual.md`](docs/manual_de_usuario/manual.md).
+
+Las imágenes no son mockups: se generan ejecutando la aplicación real con los
+tests de TestFX.
+
+```bash
+scripts/run-ui-tests.sh --manual   # regenera docs/manual_de_usuario/img/*.png
 ```
 
 ---
@@ -533,5 +549,28 @@ consumo FIFO), stock/alertas e informes con exportación CSV/PDF.
 Los identificadores, el Javadoc y los registros de log están en inglés; los
 textos que ve el usuario (etiquetas, mensajes y títulos de ventana) están en
 español.
+
+## Regenerar las capturas del manual
+
+Las imágenes de este documento las produce la aplicación real. El generador es el
+test `src/test/java/com/entidaddesconocida/monte_erp/ui/ManualCaptureUiTest.java`,
+que recorre la aplicación contra un MySQL efímero y guarda un PNG por pantalla en
+`docs/manual_de_usuario/img`.
+
+```bash
+scripts/run-ui-tests.sh --manual
+```
+
+- Requiere **Docker** y un servidor gráfico (el script arranca su propio **Xvfb**).
+- Guarda las capturas en `docs/manual_de_usuario/img` (se puede cambiar con
+  `-Dmanual.screenshots.dir=…`).
+- El test **no forma parte** de la suite normal: solo se ejecuta con
+  `-Dmanual.capture=true`, así que `scripts/run-ui-tests.sh` (sin `--manual`) y
+  `./mvnw test` no lo tocan.
+
+Cada captura va precedida por las mismas aserciones que usan los tests de interfaz,
+de modo que si un cambio en la aplicación altera una pantalla, el generador falla
+en lugar de guardar una imagen equivocada. Si cambias textos o flujos de la
+interfaz, actualiza también el apartado correspondiente de este manual.
 
 

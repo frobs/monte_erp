@@ -4,6 +4,7 @@
 #
 #   scripts/run-ui-tests.sh                 # unit + UI tests on a private Xvfb
 #   scripts/run-ui-tests.sh -Dtest=LoginUiTest
+#   scripts/run-ui-tests.sh --manual        # regenera las capturas del manual
 #   UI_USE_EXISTING_DISPLAY=1 scripts/run-ui-tests.sh   # use the current DISPLAY
 #
 # Requirements: Docker (daemon reachable) and Xvfb (or xvfb-run). On a desktop
@@ -13,7 +14,13 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-MAVEN_ARGS=(test -Pui-tests "$@")
+# --manual regenerates the screenshots of docs/manual_de_usuario (see ManualCaptureUiTest).
+if [ "${1:-}" = "--manual" ]; then
+    shift
+    MAVEN_ARGS=(test -Pui-tests -Dtest=ManualCaptureUiTest -Dmanual.capture=true "$@")
+else
+    MAVEN_ARGS=(test -Pui-tests "$@")
+fi
 
 fail() {
     echo "ERROR: $*" >&2
