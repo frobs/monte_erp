@@ -44,6 +44,17 @@ public class CustomersViewModel extends FilterableCrudViewModel<Customer> {
     /** Label of the recovery toggle action (activate the selected customer). */
     public static final String TOGGLE_ACTIVATE_LABEL = "Reactivar cliente";
 
+    /** Labels and messages of the screen, handed to the CRUD template. */
+    private static final CrudLabels<Customer> LABELS = new CrudLabels<>(
+            TOGGLE_DEACTIVATE_LABEL,
+            TOGGLE_ACTIVATE_LABEL,
+            "Selecciona un cliente de la tabla.",
+            "El cliente ya está activo.",
+            "El cliente ya está dado de baja.",
+            customer -> "Cliente '" + customer.getName() + "' dado de baja.",
+            customer -> "Cliente '" + customer.getName() + "' reactivado.",
+            "Cliente guardado correctamente.");
+
     private static final int MAX_NAME_LENGTH = 100;
     private static final int MAX_PHONE_LENGTH = 20;
     private static final int MAX_EMAIL_LENGTH = 100;
@@ -71,7 +82,7 @@ public class CustomersViewModel extends FilterableCrudViewModel<Customer> {
 
     public CustomersViewModel(CustomerRepository customerRepository, SessionValidator sessionValidator,
                         BackgroundTasks backgroundTasks) {
-        super(sessionValidator, backgroundTasks);
+        super(LABELS, sessionValidator, backgroundTasks);
         this.customerRepository = customerRepository;
         bindFilter(searchText);
         watchFields(name, phone, email, address);
@@ -282,46 +293,6 @@ public class CustomersViewModel extends FilterableCrudViewModel<Customer> {
     @Override
     protected String editFormTitle() {
         return "Editar cliente";
-    }
-
-    @Override
-    public String deactivateLabel() {
-        return TOGGLE_DEACTIVATE_LABEL;
-    }
-
-    @Override
-    protected String activateLabel() {
-        return TOGGLE_ACTIVATE_LABEL;
-    }
-
-    @Override
-    protected String notSelectedMessage() {
-        return "Selecciona un cliente de la tabla.";
-    }
-
-    @Override
-    protected String alreadyActiveMessage() {
-        return "El cliente ya está activo.";
-    }
-
-    @Override
-    protected String alreadyInactiveMessage() {
-        return "El cliente ya está dado de baja.";
-    }
-
-    @Override
-    protected String deactivatedMessage(Customer customer) {
-        return "Cliente '" + customer.getName() + "' dado de baja.";
-    }
-
-    @Override
-    protected String activatedMessage(Customer customer) {
-        return "Cliente '" + customer.getName() + "' reactivado.";
-    }
-
-    @Override
-    protected String saveSuccessMessage() {
-        return "Cliente guardado correctamente.";
     }
 
     private String validateName() {

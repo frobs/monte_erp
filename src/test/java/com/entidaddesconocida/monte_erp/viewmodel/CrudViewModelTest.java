@@ -333,6 +333,16 @@ class CrudViewModelTest {
      */
     private static final class TestViewModel extends FilterableCrudViewModel<FakeCrudItem> {
 
+        private static final CrudLabels<FakeCrudItem> LABELS = new CrudLabels<>(
+                "Dar de baja",
+                "Reactivar",
+                "Selecciona un elemento de la tabla.",
+                "Ya está activo.",
+                "Ya está dado de baja.",
+                item -> "Elemento '" + item.getName() + "' dado de baja.",
+                item -> "Elemento '" + item.getName() + "' reactivado.",
+                "Elemento guardado correctamente.");
+
         private final FakeCrudRepository repository;
         private final StringProperty name = new SimpleStringProperty("");
         private final ReadOnlyStringWrapper nameError = new ReadOnlyStringWrapper("");
@@ -345,7 +355,7 @@ class CrudViewModelTest {
         }
 
         TestViewModel(FakeCrudRepository repository, BackgroundTasks backgroundTasks) {
-            super(null, backgroundTasks);
+            super(LABELS, null, backgroundTasks);
             this.repository = repository;
             bindFilter(searchText);
             watchFields(name);
@@ -480,46 +490,6 @@ class CrudViewModelTest {
         @Override
         protected String editFormTitle() {
             return "Editar elemento";
-        }
-
-        @Override
-        public String deactivateLabel() {
-            return "Dar de baja";
-        }
-
-        @Override
-        protected String activateLabel() {
-            return "Reactivar";
-        }
-
-        @Override
-        protected String notSelectedMessage() {
-            return "Selecciona un elemento de la tabla.";
-        }
-
-        @Override
-        protected String alreadyActiveMessage() {
-            return "Ya está activo.";
-        }
-
-        @Override
-        protected String alreadyInactiveMessage() {
-            return "Ya está dado de baja.";
-        }
-
-        @Override
-        protected String deactivatedMessage(FakeCrudItem item) {
-            return "Elemento '" + item.getName() + "' dado de baja.";
-        }
-
-        @Override
-        protected String activatedMessage(FakeCrudItem item) {
-            return "Elemento '" + item.getName() + "' reactivado.";
-        }
-
-        @Override
-        protected String saveSuccessMessage() {
-            return "Elemento guardado correctamente.";
         }
 
         private void rejectDuplicate(String nameValue) {

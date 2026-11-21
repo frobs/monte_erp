@@ -44,6 +44,17 @@ public class SuppliersViewModel extends FilterableCrudViewModel<Supplier> {
     /** Label of the recovery toggle action (activate the selected supplier). */
     public static final String TOGGLE_ACTIVATE_LABEL = "Reactivar proveedor";
 
+    /** Labels and messages of the screen, handed to the CRUD template. */
+    private static final CrudLabels<Supplier> LABELS = new CrudLabels<>(
+            TOGGLE_DEACTIVATE_LABEL,
+            TOGGLE_ACTIVATE_LABEL,
+            "Selecciona un proveedor de la tabla.",
+            "El proveedor ya está activo.",
+            "El proveedor ya está dado de baja.",
+            supplier -> "Proveedor '" + supplier.getName() + "' dado de baja.",
+            supplier -> "Proveedor '" + supplier.getName() + "' reactivado.",
+            "Proveedor guardado correctamente.");
+
     private static final int MAX_NAME_LENGTH = 100;
     private static final int MAX_PHONE_LENGTH = 20;
     private static final int MAX_EMAIL_LENGTH = 100;
@@ -71,7 +82,7 @@ public class SuppliersViewModel extends FilterableCrudViewModel<Supplier> {
 
     public SuppliersViewModel(SupplierRepository supplierRepository, SessionValidator sessionValidator,
                         BackgroundTasks backgroundTasks) {
-        super(sessionValidator, backgroundTasks);
+        super(LABELS, sessionValidator, backgroundTasks);
         this.supplierRepository = supplierRepository;
         bindFilter(searchText);
         watchFields(name, phone, email, address);
@@ -282,46 +293,6 @@ public class SuppliersViewModel extends FilterableCrudViewModel<Supplier> {
     @Override
     protected String editFormTitle() {
         return "Editar proveedor";
-    }
-
-    @Override
-    public String deactivateLabel() {
-        return TOGGLE_DEACTIVATE_LABEL;
-    }
-
-    @Override
-    protected String activateLabel() {
-        return TOGGLE_ACTIVATE_LABEL;
-    }
-
-    @Override
-    protected String notSelectedMessage() {
-        return "Selecciona un proveedor de la tabla.";
-    }
-
-    @Override
-    protected String alreadyActiveMessage() {
-        return "El proveedor ya está activo.";
-    }
-
-    @Override
-    protected String alreadyInactiveMessage() {
-        return "El proveedor ya está dado de baja.";
-    }
-
-    @Override
-    protected String deactivatedMessage(Supplier supplier) {
-        return "Proveedor '" + supplier.getName() + "' dado de baja.";
-    }
-
-    @Override
-    protected String activatedMessage(Supplier supplier) {
-        return "Proveedor '" + supplier.getName() + "' reactivado.";
-    }
-
-    @Override
-    protected String saveSuccessMessage() {
-        return "Proveedor guardado correctamente.";
     }
 
     private String validateName() {

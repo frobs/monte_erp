@@ -50,17 +50,13 @@ public abstract class FilterableCrudViewModel<T> extends CrudViewModel<T> {
     /** Avoids one query per property while a batch filter change is applied. */
     private boolean suppressFilterReload;
 
-    protected FilterableCrudViewModel() {
-        this(null, BackgroundTasks.synchronous());
+    protected FilterableCrudViewModel(CrudLabels<T> labels, SessionValidator sessionValidator) {
+        this(labels, sessionValidator, BackgroundTasks.synchronous());
     }
 
-    protected FilterableCrudViewModel(SessionValidator sessionValidator) {
-        this(sessionValidator, BackgroundTasks.synchronous());
-    }
-
-    protected FilterableCrudViewModel(SessionValidator sessionValidator,
+    protected FilterableCrudViewModel(CrudLabels<T> labels, SessionValidator sessionValidator,
                                       BackgroundTasks backgroundTasks) {
-        super(sessionValidator, backgroundTasks);
+        super(labels, sessionValidator, backgroundTasks);
         // Active and inactive rows come from different queries, so toggling the
         // checkbox reloads the master list. If the reload fails the checkbox is
         // rolled back, so it never disagrees with the rows still on screen.

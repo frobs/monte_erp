@@ -46,6 +46,17 @@ public class UsersViewModel extends CrudViewModel<User> {
     /** Label of the recovery toggle action (activate the selected user). */
     public static final String TOGGLE_ACTIVATE_LABEL = "Activar usuario";
 
+    /** Labels and messages of the screen, handed to the CRUD template. */
+    private static final CrudLabels<User> LABELS = new CrudLabels<>(
+            TOGGLE_DEACTIVATE_LABEL,
+            TOGGLE_ACTIVATE_LABEL,
+            "Selecciona un usuario de la tabla.",
+            "El usuario ya está activo.",
+            "El usuario ya está desactivado.",
+            user -> "Usuario '" + user.getUsername() + "' desactivado.",
+            user -> "Usuario '" + user.getUsername() + "' activado.",
+            "Usuario guardado correctamente.");
+
     private static final int MAX_NAME_LENGTH = 100;
     private static final int MAX_USERNAME_LENGTH = 50;
 
@@ -90,7 +101,7 @@ public class UsersViewModel extends CrudViewModel<User> {
 
     public UsersViewModel(UserRepository userRepository, SessionUser currentUser,
                           SessionValidator sessionValidator, BackgroundTasks backgroundTasks) {
-        super(sessionValidator, backgroundTasks);
+        super(LABELS, sessionValidator, backgroundTasks);
         this.userRepository = userRepository;
         this.currentUser = currentUser;
         watchItemsForCount();
@@ -373,46 +384,6 @@ public class UsersViewModel extends CrudViewModel<User> {
     @Override
     protected String editFormTitle() {
         return "Editar usuario";
-    }
-
-    @Override
-    public String deactivateLabel() {
-        return TOGGLE_DEACTIVATE_LABEL;
-    }
-
-    @Override
-    protected String activateLabel() {
-        return TOGGLE_ACTIVATE_LABEL;
-    }
-
-    @Override
-    protected String notSelectedMessage() {
-        return "Selecciona un usuario de la tabla.";
-    }
-
-    @Override
-    protected String alreadyActiveMessage() {
-        return "El usuario ya está activo.";
-    }
-
-    @Override
-    protected String alreadyInactiveMessage() {
-        return "El usuario ya está desactivado.";
-    }
-
-    @Override
-    protected String deactivatedMessage(User user) {
-        return "Usuario '" + user.getUsername() + "' desactivado.";
-    }
-
-    @Override
-    protected String activatedMessage(User user) {
-        return "Usuario '" + user.getUsername() + "' activado.";
-    }
-
-    @Override
-    protected String saveSuccessMessage() {
-        return "Usuario guardado correctamente.";
     }
 
     private String validateName() {

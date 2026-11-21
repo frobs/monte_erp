@@ -47,9 +47,11 @@ import java.util.logging.Logger;
  * milliseconds the hash takes.</p>
  *
  * <p>Everything entity specific is a hook: how to load the list, how to write,
- * how to map an item to its id/active flag, which labels and messages to show
- * and how to fill/clear the form. A hook is added here only when at least two
- * of the five real screens need it; otherwise it stays in the subclass.</p>
+ * how to map an item to its id/active flag and how to fill/clear the form. The
+ * texts are not hooks: they travel in a {@link CrudLabels} value handed to the
+ * constructor, so a new screen declares them once instead of implementing a
+ * method per string. A hook is added here only when at least two of the five
+ * real screens need it; otherwise it stays in the subclass.</p>
  *
  * <p>Like the concrete ViewModels, this class is deliberately free of
  * ValidatorFX: the per-field rules are exposed as one error property per field,
@@ -69,6 +71,7 @@ public abstract class CrudViewModel<T> implements ViewModel {
 
     protected static final String SESSION_EXPIRED = ViewMessages.SESSION_EXPIRED;
 
+    private final CrudLabels<T> labels;
     private final SessionValidator sessionValidator;
     private final BackgroundTasks backgroundTasks;
 
@@ -115,20 +118,20 @@ public abstract class CrudViewModel<T> implements ViewModel {
         }
     };
 
-    protected CrudViewModel() {
-        this(null, BackgroundTasks.synchronous());
-    }
-
-    protected CrudViewModel(SessionValidator sessionValidator) {
-        this(sessionValidator, BackgroundTasks.synchronous());
+    protected CrudViewModel(CrudLabels<T> labels, SessionValidator sessionValidator) {
+        this(labels, sessionValidator, BackgroundTasks.synchronous());
     }
 
     /**
+     * @param labels          labels and messages of the screen (button, selection
+     *                        guards and success texts)
      * @param backgroundTasks executor of the list query; {@link
      *                        BackgroundTasks#synchronous()} in tests and a
      *                        virtual-thread executor in the application
      */
-    protected CrudViewModel(SessionValidator sessionValidator, BackgroundTasks backgroundTasks) {
+    protected CrudViewModel(CrudLabels<T> labels, SessionValidator sessionValidator,
+                            BackgroundTasks backgroundTasks) {
+        this.labels = labels;
         this.sessionValidator = sessionValidator;
         this.backgroundTasks = backgroundTasks;
         // Selecting a row loads it into the form; clearing the selection resets
@@ -320,7 +323,7 @@ public abstract class CrudViewModel<T> implements ViewModel {
                 ignored -> {
                     writeInFlight = false;
                     afterWrite();
-                    reloadAfterWrite(saveSuccessMessage());
+                    reloadAfterWrite(labels.saveSuccessMessage());
                 },
                 this::onWriteFailure);
     }
@@ -348,11 +351,11 @@ public abstract class CrudViewModel<T> implements ViewModel {
         }
         T selected = selectedItem.get();
         if (selected == null) {
-            fail(notSelectedMessage());
+            fail(labels.notSelectedMessage());
             return;
         }
         if (!itemIsActive(selected)) {
-            fail(alreadyInactiveMessage());
+            fail(labels.alreadyInactiveMessage());
             return;
         }
         if (!canDeactivate(selected)) {
@@ -365,7 +368,7 @@ public abstract class CrudViewModel<T> implements ViewModel {
             fail(DATABASE_ERROR);
             return;
         }
-        reloadAfterWrite(deactivatedMessage(selected));
+        reloadAfterWrite(labels.deactivatedMessage().apply(selected));
     }
 
     /** Brings a previously deleted item back to active. */
@@ -375,11 +378,11 @@ public abstract class CrudViewModel<T> implements ViewModel {
         }
         T selected = selectedItem.get();
         if (selected == null) {
-            fail(notSelectedMessage());
+            fail(labels.notSelectedMessage());
             return;
         }
         if (itemIsActive(selected)) {
-            fail(alreadyActiveMessage());
+            fail(labels.alreadyActiveMessage());
             return;
         }
         if (!canActivate(selected)) {
@@ -392,7 +395,7 @@ public abstract class CrudViewModel<T> implements ViewModel {
             fail(DATABASE_ERROR);
             return;
         }
-        reloadAfterWrite(activatedMessage(selected));
+        reloadAfterWrite(labels.activatedMessage().apply(selected));
     }
 
     /** Currently selected item, or {@code null} when none is selected. */
@@ -507,7 +510,7 @@ public abstract class CrudViewModel<T> implements ViewModel {
             toggleLabel.set(deactivateLabel());
             toggleDisabled.set(isToggleDisabledForActive(selected));
         } else {
-            toggleLabel.set(activateLabel());
+            toggleLabel.set(labels.activateLabel());
             toggleDisabled.set(false);
         }
     }
@@ -647,19 +650,7 @@ public abstract class CrudViewModel<T> implements ViewModel {
     protected abstract String editFormTitle();
 
     /** Label of the destructive toggle action; public so the View can style the button. */
-    public abstract String deactivateLabel();
-
-    protected abstract String activateLabel();
-
-    protected abstract String notSelectedMessage();
-
-    protected abstract String alreadyActiveMessage();
-
-    protected abstract String alreadyInactiveMessage();
-
-    protected abstract String deactivatedMessage(T item);
-
-    protected abstract String activatedMessage(T item);
-
-    protected abstract String saveSuccessMessage();
+    public final String deactivateLabel() {
+        return labels.deactivateLabel();
+    }
 }

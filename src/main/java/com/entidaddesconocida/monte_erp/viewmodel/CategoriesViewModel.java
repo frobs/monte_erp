@@ -48,6 +48,17 @@ public class CategoriesViewModel extends FilterableCrudViewModel<Category> {
     /** Label of the recovery toggle action (activate the selected category). */
     public static final String TOGGLE_ACTIVATE_LABEL = "Reactivar categoría";
 
+    /** Labels and messages of the screen, handed to the CRUD template. */
+    private static final CrudLabels<Category> LABELS = new CrudLabels<>(
+            TOGGLE_DEACTIVATE_LABEL,
+            TOGGLE_ACTIVATE_LABEL,
+            "Selecciona una categoría de la tabla.",
+            "La categoría ya está activa.",
+            "La categoría ya está dada de baja.",
+            category -> "Categoría '" + category.getName() + "' dada de baja.",
+            category -> "Categoría '" + category.getName() + "' reactivada.",
+            "Categoría guardada correctamente.");
+
     private static final int MAX_NAME_LENGTH = 100;
     private static final int MAX_DESCRIPTION_LENGTH = 255;
 
@@ -69,7 +80,7 @@ public class CategoriesViewModel extends FilterableCrudViewModel<Category> {
 
     public CategoriesViewModel(CategoryRepository categoryRepository, SessionValidator sessionValidator,
                         BackgroundTasks backgroundTasks) {
-        super(sessionValidator, backgroundTasks);
+        super(LABELS, sessionValidator, backgroundTasks);
         this.categoryRepository = categoryRepository;
         bindFilter(searchText);
         watchFields(name, description);
@@ -247,46 +258,6 @@ public class CategoriesViewModel extends FilterableCrudViewModel<Category> {
     @Override
     protected String editFormTitle() {
         return "Editar categoría";
-    }
-
-    @Override
-    public String deactivateLabel() {
-        return TOGGLE_DEACTIVATE_LABEL;
-    }
-
-    @Override
-    protected String activateLabel() {
-        return TOGGLE_ACTIVATE_LABEL;
-    }
-
-    @Override
-    protected String notSelectedMessage() {
-        return "Selecciona una categoría de la tabla.";
-    }
-
-    @Override
-    protected String alreadyActiveMessage() {
-        return "La categoría ya está activa.";
-    }
-
-    @Override
-    protected String alreadyInactiveMessage() {
-        return "La categoría ya está dada de baja.";
-    }
-
-    @Override
-    protected String deactivatedMessage(Category category) {
-        return "Categoría '" + category.getName() + "' dada de baja.";
-    }
-
-    @Override
-    protected String activatedMessage(Category category) {
-        return "Categoría '" + category.getName() + "' reactivada.";
-    }
-
-    @Override
-    protected String saveSuccessMessage() {
-        return "Categoría guardada correctamente.";
     }
 
     private String validateName() {

@@ -64,6 +64,17 @@ public class ProductsViewModel extends FilterableCrudViewModel<Product> {
     /** Label of the recovery toggle action (activate the selected product). */
     public static final String TOGGLE_ACTIVATE_LABEL = "Reactivar producto";
 
+    /** Labels and messages of the screen, handed to the CRUD template. */
+    private static final CrudLabels<Product> LABELS = new CrudLabels<>(
+            TOGGLE_DEACTIVATE_LABEL,
+            TOGGLE_ACTIVATE_LABEL,
+            "Selecciona un producto de la tabla.",
+            "El producto ya está activo.",
+            "El producto ya está dado de baja.",
+            product -> "Producto '" + product.getName() + "' dado de baja.",
+            product -> "Producto '" + product.getName() + "' reactivado.",
+            "Producto guardado correctamente.");
+
     private static final int MAX_NAME_LENGTH = 100;
     private static final int MAX_SKU_LENGTH = 50;
     private static final int MAX_DESCRIPTION_LENGTH = 255;
@@ -112,7 +123,7 @@ public class ProductsViewModel extends FilterableCrudViewModel<Product> {
                              SupplierRepository supplierRepository,
                              SessionValidator sessionValidator,
                              BackgroundTasks backgroundTasks) {
-        super(sessionValidator, backgroundTasks);
+        super(LABELS, sessionValidator, backgroundTasks);
         this.productRepository = productRepository;
         this.categoryRepository = categoryRepository;
         this.supplierRepository = supplierRepository;
@@ -425,46 +436,6 @@ public class ProductsViewModel extends FilterableCrudViewModel<Product> {
     @Override
     protected String editFormTitle() {
         return "Editar producto";
-    }
-
-    @Override
-    public String deactivateLabel() {
-        return TOGGLE_DEACTIVATE_LABEL;
-    }
-
-    @Override
-    protected String activateLabel() {
-        return TOGGLE_ACTIVATE_LABEL;
-    }
-
-    @Override
-    protected String notSelectedMessage() {
-        return "Selecciona un producto de la tabla.";
-    }
-
-    @Override
-    protected String alreadyActiveMessage() {
-        return "El producto ya está activo.";
-    }
-
-    @Override
-    protected String alreadyInactiveMessage() {
-        return "El producto ya está dado de baja.";
-    }
-
-    @Override
-    protected String deactivatedMessage(Product product) {
-        return "Producto '" + product.getName() + "' dado de baja.";
-    }
-
-    @Override
-    protected String activatedMessage(Product product) {
-        return "Producto '" + product.getName() + "' reactivado.";
-    }
-
-    @Override
-    protected String saveSuccessMessage() {
-        return "Producto guardado correctamente.";
     }
 
     private String validateName() {
