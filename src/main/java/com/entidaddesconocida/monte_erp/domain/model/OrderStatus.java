@@ -14,7 +14,7 @@ import java.util.List;
  * database value ({@link #dbValue()}) and the label shown to the user
  * ({@link #label()}) in the same place.</p>
  */
-public enum OrderStatus {
+public enum OrderStatus implements WorkflowStatus {
 
     /** State of a freshly created order. */
     PENDING("pending", "Pendiente"),

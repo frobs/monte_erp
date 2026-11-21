@@ -26,7 +26,7 @@ import java.util.List;
  * rehydration goes through the full constructor with the value parsed by
  * {@link OrderStatus#fromDb(String)}.</p>
  */
-public class SalesOrder {
+public class SalesOrder implements StatusWorkflow<OrderStatus> {
 
     private int id;
     private LocalDateTime orderDate;

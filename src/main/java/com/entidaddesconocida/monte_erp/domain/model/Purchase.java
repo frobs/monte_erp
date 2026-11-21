@@ -33,7 +33,7 @@ import java.util.List;
  * header and its lots is atomic (decision D5) and belongs to the repository, not
  * to this entity.</p>
  */
-public class Purchase {
+public class Purchase implements StatusWorkflow<PurchaseStatus> {
 
     private int id;
     private LocalDateTime purchaseDate;

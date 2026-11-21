@@ -12,7 +12,7 @@ import java.util.List;
  * to the supplier. That rule is a property of the state, not of a validation
  * method that compares strings.</p>
  */
-public enum PurchaseStatus {
+public enum PurchaseStatus implements WorkflowStatus {
 
     /** State of a freshly created purchase: its lots are not available yet. */
     PENDING("pending", "Pendiente"),

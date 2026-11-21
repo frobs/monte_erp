@@ -14,7 +14,6 @@ import com.entidaddesconocida.monte_erp.domain.repository.CustomerRepository;
 import com.entidaddesconocida.monte_erp.domain.repository.ProductRepository;
 import com.entidaddesconocida.monte_erp.domain.repository.SalesOrderRepository;
 import com.entidaddesconocida.monte_erp.domain.repository.StockRepository;
-import com.entidaddesconocida.monte_erp.domain.service.FifoAllocator;
 import com.entidaddesconocida.monte_erp.domain.service.InactiveEntityException;
 import com.entidaddesconocida.monte_erp.domain.service.InsufficientStockException;
 
@@ -22,13 +21,9 @@ import de.saxsys.mvvmfx.ViewModel;
 
 import javafx.beans.property.ObjectProperty;
 import javafx.beans.property.ReadOnlyIntegerProperty;
-import javafx.beans.property.ReadOnlyIntegerWrapper;
 import javafx.beans.property.ReadOnlyObjectProperty;
-import javafx.beans.property.ReadOnlyObjectWrapper;
 import javafx.beans.property.ReadOnlyStringProperty;
-import javafx.beans.property.ReadOnlyStringWrapper;
 import javafx.beans.property.SimpleObjectProperty;
-import javafx.beans.property.SimpleStringProperty;
 import javafx.beans.property.StringProperty;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
@@ -36,7 +31,6 @@ import javafx.collections.ObservableList;
 import java.math.BigDecimal;
 import java.sql.SQLException;
 import java.time.LocalDate;
-import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -48,23 +42,25 @@ import java.util.logging.Logger;
  * master-detail screen that creates an order from several lines and shows the
  * read-only history with the detail of the selected order.</p>
  *
- * <p>The unit price of a line is a snapshot of the product price when the line is
- * added (decision D4) and only one line per product is allowed (D3), rejected
- * with a message. The order is saved as {@code pending} with the signed-in user
- * (D5) and the total is computed from the lines (D6).</p>
+ * <p>The responsibilities are delegated (A2): the draft — combos, lines, price
+ * snapshot, total and stock pre-warning — lives in {@link SalesOrderDraft}; the
+ * history criteria in {@link HistoryFilter}; the RF-08 pipeline in
+ * {@link StatusChanger}. This class wires them, runs the insert and reads the
+ * detail of the selection.</p>
  *
- * <p>Stock is checked twice (RF-09/RF-15, decision D4): {@link #addLine()}
- * pre-warns with {@link StockRepository#findAvailable(int)} and does not add an
- * impossible line, while {@link #save()} is the authority (the repository
- * re-reads the lots under lock and may still reject the order). The detail of a
- * selected order also loads the consumed lots ({@link SalesOrderRepository#findIssues(int)}, RF-15).</p>
+ * <p>The order is saved as {@code pending} with the signed-in user (D5) and the
+ * total is computed from the lines (D6). Stock is checked twice (RF-09/RF-15,
+ * decision D4): the draft pre-warns with {@link StockRepository#findAvailable(int)}
+ * and does not add an impossible line, while {@link #save()} is the authority (the
+ * repository re-reads the lots under lock and may still reject the order). The
+ * detail of a selected order also loads the consumed lots
+ * ({@link SalesOrderRepository#findIssues(int)}, RF-15).</p>
  *
  * <p>Every query of the screen — the insert, the status change, the detail of the
- * selected order, the stock of the chosen product and the pre-check of
- * {@link #addLine()} — runs off the JavaFX thread through
- * {@link BackgroundTasks}; only the state updates come back to it. The three
- * detail/stock queries are guarded by a generation counter so a slow response
- * for a previous selection can never overwrite the current one.</p>
+ * selected order and the stock of the chosen product — runs off the JavaFX thread
+ * through {@link BackgroundTasks}; only the state updates come back to it. The
+ * detail query is guarded by a generation counter so a slow response for a
+ * previous selection can never overwrite the current one.</p>
  *
  * <p>The history can be filtered by date range, customer and status. The criteria
  * travel to the database as a {@link SalesOrderFilter}: every change runs
@@ -85,9 +81,6 @@ public class SalesOrdersViewModel implements ViewModel {
     private static final String SESSION_EXPIRED = ViewMessages.SESSION_EXPIRED;
     private static final String SAVE_RELOAD_ERROR =
             "Pedido #%d guardado, pero no se pudo actualizar el histórico. Pulsa 'Actualizar'.";
-    private static final BigDecimal MAX_STORED_TOTAL = new BigDecimal("99999999.99");
-    private static final String TOTAL_LIMIT_ERROR =
-            "El total del pedido no puede superar 99.999.999,99 €.";
 
     /** Message shown when the "desde" date is after the "hasta" date. */
     protected static final String PERIOD_ERROR = ViewMessages.PERIOD_ERROR;
@@ -97,23 +90,22 @@ public class SalesOrdersViewModel implements ViewModel {
             "Pedido #%d guardado correctamente. Corrige el filtro para verlo en el histórico.";
 
     /** No customer chosen when saving an order. */
-    protected static final String CUSTOMER_REQUIRED = "Selecciona un cliente.";
+    protected static final String CUSTOMER_REQUIRED = SalesOrderDraft.CUSTOMER_REQUIRED;
 
     /** No product chosen when adding a line. */
-    protected static final String PRODUCT_REQUIRED = "Selecciona un producto.";
+    protected static final String PRODUCT_REQUIRED = SalesOrderDraft.PRODUCT_REQUIRED;
 
     /** Quantity is empty, not an integer or not positive. */
-    protected static final String QUANTITY_INVALID =
-            "La cantidad debe ser un número entero mayor que 0.";
+    protected static final String QUANTITY_INVALID = SalesOrderDraft.QUANTITY_INVALID;
 
     /** A product can only appear once in the order (decision D3). */
-    protected static final String DUPLICATED_PRODUCT = "El producto ya está en el pedido.";
+    protected static final String DUPLICATED_PRODUCT = SalesOrderDraft.DUPLICATED_PRODUCT;
 
     /** Prefix of the stock pre-warning message (RF-09, decision D4). */
-    protected static final String STOCK_INSUFFICIENT = "Stock insuficiente";
+    protected static final String STOCK_INSUFFICIENT = SalesOrderDraft.STOCK_INSUFFICIENT;
 
     /** An order needs at least one line to be saved. */
-    protected static final String LINES_REQUIRED = "Añade al menos una línea al pedido.";
+    protected static final String LINES_REQUIRED = SalesOrderDraft.LINES_REQUIRED;
 
     /** RF-08: no order selected to change its status. */
     protected static final String ORDER_REQUIRED = "Selecciona un pedido.";
@@ -126,84 +118,27 @@ public class SalesOrdersViewModel implements ViewModel {
     protected static final String CONFLICT =
             "El pedido ha cambiado desde que se cargó; se ha actualizado el histórico.";
 
+    /** Texts of the RF-08 pipeline, so the in-memory and the stored order agree. */
+    private static final StatusChanger.Messages<OrderStatus> STATUS_MESSAGES =
+            new StatusChanger.Messages<>(ORDER_REQUIRED, INVALID_TRANSITION, CONFLICT,
+                    (id, status) -> "Pedido #" + id + " marcado como " + status.label() + ".");
+
     private final SalesOrderRepository salesOrderRepository;
     private final CustomerRepository customerRepository;
-    private final ProductRepository productRepository;
-    private final StockRepository stockRepository;
     private final SessionUser currentUser;
     private final SessionValidator sessionValidator;
     private final BackgroundTasks backgroundTasks;
 
-    private final ObservableList<Customer> customers = FXCollections.observableArrayList();
-    private final ObservableList<Product> products = FXCollections.observableArrayList();
-    private final ObjectProperty<Customer> selectedCustomer = new SimpleObjectProperty<>();
-    private final ObjectProperty<Product> selectedProduct = new SimpleObjectProperty<>();
-    private final StringProperty quantity = new SimpleStringProperty("");
+    private final Feedback feedback = new Feedback();
+    private final WriteGuard writeGuard = new WriteGuard();
 
-    /** Available units of the selected product, refreshed when the selection changes (RF-09). */
-    private final ReadOnlyIntegerWrapper availableStock = new ReadOnlyIntegerWrapper(0);
-
-    private final ObservableList<SalesOrderLine> draftLines = FXCollections.observableArrayList();
-    private final ReadOnlyObjectWrapper<BigDecimal> orderTotal = new ReadOnlyObjectWrapper<>(BigDecimal.ZERO);
+    private final SalesOrderDraft draft;
+    private final HistoryFilter<Customer, OrderStatus> filter;
+    private final StatusChanger<SalesOrder, OrderStatus> statusChanger;
 
     private final ObservableList<SalesOrder> orders = FXCollections.observableArrayList();
     private final ObjectProperty<SalesOrder> selectedOrder = new SimpleObjectProperty<>();
-    private final ObservableList<SalesOrderLine> selectedOrderLines = FXCollections.observableArrayList();
-
-    /** RF-15: lots consumed by the selected order, for the detail table. */
-    private final ObservableList<StockIssue> selectedOrderIssues = FXCollections.observableArrayList();
-
-    /** RF-08: statuses reachable from the selected order, in button order. */
-    private final ObservableList<OrderStatus> availableTransitions =
-            FXCollections.observableArrayList();
-
-    // History filters: they travel to the database, so every change re-runs
-    // findAll(filter) instead of filtering the loaded list in memory.
-    private final ObjectProperty<LocalDate> fromDate = new SimpleObjectProperty<>();
-    private final ObjectProperty<LocalDate> toDate = new SimpleObjectProperty<>();
-    private final ObjectProperty<Customer> customerFilter = new SimpleObjectProperty<>();
-    private final ObjectProperty<OrderStatus> statusFilter = new SimpleObjectProperty<>();
-    private final ObservableList<Customer> customerFilterOptions =
-            FXCollections.observableArrayList();
-    private final ObservableList<OrderStatus> statusFilterOptions =
-            FXCollections.observableArrayList(OrderStatus.values());
-
-    /** Guards a batched filter reset so it issues a single query. */
-    private boolean suppressReload;
-
-    /**
-     * Guards a write in flight. The insert ran on the UI thread before, which made
-     * a double click impossible; now that it runs in the background the flag stops
-     * a second order or a second transition from being submitted.
-     */
-    private boolean writeInFlight;
-
-    /**
-     * Guards the pre-check of {@link #addLine()}: while the stock query runs, a
-     * second click must not submit it twice (it would add the line twice).
-     */
-    private boolean lineCheckInFlight;
-
-    /**
-     * Sequence of the detail queries (lines and lots of the selected order). Only
-     * the newest submission is applied, so a slow query for a previous order can
-     * never paint its detail over the current one.
-     */
-    private long detailGeneration;
-
-    /**
-     * Sequence of the available-stock queries. Same rule: the response of a
-     * product the user has already left behind is discarded.
-     */
-    private long stockGeneration;
-
-    private final StringProperty errorMessage = new SimpleStringProperty("");
-    private final StringProperty statusMessage = new SimpleStringProperty("");
-    private final ReadOnlyStringWrapper customerError = new ReadOnlyStringWrapper("");
-    private final ReadOnlyStringWrapper productError = new ReadOnlyStringWrapper("");
-    private final ReadOnlyStringWrapper quantityError = new ReadOnlyStringWrapper("");
-    private final ReadOnlyStringWrapper stockError = new ReadOnlyStringWrapper("");
-    private final ReadOnlyStringWrapper linesError = new ReadOnlyStringWrapper("");
+    private final SalesOrderDetail detail;
 
     public SalesOrdersViewModel(SalesOrderRepository salesOrderRepository,
                                 CustomerRepository customerRepository,
@@ -226,9 +161,8 @@ public class SalesOrdersViewModel implements ViewModel {
 
     /**
      * @param backgroundTasks executor of the insert, the status change, the order
-     *                        detail, the available stock and the stock pre-check
-     *                        (all of them query the database and can wait for
-     *                        another session); {@link
+     *                        detail and the stock queries (all of them query the
+     *                        database and can wait for another session); {@link
      *                        BackgroundTasks#synchronous()} in tests and a
      *                        virtual-thread executor in the application
      */
@@ -241,43 +175,55 @@ public class SalesOrdersViewModel implements ViewModel {
                                 BackgroundTasks backgroundTasks) {
         this.salesOrderRepository = salesOrderRepository;
         this.customerRepository = customerRepository;
-        this.productRepository = productRepository;
-        this.stockRepository = stockRepository;
         this.currentUser = currentUser;
         this.sessionValidator = sessionValidator;
         this.backgroundTasks = backgroundTasks;
-        // The view shows the available units of the chosen product and caps the
-        // quantity field with them, so the stock is refreshed on every change.
-        selectedProduct.addListener((observable, previous, product) -> refreshAvailableStock(product));
-        // Every filter change runs one query; the DatePicker only fires when the
-        // user commits a value, so this is one reload per deliberate change.
-        fromDate.addListener((observable, oldValue, newValue) -> onFilterChanged());
-        toDate.addListener((observable, oldValue, newValue) -> onFilterChanged());
-        customerFilter.addListener((observable, oldValue, newValue) -> onFilterChanged());
-        statusFilter.addListener((observable, oldValue, newValue) -> onFilterChanged());
+        this.draft = new SalesOrderDraft(customerRepository, productRepository, stockRepository,
+                backgroundTasks, feedback, this::ensureActiveSession);
+        // Every filter change runs one query.
+        this.filter = new HistoryFilter<>(OrderStatus.values(), this::reloadHistory);
+        this.detail = new SalesOrderDetail(salesOrderRepository, backgroundTasks, feedback);
+        this.statusChanger = new StatusChanger<>(backgroundTasks, writeGuard, feedback,
+                salesOrderRepository::changeStatus, new StatusChanger.Screen<>() {
+                    @Override
+                    public boolean reloadHistory() {
+                        return SalesOrdersViewModel.this.reloadHistory();
+                    }
+
+                    @Override
+                    public SalesOrder findById(int id) {
+                        return SalesOrdersViewModel.this.findById(id);
+                    }
+
+                    @Override
+                    public void select(SalesOrder order) {
+                        selectedOrder.set(order);
+                        selectOrder(order);
+                    }
+                }, this::onStatusFailure, STATUS_MESSAGES);
     }
 
     /** Active customers offered in the combo (decision: an inactive one cannot be assigned). */
     public ObservableList<Customer> customers() {
-        return customers;
+        return draft.customers();
     }
 
     /** Active products offered in the combo. */
     public ObservableList<Product> products() {
-        return products;
+        return draft.products();
     }
 
     public ObjectProperty<Customer> selectedCustomerProperty() {
-        return selectedCustomer;
+        return draft.selectedCustomerProperty();
     }
 
     public ObjectProperty<Product> selectedProductProperty() {
-        return selectedProduct;
+        return draft.selectedProductProperty();
     }
 
-    /** Quantity typed by the user; parsed in {@link #addLine()}. */
+    /** Quantity typed by the user; parsed by {@link SalesOrderDraft#addLine()}. */
     public StringProperty quantityProperty() {
-        return quantity;
+        return draft.quantityProperty();
     }
 
     /**
@@ -286,17 +232,17 @@ public class SalesOrdersViewModel implements ViewModel {
      * the stock and to cap what can be typed in the quantity field.
      */
     public ReadOnlyIntegerProperty availableStockProperty() {
-        return availableStock.getReadOnlyProperty();
+        return draft.availableStockProperty();
     }
 
     /** Lines of the order being drafted. */
     public ObservableList<SalesOrderLine> draftLines() {
-        return draftLines;
+        return draft.lines();
     }
 
     /** Total of the draft order, recomputed from the lines (RF-13). */
     public ReadOnlyObjectProperty<BigDecimal> orderTotalProperty() {
-        return orderTotal.getReadOnlyProperty();
+        return draft.totalProperty();
     }
 
     /** Read-only history of saved orders, most recent first. */
@@ -310,12 +256,12 @@ public class SalesOrdersViewModel implements ViewModel {
 
     /** Lines of the selected order, loaded from the repository. */
     public ObservableList<SalesOrderLine> selectedOrderLines() {
-        return selectedOrderLines;
+        return detail.lines();
     }
 
     /** RF-15: lots consumed by the selected order, loaded from the repository. */
     public ObservableList<StockIssue> selectedOrderIssues() {
-        return selectedOrderIssues;
+        return detail.issues();
     }
 
     /**
@@ -324,27 +270,27 @@ public class SalesOrdersViewModel implements ViewModel {
      * bind the visibility of each action button to it.
      */
     public ObservableList<OrderStatus> availableTransitions() {
-        return availableTransitions;
+        return statusChanger.availableTransitions();
     }
 
     /** Lower bound of the history filter; {@code null} means "unbounded". */
     public ObjectProperty<LocalDate> fromDateProperty() {
-        return fromDate;
+        return filter.fromDateProperty();
     }
 
     /** Upper bound of the history filter; {@code null} means "unbounded". */
     public ObjectProperty<LocalDate> toDateProperty() {
-        return toDate;
+        return filter.toDateProperty();
     }
 
     /** Customer filter; {@code null} means "every customer". */
     public ObjectProperty<Customer> customerFilterProperty() {
-        return customerFilter;
+        return filter.entityProperty();
     }
 
     /** Status filter; {@code null} means "every status". */
     public ObjectProperty<OrderStatus> statusFilterProperty() {
-        return statusFilter;
+        return filter.statusProperty();
     }
 
     /**
@@ -353,76 +299,66 @@ public class SalesOrdersViewModel implements ViewModel {
      * filter).
      */
     public ObservableList<Customer> customerFilterOptions() {
-        return customerFilterOptions;
+        return filter.entityOptions();
     }
 
     /** Statuses offered by the filter, in domain order. */
     public ObservableList<OrderStatus> statusFilterOptions() {
-        return statusFilterOptions;
+        return filter.statusOptions();
     }
 
     public StringProperty errorMessageProperty() {
-        return errorMessage;
+        return feedback.errorMessageProperty();
     }
 
     public StringProperty statusMessageProperty() {
-        return statusMessage;
+        return feedback.statusMessageProperty();
     }
 
     public ReadOnlyStringProperty customerErrorProperty() {
-        return customerError.getReadOnlyProperty();
+        return draft.customerErrorProperty();
     }
 
     public ReadOnlyStringProperty productErrorProperty() {
-        return productError.getReadOnlyProperty();
+        return draft.productErrorProperty();
     }
 
     public ReadOnlyStringProperty quantityErrorProperty() {
-        return quantityError.getReadOnlyProperty();
+        return draft.quantityErrorProperty();
     }
 
     /** Stock pre-warning of {@link #addLine()} (RF-09, decision D4). */
     public ReadOnlyStringProperty stockErrorProperty() {
-        return stockError.getReadOnlyProperty();
+        return draft.stockErrorProperty();
     }
 
     public ReadOnlyStringProperty linesErrorProperty() {
-        return linesError.getReadOnlyProperty();
+        return draft.linesErrorProperty();
     }
 
     /** Loads the combos, the filter options and the filtered history. */
     public void load() {
-        errorMessage.set("");
-        statusMessage.set("");
+        feedback.clear();
         if (!ensureActiveSession()) {
             return;
         }
         try {
-            customers.setAll(customerRepository.findActive());
+            draft.loadCombos();
             // The filter lists every customer: an inactive one still bought from us.
-            customerFilterOptions.setAll(customerRepository.findAll());
-            products.setAll(productRepository.findAll());
+            customerFilterOptions().setAll(customerRepository.findAll());
         } catch (SQLException e) {
             LOGGER.log(Level.SEVERE, "Could not load the sales orders", e);
-            fail(DATABASE_ERROR);
+            feedback.fail(DATABASE_ERROR);
             return;
         }
-        resetDraft();
-        clearFieldErrors();
+        draft.reset();
+        draft.clearFieldErrors();
         reloadHistory();
     }
 
     /** Drops every filter and re-queries the whole history. */
     public void clearFilters() {
-        suppressReload = true;
-        try {
-            fromDate.set(null);
-            toDate.set(null);
-            customerFilter.set(null);
-            statusFilter.set(null);
-        } finally {
-            suppressReload = false;
-        }
+        filter.reset();
         reloadHistory();
     }
 
@@ -433,157 +369,63 @@ public class SalesOrdersViewModel implements ViewModel {
      * message is already set and the caller decides how to report its write.
      */
     private boolean reloadHistory() {
-        SalesOrderFilter filter;
+        SalesOrderFilter current;
         try {
-            filter = currentFilter();
+            current = currentFilter();
         } catch (IllegalArgumentException e) {
             orders.clear();
             clearSelection();
-            fail(PERIOD_ERROR);
+            feedback.fail(PERIOD_ERROR);
             return false;
         }
         // A corrected range must clear the message that rejected the old one.
-        if (PERIOD_ERROR.equals(errorMessage.get())) {
-            errorMessage.set("");
+        if (PERIOD_ERROR.equals(feedback.error())) {
+            feedback.clearError();
         }
         try {
-            orders.setAll(salesOrderRepository.findAll(filter));
+            orders.setAll(salesOrderRepository.findAll(current));
         } catch (SQLException e) {
             LOGGER.log(Level.SEVERE, "Could not load the sales orders", e);
             orders.clear();
             clearSelection();
-            fail(DATABASE_ERROR);
+            feedback.fail(DATABASE_ERROR);
             return false;
         }
         clearSelection();
         return true;
     }
 
-    private void onFilterChanged() {
-        if (!suppressReload) {
-            reloadHistory();
-        }
-    }
-
     private SalesOrderFilter currentFilter() {
-        Customer customer = customerFilter.get();
-        return SalesOrderFilter.of(fromDate.get(), toDate.get(),
-                customer == null ? null : customer.getId(), statusFilter.get());
+        Customer customer = filter.entityProperty().get();
+        return SalesOrderFilter.of(filter.fromDateProperty().get(), filter.toDateProperty().get(),
+                customer == null ? null : customer.getId(), filter.statusProperty().get());
     }
 
     private void clearSelection() {
-        // Any detail query in flight belongs to the previous selection.
-        detailGeneration++;
         selectedOrder.set(null);
-        selectedOrderLines.clear();
-        selectedOrderIssues.clear();
-        availableTransitions.clear();
+        // Any detail query in flight belongs to the previous selection.
+        detail.clear();
+        statusChanger.availableTransitions().clear();
     }
 
-    /**
-     * Adds the chosen product to the draft order with the given quantity and the
-     * product price snapshot. Validates the product, the quantity and the "one
-     * line per product" rule (D3) on the UI thread, then pre-checks the available
-     * lots off it: the line is added in the callback.
-     */
+    /** Adds the chosen product to the draft order (see {@link SalesOrderDraft#addLine()}). */
     public void addLine() {
-        if (!ensureActiveSession()) {
-            return;
+        if (ensureActiveSession()) {
+            draft.addLine();
         }
-        errorMessage.set("");
-        statusMessage.set("");
-        clearFieldErrors();
-
-        Product product = selectedProduct.get();
-        if (product == null) {
-            productError.set(PRODUCT_REQUIRED);
-        }
-
-        Integer parsedQuantity = parseQuantity();
-        if (parsedQuantity == null || parsedQuantity <= 0) {
-            quantityError.set(QUANTITY_INVALID);
-        }
-
-        if (product != null && containsProduct(product)) {
-            productError.set(DUPLICATED_PRODUCT);
-        }
-
-        if (hasFieldErrors()) {
-            fail(ViewMessages.join(productError.get(), quantityError.get()));
-            return;
-        }
-
-        if (lineCheckInFlight) {
-            return;
-        }
-        int requested = parsedQuantity;
-        int productId = product.getId();
-        // The pre-check reads the lots with a query, so it runs in the background
-        // and the line is added once the answer arrives.
-        lineCheckInFlight = true;
-        backgroundTasks.submit(
-                () -> FifoAllocator.availableTotal(stockRepository.findAvailable(productId)),
-                available -> {
-                    lineCheckInFlight = false;
-                    onStockChecked(product, requested, available);
-                },
-                failure -> {
-                    lineCheckInFlight = false;
-                    LOGGER.log(Level.SEVERE, "Could not check the available stock", failure);
-                    fail(DATABASE_ERROR);
-                });
-    }
-
-    /**
-     * Adds the line once the pre-check of {@link #addLine()} confirms that the
-     * available lots cover the quantity. The duplicate rule is checked again
-     * because a line could have been added while the query was running.
-     */
-    private void onStockChecked(Product product, int requested, int available) {
-        if (containsProduct(product)) {
-            productError.set(DUPLICATED_PRODUCT);
-            fail(DUPLICATED_PRODUCT);
-            return;
-        }
-        if (available < requested) {
-            String message = InsufficientStockException.formatMessage(product.getName(),
-                    requested, available);
-            stockError.set(message);
-            fail(message);
-            return;
-        }
-        SalesOrderLine line = new SalesOrderLine(requested, product.getPrice(), product);
-        BigDecimal nextTotal = calculateDraftTotal().add(line.subtotal());
-        if (nextTotal.compareTo(MAX_STORED_TOTAL) > 0) {
-            fail(TOTAL_LIMIT_ERROR);
-            return;
-        }
-        draftLines.add(line);
-        orderTotal.set(nextTotal);
-        clearFieldErrors();
-        // The form is cleared only when it still holds what was checked: the user
-        // may have chosen another product while the query was running.
-        if (selectedProduct.get() == product) {
-            selectedProduct.set(null);
-            quantity.set("");
-        }
-        succeed("Línea añadida.");
     }
 
     /** Removes a line from the draft order and recomputes the total. */
     public void removeLine(SalesOrderLine line) {
-        if (line != null && draftLines.remove(line)) {
-            recomputeTotal();
-        }
+        draft.removeLine(line);
     }
 
     /** Clears the draft order so a brand new one can be typed in. */
     public void newOrder() {
-        errorMessage.set("");
-        statusMessage.set("");
-        resetDraft();
-        availableTransitions.clear();
-        clearFieldErrors();
+        feedback.clear();
+        draft.reset();
+        statusChanger.availableTransitions().clear();
+        draft.clearFieldErrors();
     }
 
     /**
@@ -595,38 +437,30 @@ public class SalesOrdersViewModel implements ViewModel {
         if (!ensureActiveSession()) {
             return;
         }
-        clearFieldErrors();
-        if (selectedCustomer.get() == null) {
-            customerError.set(CUSTOMER_REQUIRED);
-        }
-        if (draftLines.isEmpty()) {
-            linesError.set(LINES_REQUIRED);
-        }
-        if (hasFieldErrors()) {
-            fail(ViewMessages.join(customerError.get(), linesError.get()));
+        String invalid = draft.validateForSave();
+        if (!invalid.isEmpty()) {
+            feedback.fail(invalid);
             return;
         }
-        if (calculateDraftTotal().compareTo(MAX_STORED_TOTAL) > 0) {
-            fail(TOTAL_LIMIT_ERROR);
+        if (!draft.totalWithinLimit()) {
+            feedback.fail(SalesOrderDraft.TOTAL_LIMIT_ERROR);
             return;
         }
 
-        if (writeInFlight) {
+        if (!writeGuard.tryBegin()) {
             return;
         }
-        SalesOrder order = new SalesOrder(selectedCustomer.get(), currentUser.toEntityReference(),
-                draftLines);
+        SalesOrder order = draft.buildOrder(currentUser.toEntityReference());
         // The insert locks the customer and the stock lots (FOR UPDATE), so it can
         // wait for another session: it must not run on the UI thread.
-        writeInFlight = true;
         backgroundTasks.submit(
                 () -> salesOrderRepository.insert(order),
                 id -> {
-                    writeInFlight = false;
+                    writeGuard.end();
                     onOrderSaved(id);
                 },
                 failure -> {
-                    writeInFlight = false;
+                    writeGuard.end();
                     onOrderSaveFailure(failure);
                 });
     }
@@ -636,16 +470,16 @@ public class SalesOrdersViewModel implements ViewModel {
      * history read, so a reload failure cannot cause a duplicate.
      */
     private void onOrderSaved(int id) {
-        resetDraft();
-        clearFieldErrors();
+        draft.reset();
+        draft.clearFieldErrors();
         if (reloadHistory()) {
-            succeed("Pedido #" + id + " guardado correctamente.");
-        } else if (PERIOD_ERROR.equals(errorMessage.get())) {
+            feedback.succeed("Pedido #" + id + " guardado correctamente.");
+        } else if (PERIOD_ERROR.equals(feedback.error())) {
             // The write succeeded; only the filter hides the history.
-            statusMessage.set(String.format(SAVED_WITH_BAD_FILTER, id));
+            feedback.status(String.format(SAVED_WITH_BAD_FILTER, id));
         } else {
             LOGGER.log(Level.WARNING, "Sales order was saved but its history could not be reloaded");
-            fail(String.format(SAVE_RELOAD_ERROR, id));
+            feedback.fail(String.format(SAVE_RELOAD_ERROR, id));
         }
     }
 
@@ -657,11 +491,11 @@ public class SalesOrdersViewModel implements ViewModel {
     private void onOrderSaveFailure(Throwable failure) {
         if (failure instanceof InactiveEntityException
                 || failure instanceof InsufficientStockException) {
-            fail(failure.getMessage());
+            feedback.fail(failure.getMessage());
             return;
         }
         LOGGER.log(Level.SEVERE, "Could not save the sales order", failure);
-        fail(DATABASE_ERROR);
+        feedback.fail(DATABASE_ERROR);
     }
 
     /**
@@ -674,99 +508,26 @@ public class SalesOrdersViewModel implements ViewModel {
         if (!ensureActiveSession()) {
             return;
         }
-        updateAvailableTransitions(order);
-        long generation = ++detailGeneration;
-        if (order == null) {
-            selectedOrderLines.clear();
-            selectedOrderIssues.clear();
-            return;
-        }
-        int orderId = order.getId();
-        backgroundTasks.submit(
-                () -> new OrderDetail(salesOrderRepository.findLines(orderId),
-                        salesOrderRepository.findIssues(orderId)),
-                detail -> {
-                    if (generation == detailGeneration) {
-                        selectedOrderLines.setAll(detail.lines());
-                        selectedOrderIssues.setAll(detail.issues());
-                    }
-                },
-                failure -> {
-                    if (generation == detailGeneration) {
-                        LOGGER.log(Level.SEVERE, "Could not load the order lines", failure);
-                        selectedOrderLines.clear();
-                        selectedOrderIssues.clear();
-                        fail(DATABASE_ERROR);
-                    }
-                });
-    }
-
-    /** Lines and consumed lots of one order, read together in the background. */
-    private record OrderDetail(List<SalesOrderLine> lines, List<StockIssue> issues) {
+        statusChanger.updateFor(order);
+        detail.load(order);
     }
 
     /**
-     * RF-08: moves the selected order to {@code newStatus}. The transition is
-     * validated in the domain first, then persisted with the optimistic guard;
-     * a 0-row update means someone else moved the order in the meantime, so the
-     * history is reloaded and the user is warned instead of overwriting it.
+     * RF-08: moves the selected order to {@code newStatus} through the shared
+     * pipeline (domain validation, optimistic guard and conflict reload).
      */
     public void changeStatus(OrderStatus newStatus) {
         if (!ensureActiveSession()) {
             return;
         }
-        clearFieldErrors();
-        SalesOrder order = selectedOrder.get();
-        if (order == null) {
-            fail(ORDER_REQUIRED);
-            return;
-        }
-        if (!order.canTransitionTo(newStatus)) {
-            fail(String.format(INVALID_TRANSITION, order.getStatus().label(),
-                    newStatus.label()));
-            return;
-        }
-        if (writeInFlight) {
-            return;
-        }
-        int orderId = order.getId();
-        OrderStatus currentStatus = order.getStatus();
-        // The cancellation gives stock back inside a transaction: off the UI thread.
-        writeInFlight = true;
-        backgroundTasks.submit(
-                () -> salesOrderRepository.changeStatus(orderId, currentStatus, newStatus),
-                updated -> {
-                    writeInFlight = false;
-                    onStatusChanged(order, newStatus, updated);
-                },
-                failure -> {
-                    writeInFlight = false;
-                    LOGGER.log(Level.SEVERE, "Could not change the sales order status", failure);
-                    fail(DATABASE_ERROR);
-                });
+        draft.clearFieldErrors();
+        statusChanger.change(selectedOrder.get(), newStatus);
     }
 
-    /** Applies a status change already committed by the repository. */
-    private void onStatusChanged(SalesOrder order, OrderStatus newStatus, int updated) {
-        if (updated == 0) {
-            // Someone else moved the order: reload instead of overwriting it.
-            reloadHistory();
-            fail(CONFLICT);
-            return;
-        }
-        order.changeStatus(newStatus);
-        String message = "Pedido #" + order.getId() + " marcado como "
-                + newStatus.label() + ".";
-        if (!reloadHistory()) {
-            // The write is committed: confirm it even though the filter or the
-            // database hides the reloaded history.
-            statusMessage.set(message);
-            return;
-        }
-        SalesOrder reloaded = findById(order.getId());
-        selectedOrder.set(reloaded);
-        selectOrder(reloaded);
-        succeed(message);
+    /** Anything but the domain rejections already mapped by the pipeline. */
+    private void onStatusFailure(Throwable failure) {
+        LOGGER.log(Level.SEVERE, "Could not change the sales order status", failure);
+        feedback.fail(DATABASE_ERROR);
     }
 
     private boolean ensureActiveSession() {
@@ -779,22 +540,14 @@ public class SalesOrdersViewModel implements ViewModel {
             }
         } catch (SQLException e) {
             LOGGER.log(Level.WARNING, "Could not revalidate the signed-in user", e);
-            fail(DATABASE_ERROR);
+            feedback.fail(DATABASE_ERROR);
             return false;
         }
         orders.clear();
         clearSelection();
-        resetDraft();
-        fail(SESSION_EXPIRED);
+        draft.reset();
+        feedback.fail(SESSION_EXPIRED);
         return false;
-    }
-
-    private void updateAvailableTransitions(SalesOrder order) {
-        if (order == null) {
-            availableTransitions.clear();
-        } else {
-            availableTransitions.setAll(order.allowedTransitions());
-        }
     }
 
     private SalesOrder findById(int id) {
@@ -802,113 +555,5 @@ public class SalesOrdersViewModel implements ViewModel {
                 .filter(order -> order.getId() == id)
                 .findFirst()
                 .orElse(null);
-    }
-
-    private Integer parseQuantity() {
-        String value = quantity.get() == null ? "" : quantity.get().trim();
-        if (value.isEmpty()) {
-            return null;
-        }
-        try {
-            return Integer.valueOf(value);
-        } catch (NumberFormatException e) {
-            return null;
-        }
-    }
-
-    /**
-     * Reloads the available units of the given product (0 for {@code null}) and
-     * caps the typed quantity to it. The query runs in the background; a response
-     * for a product that is no longer selected is discarded. A database failure is
-     * reported as a connection error and leaves the stock at 0 so no impossible
-     * line is added.
-     */
-    private void refreshAvailableStock(Product product) {
-        long generation = ++stockGeneration;
-        if (product == null) {
-            availableStock.set(0);
-            return;
-        }
-        if (!ensureActiveSession()) {
-            availableStock.set(0);
-            return;
-        }
-        int productId = product.getId();
-        backgroundTasks.submit(
-                () -> FifoAllocator.availableTotal(stockRepository.findAvailable(productId)),
-                available -> {
-                    if (generation == stockGeneration) {
-                        applyAvailableStock(available);
-                    }
-                },
-                failure -> {
-                    if (generation != stockGeneration) {
-                        return;
-                    }
-                    LOGGER.log(Level.SEVERE, "Could not load the available stock", failure);
-                    availableStock.set(0);
-                    fail(DATABASE_ERROR);
-                });
-    }
-
-    /** Publishes the stock of the selected product and caps the typed quantity. */
-    private void applyAvailableStock(int available) {
-        availableStock.set(available);
-        // The field mask stops the user from typing more than the stock, but a
-        // product change can leave an already typed quantity above the new stock.
-        Integer typed = parseQuantity();
-        if (typed != null && typed > available) {
-            quantity.set(available > 0 ? String.valueOf(available) : "");
-        }
-    }
-
-    private boolean containsProduct(Product product) {
-        return draftLines.stream()
-                .anyMatch(line -> line.getProduct() != null
-                        && line.getProduct().getId() == product.getId());
-    }
-
-    private BigDecimal calculateDraftTotal() {
-        BigDecimal total = BigDecimal.ZERO;
-        for (SalesOrderLine line : draftLines) {
-            total = total.add(line.subtotal());
-        }
-        return total;
-    }
-
-    private void recomputeTotal() {
-        orderTotal.set(calculateDraftTotal());
-    }
-
-    private void resetDraft() {
-        selectedCustomer.set(null);
-        selectedProduct.set(null);
-        quantity.set("");
-        draftLines.clear();
-        orderTotal.set(BigDecimal.ZERO);
-    }
-
-    private void clearFieldErrors() {
-        customerError.set("");
-        productError.set("");
-        quantityError.set("");
-        stockError.set("");
-        linesError.set("");
-    }
-
-    private boolean hasFieldErrors() {
-        return !customerError.get().isBlank() || !productError.get().isBlank()
-                || !quantityError.get().isBlank() || !stockError.get().isBlank()
-                || !linesError.get().isBlank();
-    }
-
-    private void fail(String message) {
-        statusMessage.set("");
-        errorMessage.set(message);
-    }
-
-    private void succeed(String message) {
-        errorMessage.set("");
-        statusMessage.set(message);
     }
 }
