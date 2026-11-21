@@ -189,7 +189,7 @@
 }
 
 .session-menu-item:focused {
-    -fx-background-color: rgb(0 0 0 / 0.12);
+    -fx-background-color: rgba(0, 0, 0, 0.12);
 }
 
 .module-button {
