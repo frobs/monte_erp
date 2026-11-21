@@ -84,14 +84,14 @@ public class AppShell {
 
     /** Loads the main view for the current session (e.g. when coming back from a module). */
     public void showMain() {
-        User user = refreshSession();
+        SessionUser user = refreshSession();
         if (user == null) {
             showLogin();
             return;
         }
         ViewTuple<MainView, ?> tuple =
                 FluentViewLoader.fxmlView(MainView.class).load();
-        String title = "Monte ERP · " + user.getName() + " (" + user.getRoleLabel() + ")";
+        String title = "Monte ERP · " + user.name() + " (" + user.roleLabel() + ")";
         SceneNavigator.show(stage, tuple, title,
                 SceneNavigator.MAIN_WIDTH, SceneNavigator.MAIN_HEIGHT);
     }
@@ -104,7 +104,7 @@ public class AppShell {
      *                               hidden for employees, this is a safety net
      */
     public void showUsers() {
-        User user = refreshSession();
+        SessionUser user = refreshSession();
         if (user == null) {
             showLogin();
             return;
@@ -265,7 +265,7 @@ public class AppShell {
         }
     }
 
-    private User refreshSession() {
+    private SessionUser refreshSession() {
         session.requireCurrentUser();
         try {
             if (sessionValidator.refresh()) {

@@ -28,7 +28,7 @@ class LoginUiTest extends AbstractUiTest {
         ui.assertLabel("roleLabel", "Administrador");
         ui.assertLabelContains("databaseLabel", "jdbc:mysql://");
         ui.assertVisible("manageUsersButton", true);
-        assertEquals("admin", app.session().currentUser().getUsername());
+        assertEquals("admin", app.session().currentUser().username());
     }
 
     @Test

@@ -442,6 +442,16 @@ public abstract class CrudViewModel<T> implements ViewModel {
         return false;
     }
 
+    /**
+     * Validator of the signed-in session, for the subclasses whose rules depend
+     * on the <em>current</em> role (users): the one the screen was built with may
+     * be stale after a demotion. {@code null} in the unit tests that build the
+     * ViewModel by hand.
+     */
+    protected final SessionValidator sessionValidator() {
+        return sessionValidator;
+    }
+
     private void refreshToggleState() {
         T selected = selectedItem.get();
         if (selected == null) {

@@ -1,6 +1,7 @@
 package com.entidaddesconocida.monte_erp.viewmodel;
 
 import com.entidaddesconocida.monte_erp.app.BackgroundTasks;
+import com.entidaddesconocida.monte_erp.app.SessionUser;
 import com.entidaddesconocida.monte_erp.domain.model.Customer;
 import com.entidaddesconocida.monte_erp.domain.model.OrderStatus;
 import com.entidaddesconocida.monte_erp.domain.model.Role;
@@ -70,7 +71,7 @@ class SalesOrdersViewModelTest {
                 .withLot(1, lot(product(1, "Teclado", "10.00"), 100))
                 .withLot(2, lot(product(2, "Ratón", "5.50"), 100));
         viewModel = new SalesOrdersViewModel(salesOrderRepository, customerRepository,
-                productRepository, stockRepository, user());
+                productRepository, stockRepository, sessionUser());
         viewModel.load();
     }
 
@@ -94,6 +95,11 @@ class SalesOrdersViewModelTest {
         User user = new User("Bea", "bea", "hash", Role.EMPLOYEE, true);
         user.setId(9);
         return user;
+    }
+
+    /** Signed-in snapshot handed to the ViewModel: same account, no credentials. */
+    private static SessionUser sessionUser() {
+        return SessionUser.of(user());
     }
 
     private void selectProduct(int index) {
@@ -125,7 +131,7 @@ class SalesOrdersViewModelTest {
     void loadReportsDatabaseError() {
         SalesOrdersViewModel failing = new SalesOrdersViewModel(
                 new FakeSalesOrderRepository().throwOnAccess(), customerRepository,
-                productRepository, stockRepository, user());
+                productRepository, stockRepository, sessionUser());
 
         failing.load();
 
@@ -346,7 +352,7 @@ class SalesOrdersViewModelTest {
     void doubleClickSavesOnlyOnce() throws Exception {
         Deque<Runnable> pending = new ArrayDeque<>();
         SalesOrdersViewModel deferred = new SalesOrdersViewModel(salesOrderRepository,
-                customerRepository, productRepository, stockRepository, user(), null,
+                customerRepository, productRepository, stockRepository, sessionUser(), null,
                 new BackgroundTasks() {
                     @Override
                     public <T> void submit(Callable<T> task, Consumer<T> onSuccess,
@@ -478,7 +484,7 @@ class SalesOrdersViewModelTest {
         FakeStockRepository lowStock = new FakeStockRepository()
                 .withLot(1, lot(product(1, "Teclado", "10.00"), 1));
         SalesOrdersViewModel vm = new SalesOrdersViewModel(salesOrderRepository,
-                customerRepository, productRepository, lowStock, user());
+                customerRepository, productRepository, lowStock, sessionUser());
         vm.load();
         Product tecladoProduct = vm.products().stream()
                 .filter(candidate -> candidate.getId() == 1).findFirst().orElseThrow();
@@ -553,7 +559,7 @@ class SalesOrdersViewModelTest {
 
     private SalesOrdersViewModel viewModel(FakeStockRepository stock) {
         SalesOrdersViewModel vm = new SalesOrdersViewModel(salesOrderRepository,
-                customerRepository, productRepository, stock, user());
+                customerRepository, productRepository, stock, sessionUser());
         vm.load();
         return vm;
     }

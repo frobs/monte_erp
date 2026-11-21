@@ -1,5 +1,6 @@
 package com.entidaddesconocida.monte_erp.viewmodel;
 
+import com.entidaddesconocida.monte_erp.app.SessionUser;
 import com.entidaddesconocida.monte_erp.domain.model.PurchaseStatus;
 import com.entidaddesconocida.monte_erp.domain.model.Role;
 import com.entidaddesconocida.monte_erp.domain.model.Product;
@@ -53,7 +54,7 @@ class PurchasesViewModelTest {
                 .withProduct(product(3, "Antiguo", false));
         purchaseRepository = new FakePurchaseRepository();
         viewModel = new PurchasesViewModel(purchaseRepository, supplierRepository,
-                productRepository, user());
+                productRepository, sessionUser());
         viewModel.load();
     }
 
@@ -71,6 +72,11 @@ class PurchasesViewModelTest {
         User user = new User("Bea", "bea", "hash", Role.EMPLOYEE, true);
         user.setId(9);
         return user;
+    }
+
+    /** Signed-in snapshot handed to the ViewModel: same account, no credentials. */
+    private static SessionUser sessionUser() {
+        return SessionUser.of(user());
     }
 
     private void selectSupplier() {
@@ -102,7 +108,7 @@ class PurchasesViewModelTest {
     void loadReportsDatabaseError() {
         PurchasesViewModel failing = new PurchasesViewModel(
                 new FakePurchaseRepository().throwOnAccess(), supplierRepository,
-                productRepository, user());
+                productRepository, sessionUser());
 
         failing.load();
 

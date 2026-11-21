@@ -2,6 +2,7 @@ package com.entidaddesconocida.monte_erp.viewmodel;
 
 import com.entidaddesconocida.monte_erp.domain.model.Role;
 import com.entidaddesconocida.monte_erp.app.SessionState;
+import com.entidaddesconocida.monte_erp.app.SessionUser;
 import com.entidaddesconocida.monte_erp.app.SessionValidator;
 import com.entidaddesconocida.monte_erp.domain.model.User;
 import com.entidaddesconocida.monte_erp.security.PasswordHasher;
@@ -37,7 +38,7 @@ class UsersViewModelTest {
     void setUp() {
         admin = new User("Ana", "ana", PasswordHasher.hash(ADMIN_PASSWORD), Role.ADMIN, true);
         fakeRepository = new FakeUserRepository().withUser(admin);
-        viewModel = new UsersViewModel(fakeRepository, admin);
+        viewModel = new UsersViewModel(fakeRepository, SessionUser.of(admin));
         viewModel.load();
     }
 
@@ -258,14 +259,19 @@ class UsersViewModelTest {
     }
 
     @Test
-    @DisplayName("Editar el propio usuario sincroniza la copia de sesión")
+    @DisplayName("Editar el propio usuario actualiza el snapshot de sesión")
     void editingCurrentUserSyncsSession() throws Exception {
-        viewModel.selectedUserProperty().set(admin);
-        viewModel.nameProperty().set("Ana María");
+        SessionState session = new SessionState();
+        session.signIn(admin);
+        UsersViewModel currentSessionViewModel = new UsersViewModel(fakeRepository,
+                SessionUser.of(admin), new SessionValidator(session, fakeRepository));
+        currentSessionViewModel.load();
+        currentSessionViewModel.selectedUserProperty().set(admin);
+        currentSessionViewModel.nameProperty().set("Ana María");
 
-        viewModel.save();
+        currentSessionViewModel.save();
 
-        assertEquals("Ana María", admin.getName());
+        assertEquals("Ana María", session.currentUser().name());
         assertEquals("Ana María", fakeRepository.findByUsername("ana").getName());
     }
 
@@ -409,7 +415,7 @@ class UsersViewModelTest {
     @Test
     @DisplayName("Sin usuarios, el contador muestra cero")
     void emptyTableShowsZeroCount() {
-        UsersViewModel emptyViewModel = new UsersViewModel(new FakeUserRepository(), admin);
+        UsersViewModel emptyViewModel = new UsersViewModel(new FakeUserRepository(), SessionUser.of(admin));
 
         emptyViewModel.load();
 
@@ -521,7 +527,7 @@ class UsersViewModelTest {
                 throw new SQLIntegrityConstraintViolationException("Duplicate entry for key 'uq_user_username'");
             }
         };
-        UsersViewModel racingViewModel = new UsersViewModel(racing, admin);
+        UsersViewModel racingViewModel = new UsersViewModel(racing, SessionUser.of(admin));
         racingViewModel.nameProperty().set("Nuevo Usuario");
         racingViewModel.usernameProperty().set("nuevo");
         racingViewModel.passwordProperty().set("clave123");
@@ -538,7 +544,7 @@ class UsersViewModelTest {
         FakeUserRepository repository = new FakeUserRepository().withUser(current);
         SessionState session = new SessionState();
         session.signIn(current);
-        UsersViewModel guarded = new UsersViewModel(repository, current,
+        UsersViewModel guarded = new UsersViewModel(repository, SessionUser.of(current),
                 new SessionValidator(session, repository));
         guarded.nameProperty().set("Nuevo Usuario");
         guarded.usernameProperty().set("nuevo");

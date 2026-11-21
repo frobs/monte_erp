@@ -1,6 +1,6 @@
 package com.entidaddesconocida.monte_erp.viewmodel;
 
-import com.entidaddesconocida.monte_erp.domain.model.User;
+import com.entidaddesconocida.monte_erp.app.SessionUser;
 import com.entidaddesconocida.monte_erp.infrastructure.config.DatabaseUrl;
 
 import de.saxsys.mvvmfx.ViewModel;
@@ -15,7 +15,8 @@ import javafx.beans.property.ReadOnlyStringWrapper;
  *
  * <p>Exposes read-only properties derived from the authenticated user and the
  * application configuration. The View binds labels and visibility to these
- * properties.</p>
+ * properties. It receives the {@link SessionUser} snapshot, so the screen never
+ * has access to the credentials of the account.</p>
  */
 public class MainViewModel implements ViewModel {
 
@@ -25,10 +26,10 @@ public class MainViewModel implements ViewModel {
     private final ReadOnlyBooleanWrapper adminProperty = new ReadOnlyBooleanWrapper();
     private final ReadOnlyStringWrapper databaseProperty = new ReadOnlyStringWrapper();
 
-    public MainViewModel(User user, DatabaseUrl databaseUrl) {
-        welcomeProperty.set("Bienvenido/a, " + user.getName());
-        usernameProperty.set(user.getUsername());
-        roleLabelProperty.set(user.getRoleLabel());
+    public MainViewModel(SessionUser user, DatabaseUrl databaseUrl) {
+        welcomeProperty.set("Bienvenido/a, " + user.name());
+        usernameProperty.set(user.username());
+        roleLabelProperty.set(user.roleLabel());
         adminProperty.set(user.isAdmin());
         databaseProperty.set("Base de datos: " + databaseUrl.redacted());
     }

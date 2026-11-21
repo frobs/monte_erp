@@ -1,6 +1,7 @@
 package com.entidaddesconocida.monte_erp.viewmodel;
 
 import com.entidaddesconocida.monte_erp.app.BackgroundTasks;
+import com.entidaddesconocida.monte_erp.app.SessionUser;
 import com.entidaddesconocida.monte_erp.app.SessionValidator;
 import com.entidaddesconocida.monte_erp.domain.model.Role;
 import com.entidaddesconocida.monte_erp.domain.model.User;
@@ -49,7 +50,13 @@ public class UsersViewModel extends CrudViewModel<User> {
     private static final int MAX_USERNAME_LENGTH = 50;
 
     private final UserRepository userRepository;
-    private final User currentUser;
+
+    /**
+     * Snapshot of the signed-in administrator, used when the ViewModel is built
+     * without a validator (unit tests). In the application the live snapshot of
+     * {@link #sessionValidator()} wins, so a demotion applies immediately.
+     */
+    private final SessionUser currentUser;
 
     private final StringProperty name = new SimpleStringProperty("");
     private final StringProperty username = new SimpleStringProperty("");
@@ -65,16 +72,16 @@ public class UsersViewModel extends CrudViewModel<User> {
     private final ReadOnlyStringWrapper usernameError = new ReadOnlyStringWrapper("");
     private final ReadOnlyStringWrapper passwordError = new ReadOnlyStringWrapper("");
 
-    public UsersViewModel(UserRepository userRepository, User currentUser) {
+    public UsersViewModel(UserRepository userRepository, SessionUser currentUser) {
         this(userRepository, currentUser, null);
     }
 
-    public UsersViewModel(UserRepository userRepository, User currentUser,
+    public UsersViewModel(UserRepository userRepository, SessionUser currentUser,
                           SessionValidator sessionValidator) {
         this(userRepository, currentUser, sessionValidator, BackgroundTasks.synchronous());
     }
 
-    public UsersViewModel(UserRepository userRepository, User currentUser,
+    public UsersViewModel(UserRepository userRepository, SessionUser currentUser,
                           SessionValidator sessionValidator, BackgroundTasks backgroundTasks) {
         super(sessionValidator, backgroundTasks);
         this.userRepository = userRepository;
@@ -179,7 +186,8 @@ public class UsersViewModel extends CrudViewModel<User> {
 
     @Override
     protected boolean validateBusinessRules() throws SQLException {
-        if (currentUser == null || !currentUser.isAdmin()) {
+        SessionUser acting = actingUser();
+        if (acting == null || !acting.isAdmin()) {
             fail("La gestión de usuarios es exclusiva del administrador.");
             return false;
         }
@@ -233,7 +241,8 @@ public class UsersViewModel extends CrudViewModel<User> {
     /** The current administrator cannot deactivate their own account. */
     @Override
     protected boolean canDeactivate(User item) {
-        if (currentUser == null || !currentUser.isAdmin()) {
+        SessionUser acting = actingUser();
+        if (acting == null || !acting.isAdmin()) {
             fail("La gestión de usuarios es exclusiva del administrador.");
             return false;
         }
@@ -247,7 +256,8 @@ public class UsersViewModel extends CrudViewModel<User> {
     /** The current administrator cannot be deactivated, so the toggle is disabled for them. */
     @Override
     protected boolean canActivate(User item) {
-        if (currentUser == null || !currentUser.isAdmin()) {
+        SessionUser acting = actingUser();
+        if (acting == null || !acting.isAdmin()) {
             fail("La gestión de usuarios es exclusiva del administrador.");
             return false;
         }
@@ -401,22 +411,31 @@ public class UsersViewModel extends CrudViewModel<User> {
     }
 
     /**
-     * Keeps the session copy of the user in sync when the administrator edits
-     * their own account, so the top bar of the main screen is not stale.
+     * Keeps the session snapshot in step when the administrator edits their own
+     * account, so the top bar of the main screen is not stale. Only the session
+     * relevant fields travel: the hash of the edited row never enters the
+     * session.
      */
     private void syncCurrentUser(User saved) {
-        if (!isCurrentUser(saved)) {
+        SessionValidator validator = sessionValidator();
+        if (validator == null || !isCurrentUser(saved)) {
             return;
         }
-        currentUser.setName(saved.getName());
-        currentUser.setUsername(saved.getUsername());
-        currentUser.setPasswordHash(saved.getPasswordHash());
-        currentUser.setRole(saved.getRole());
-        currentUser.setActive(saved.isActive());
+        validator.synchronize(saved);
+    }
+
+    /**
+     * Signed-in user to check the rules against: the live snapshot when the
+     * session is validated, or the one the ViewModel was built with in tests.
+     */
+    private SessionUser actingUser() {
+        SessionValidator validator = sessionValidator();
+        return validator == null ? currentUser : validator.currentUser();
     }
 
     private boolean isCurrentUser(User user) {
-        return currentUser != null && user != null && user.getId() == currentUser.getId();
+        SessionUser acting = actingUser();
+        return acting != null && user != null && user.getId() == acting.id();
     }
 
     private static String duplicateMessage(String username) {

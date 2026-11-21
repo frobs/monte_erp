@@ -11,6 +11,7 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Unit tests for the {@link AppShell} navigation guards (RF-02).
@@ -59,7 +60,11 @@ class AppShellTest {
         IllegalStateException ex = assertThrows(IllegalStateException.class, shell::showUsers);
 
         assertEquals("La gestión de usuarios es exclusiva del administrador", ex.getMessage());
-        assertFalse(administrator.isAdmin());
+        // The session snapshot was refreshed with the persisted role; the entity
+        // that started the session is left untouched (it carries no credentials
+        // nor shared state with the screens).
+        assertFalse(session.requireCurrentUser().isAdmin());
+        assertTrue(administrator.isAdmin());
     }
 
     @Test

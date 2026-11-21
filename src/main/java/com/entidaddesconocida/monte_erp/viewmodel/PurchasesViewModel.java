@@ -1,6 +1,7 @@
 package com.entidaddesconocida.monte_erp.viewmodel;
 
 import com.entidaddesconocida.monte_erp.app.BackgroundTasks;
+import com.entidaddesconocida.monte_erp.app.SessionUser;
 import com.entidaddesconocida.monte_erp.app.SessionValidator;
 import com.entidaddesconocida.monte_erp.domain.model.Product;
 import com.entidaddesconocida.monte_erp.domain.model.Purchase;
@@ -8,7 +9,6 @@ import com.entidaddesconocida.monte_erp.domain.model.PurchaseStatus;
 import com.entidaddesconocida.monte_erp.domain.model.PurchaseFilter;
 import com.entidaddesconocida.monte_erp.domain.model.Stock;
 import com.entidaddesconocida.monte_erp.domain.model.Supplier;
-import com.entidaddesconocida.monte_erp.domain.model.User;
 import com.entidaddesconocida.monte_erp.domain.repository.ProductRepository;
 import com.entidaddesconocida.monte_erp.domain.repository.PurchaseRepository;
 import com.entidaddesconocida.monte_erp.domain.repository.SupplierRepository;
@@ -116,7 +116,7 @@ public class PurchasesViewModel implements ViewModel {
     private final PurchaseRepository purchaseRepository;
     private final SupplierRepository supplierRepository;
     private final ProductRepository productRepository;
-    private final User currentUser;
+    private final SessionUser currentUser;
     private final SessionValidator sessionValidator;
     private final BackgroundTasks backgroundTasks;
 
@@ -171,7 +171,7 @@ public class PurchasesViewModel implements ViewModel {
     public PurchasesViewModel(PurchaseRepository purchaseRepository,
                               SupplierRepository supplierRepository,
                               ProductRepository productRepository,
-                              User currentUser) {
+                              SessionUser currentUser) {
         this(purchaseRepository, supplierRepository, productRepository, currentUser, null,
                 BackgroundTasks.synchronous());
     }
@@ -179,7 +179,7 @@ public class PurchasesViewModel implements ViewModel {
     public PurchasesViewModel(PurchaseRepository purchaseRepository,
                               SupplierRepository supplierRepository,
                               ProductRepository productRepository,
-                              User currentUser,
+                              SessionUser currentUser,
                               SessionValidator sessionValidator) {
         this(purchaseRepository, supplierRepository, productRepository, currentUser,
                 sessionValidator, BackgroundTasks.synchronous());
@@ -194,7 +194,7 @@ public class PurchasesViewModel implements ViewModel {
     public PurchasesViewModel(PurchaseRepository purchaseRepository,
                               SupplierRepository supplierRepository,
                               ProductRepository productRepository,
-                              User currentUser,
+                              SessionUser currentUser,
                               SessionValidator sessionValidator,
                               BackgroundTasks backgroundTasks) {
         this.purchaseRepository = purchaseRepository;
@@ -514,7 +514,8 @@ public class PurchasesViewModel implements ViewModel {
         if (writeInFlight) {
             return;
         }
-        Purchase purchase = new Purchase(selectedSupplier.get(), currentUser, draftLots);
+        Purchase purchase = new Purchase(selectedSupplier.get(),
+                currentUser.toEntityReference(), draftLots);
         // The insert locks the supplier, the products and the lots: off the UI thread.
         writeInFlight = true;
         backgroundTasks.submit(

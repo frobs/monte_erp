@@ -1,6 +1,7 @@
 package com.entidaddesconocida.monte_erp.viewmodel;
 
 import com.entidaddesconocida.monte_erp.app.BackgroundTasks;
+import com.entidaddesconocida.monte_erp.app.SessionUser;
 import com.entidaddesconocida.monte_erp.app.SessionValidator;
 import com.entidaddesconocida.monte_erp.domain.model.Customer;
 import com.entidaddesconocida.monte_erp.domain.model.OrderStatus;
@@ -10,7 +11,6 @@ import com.entidaddesconocida.monte_erp.domain.model.SalesOrderFilter;
 import com.entidaddesconocida.monte_erp.domain.model.SalesOrderLine;
 import com.entidaddesconocida.monte_erp.domain.model.Stock;
 import com.entidaddesconocida.monte_erp.domain.model.StockIssue;
-import com.entidaddesconocida.monte_erp.domain.model.User;
 import com.entidaddesconocida.monte_erp.domain.repository.CustomerRepository;
 import com.entidaddesconocida.monte_erp.domain.repository.ProductRepository;
 import com.entidaddesconocida.monte_erp.domain.repository.SalesOrderRepository;
@@ -124,7 +124,7 @@ public class SalesOrdersViewModel implements ViewModel {
     private final CustomerRepository customerRepository;
     private final ProductRepository productRepository;
     private final StockRepository stockRepository;
-    private final User currentUser;
+    private final SessionUser currentUser;
     private final SessionValidator sessionValidator;
     private final BackgroundTasks backgroundTasks;
 
@@ -184,7 +184,7 @@ public class SalesOrdersViewModel implements ViewModel {
                                 CustomerRepository customerRepository,
                                 ProductRepository productRepository,
                                 StockRepository stockRepository,
-                                User currentUser) {
+                                SessionUser currentUser) {
         this(salesOrderRepository, customerRepository, productRepository, stockRepository,
                 currentUser, null, BackgroundTasks.synchronous());
     }
@@ -193,7 +193,7 @@ public class SalesOrdersViewModel implements ViewModel {
                                 CustomerRepository customerRepository,
                                 ProductRepository productRepository,
                                 StockRepository stockRepository,
-                                User currentUser,
+                                SessionUser currentUser,
                                 SessionValidator sessionValidator) {
         this(salesOrderRepository, customerRepository, productRepository, stockRepository,
                 currentUser, sessionValidator, BackgroundTasks.synchronous());
@@ -209,7 +209,7 @@ public class SalesOrdersViewModel implements ViewModel {
                                 CustomerRepository customerRepository,
                                 ProductRepository productRepository,
                                 StockRepository stockRepository,
-                                User currentUser,
+                                SessionUser currentUser,
                                 SessionValidator sessionValidator,
                                 BackgroundTasks backgroundTasks) {
         this.salesOrderRepository = salesOrderRepository;
@@ -545,7 +545,8 @@ public class SalesOrdersViewModel implements ViewModel {
         if (writeInFlight) {
             return;
         }
-        SalesOrder order = new SalesOrder(selectedCustomer.get(), currentUser, draftLines);
+        SalesOrder order = new SalesOrder(selectedCustomer.get(), currentUser.toEntityReference(),
+                draftLines);
         // The insert locks the customer and the stock lots (FOR UPDATE), so it can
         // wait for another session: it must not run on the UI thread.
         writeInFlight = true;

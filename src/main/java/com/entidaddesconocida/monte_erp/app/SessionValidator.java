@@ -5,7 +5,15 @@ import com.entidaddesconocida.monte_erp.domain.repository.UserRepository;
 
 import java.sql.SQLException;
 
-/** Revalidates a signed-in user against persisted account status and permissions. */
+/**
+ * Revalidates a signed-in user against persisted account status and permissions.
+ *
+ * <p>The session holds a {@link SessionUser} snapshot, so refreshing means
+ * <strong>replacing</strong> it: the copy read from the repository never carries
+ * its password hash into the session, and no screen mutates shared state. Every
+ * action of a ViewModel calls {@link #refresh()} first, so a demotion or a
+ * deactivation applies to the next write it attempts.</p>
+ */
 public final class SessionValidator {
 
     private final SessionState session;
@@ -23,23 +31,41 @@ public final class SessionValidator {
      * @return {@code true} when the current account still exists and is active
      */
     public boolean refresh() throws SQLException {
-        User current = session.currentUser();
+        SessionUser current = session.currentUser();
         if (current == null) {
             return false;
         }
 
-        User persisted = userRepository.findByUsername(current.getUsername());
+        User persisted = userRepository.findByUsername(current.username());
         if (persisted == null || !persisted.isActive()) {
             session.signOut();
             return false;
         }
 
-        // Keep the same object so already-loaded ViewModels observe role changes.
-        current.setName(persisted.getName());
-        current.setUsername(persisted.getUsername());
-        current.setPasswordHash(persisted.getPasswordHash());
-        current.setRole(persisted.getRole());
-        current.setActive(true);
+        // New snapshot: the previous one is immutable, so the screens that read
+        // it through currentUser() observe the refreshed role on their next check.
+        session.refresh(persisted);
         return true;
+    }
+
+    /**
+     * Live snapshot of the signed-in user, or {@code null} without a session.
+     * Used by the rules that depend on the <em>current</em> role instead of the
+     * one the screen was built with.
+     */
+    public SessionUser currentUser() {
+        return session.currentUser();
+    }
+
+    /**
+     * Updates the snapshot with values already persisted for the same account
+     * (an administrator editing their own name or username), without a query.
+     * A different user is ignored.
+     */
+    public void synchronize(User persisted) {
+        SessionUser current = session.currentUser();
+        if (current != null && persisted != null && current.id() == persisted.getId()) {
+            session.refresh(persisted);
+        }
     }
 }
