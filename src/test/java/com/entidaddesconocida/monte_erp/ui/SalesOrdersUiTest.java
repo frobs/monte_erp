@@ -80,7 +80,7 @@ class SalesOrdersUiTest extends AbstractUiTest {
 
         ui.assertLabel("statusLabel", "Línea añadida.");
         ui.assertRowCount("draftLinesTable", 1);
-        ui.assertLabel("totalLabel", "Total: 199.80 €");
+        ui.assertLabel("totalLabel", "Total: 199,80 €");
 
         ui.clickButton("Guardar pedido");
 

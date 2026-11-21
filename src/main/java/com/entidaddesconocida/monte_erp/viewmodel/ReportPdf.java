@@ -25,7 +25,6 @@ import com.lowagie.text.pdf.PdfWriter;
 import java.awt.Color;
 import java.io.ByteArrayOutputStream;
 import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
@@ -42,8 +41,8 @@ import java.util.List;
  * <p>The stock report keeps printing every lot, including the ones whose
  * purchase was returned or cancelled: those rows are painted in <strong>red</strong>
  * to state that they no longer count, and the totals leave them out, exactly like
- * the table of the screen. Money is a {@link BigDecimal} formatted with a comma,
- * as in the rest of the application.</p>
+ * the table of the screen. Money is a {@link BigDecimal} rendered through
+ * {@link Amounts#currency(BigDecimal)}, the same text the tables show.</p>
  */
 public final class ReportPdf {
 
@@ -89,7 +88,7 @@ public final class ReportPdf {
                             formatDate(lot.getEntryDate()),
                             String.valueOf(lot.getInitialQuantity()),
                             String.valueOf(lot.getAvailableQuantity()),
-                            money(lot.getPurchasePrice()),
+                            Amounts.currency(lot.getPurchasePrice()),
                             purchaseLabel(lot.getPurchase()),
                             ReportLabels.purchaseStatus(lot),
                             ReportLabels.availabilityReason(lot));
@@ -100,7 +99,7 @@ public final class ReportPdf {
                     + " · Excluidos (devueltos o cancelados): "
                     + StockReportCalculator.excludedCount(lots), TOTAL_FONT);
             paragraph(document, "Unidades disponibles: " + total.totalAvailableUnits()
-                    + " · Valor del stock: " + money(total.totalStockValue()), TOTAL_FONT);
+                    + " · Valor del stock: " + Amounts.currency(total.totalStockValue()), TOTAL_FONT);
         });
     }
 
@@ -123,7 +122,7 @@ public final class ReportPdf {
                             product == null ? "" : product.getName(),
                             product == null ? "" : product.getSku(),
                             String.valueOf(reportRow.getUnitsSold()),
-                            money(reportRow.getRevenue()),
+                            Amounts.currency(reportRow.getRevenue()),
                             String.valueOf(reportRow.getCancelledUnits()),
                             ReportLabels.salesReason(reportRow));
                 }
@@ -133,7 +132,7 @@ public final class ReportPdf {
                     + " · Pedidos cancelados: " + total.cancelledOrderCount()
                     + " · Unidades canceladas: " + total.cancelledUnits(), TOTAL_FONT);
             paragraph(document, "Unidades vendidas: " + total.totalUnits()
-                    + " · Facturación: " + money(total.totalRevenue()), TOTAL_FONT);
+                    + " · Facturación: " + Amounts.currency(total.totalRevenue()), TOTAL_FONT);
         });
     }
 
@@ -222,11 +221,6 @@ public final class ReportPdf {
         Font font = FontFactory.getFont(FontFactory.HELVETICA, BaseFont.WINANSI,
                 BaseFont.EMBEDDED, size, style, color);
         return font;
-    }
-
-    private static String money(BigDecimal amount) {
-        BigDecimal value = amount == null ? BigDecimal.ZERO : amount;
-        return value.setScale(2, RoundingMode.HALF_UP).toPlainString().replace('.', ',') + " €";
     }
 
     private static String formatDate(LocalDateTime moment) {

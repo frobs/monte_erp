@@ -291,7 +291,7 @@ class ManualCaptureUiTest {
         ui.type("purchasePriceField", "50.00");
         ui.clickButton("Añadir lote");
         ui.assertLabel("statusLabel", "Lote añadido.");
-        ui.assertLabel("totalLabel", "Total: 200.00 €");
+        ui.assertLabel("totalLabel", "Total: 200,00 €");
         shots.capture("compras-nueva");
 
         ui.clickButton("Guardar compra");
@@ -323,7 +323,7 @@ class ManualCaptureUiTest {
         ui.type("quantityField", "2");
         ui.clickButton("Añadir línea");
         ui.assertLabel("statusLabel", "Línea añadida.");
-        ui.assertLabel("totalLabel", "Total: 199.80 €");
+        ui.assertLabel("totalLabel", "Total: 199,80 €");
         shots.capture("pedidos-nueva");
 
         ui.clickButton("Guardar pedido");

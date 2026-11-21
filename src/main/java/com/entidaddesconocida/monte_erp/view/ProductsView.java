@@ -4,6 +4,7 @@ import com.entidaddesconocida.monte_erp.app.AppShell;
 import com.entidaddesconocida.monte_erp.domain.model.Category;
 import com.entidaddesconocida.monte_erp.domain.model.Product;
 import com.entidaddesconocida.monte_erp.domain.model.Supplier;
+import com.entidaddesconocida.monte_erp.viewmodel.Amounts;
 import com.entidaddesconocida.monte_erp.viewmodel.CrudViewModel;
 import com.entidaddesconocida.monte_erp.viewmodel.ProductsViewModel;
 
@@ -21,10 +22,6 @@ import javafx.scene.control.Label;
 import javafx.scene.control.TableColumn;
 import javafx.scene.control.TableView;
 import javafx.scene.control.TextField;
-
-import java.math.BigDecimal;
-import java.math.RoundingMode;
-import java.util.Locale;
 
 /**
  * Code-behind of the product management FXML (RF-03).
@@ -138,7 +135,7 @@ public class ProductsView extends CrudView<Product> implements FxmlView<Products
     protected void setupFields() {
         skuColumn.setCellValueFactory(cell -> new ReadOnlyStringWrapper(cell.getValue().getSku()));
         nameColumn.setCellValueFactory(cell -> new ReadOnlyStringWrapper(cell.getValue().getName()));
-        priceColumn.setCellValueFactory(cell -> new ReadOnlyStringWrapper(formatPrice(cell.getValue().getPrice())));
+        priceColumn.setCellValueFactory(cell -> new ReadOnlyStringWrapper(Amounts.currency(cell.getValue().getPrice())));
         categoryColumn.setCellValueFactory(cell -> new ReadOnlyStringWrapper(categoryName(cell.getValue())));
         statusColumn.setCellValueFactory(cell -> new ReadOnlyStringWrapper(cell.getValue().getStatusLabel()));
 
@@ -352,10 +349,5 @@ public class ProductsView extends CrudView<Product> implements FxmlView<Products
 
     private static String categoryName(Product product) {
         return product.getCategory() == null ? "" : product.getCategory().getName();
-    }
-
-    private static String formatPrice(BigDecimal price) {
-        return price == null ? "" : String.format(Locale.ROOT, "%.2f €",
-                price.setScale(2, RoundingMode.HALF_UP));
     }
 }

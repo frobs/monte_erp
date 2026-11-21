@@ -3,6 +3,7 @@ package com.entidaddesconocida.monte_erp.view;
 import com.entidaddesconocida.monte_erp.app.AppShell;
 import com.entidaddesconocida.monte_erp.domain.model.Stock;
 import com.entidaddesconocida.monte_erp.domain.model.SalesReportRow;
+import com.entidaddesconocida.monte_erp.viewmodel.Amounts;
 import com.entidaddesconocida.monte_erp.viewmodel.ReportLabels;
 import com.entidaddesconocida.monte_erp.viewmodel.ReportsViewModel;
 
@@ -23,12 +24,9 @@ import javafx.scene.control.TableView;
 
 import java.io.File;
 import java.io.IOException;
-import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.time.format.DateTimeFormatter;
-import java.util.Locale;
 import java.util.function.Predicate;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -185,7 +183,7 @@ public class ReportsView implements FxmlView<ReportsViewModel> {
         stockAvailableColumn.setCellValueFactory(cell -> new ReadOnlyStringWrapper(
                 String.valueOf(cell.getValue().getAvailableQuantity())));
         stockPurchasePriceColumn.setCellValueFactory(cell ->
-                new ReadOnlyStringWrapper(formatMoney(cell.getValue().getPurchasePrice())));
+                new ReadOnlyStringWrapper(Amounts.currency(cell.getValue().getPurchasePrice())));
         stockPurchaseColumn.setCellValueFactory(cell -> new ReadOnlyStringWrapper(
                 cell.getValue().getPurchase() == null || cell.getValue().getPurchase().getId() == 0
                         ? "" : "#" + cell.getValue().getPurchase().getId()));
@@ -224,7 +222,7 @@ public class ReportsView implements FxmlView<ReportsViewModel> {
         salesUnitsColumn.setCellValueFactory(cell ->
                 new ReadOnlyStringWrapper(String.valueOf(cell.getValue().getUnitsSold())));
         salesRevenueColumn.setCellValueFactory(cell ->
-                new ReadOnlyStringWrapper(formatMoney(cell.getValue().getRevenue())));
+                new ReadOnlyStringWrapper(Amounts.currency(cell.getValue().getRevenue())));
         salesCancelledUnitsColumn.setCellValueFactory(cell ->
                 new ReadOnlyStringWrapper(String.valueOf(cell.getValue().getCancelledUnits())));
         salesReasonColumn.setCellValueFactory(cell ->
@@ -324,10 +322,5 @@ public class ReportsView implements FxmlView<ReportsViewModel> {
         alert.setHeaderText(header);
         alert.setContentText(content);
         alert.showAndWait();
-    }
-
-    private static String formatMoney(BigDecimal amount) {
-        return amount == null ? "" : String.format(Locale.ROOT, "%.2f €",
-                amount.setScale(2, RoundingMode.HALF_UP));
     }
 }

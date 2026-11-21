@@ -73,7 +73,7 @@ class PurchasesUiTest extends AbstractUiTest {
 
         ui.assertLabel("statusLabel", "Lote añadido.");
         ui.assertRowCount("draftLotsTable", 1);
-        ui.assertLabel("totalLabel", "Total: 200.00 €");
+        ui.assertLabel("totalLabel", "Total: 200,00 €");
 
         ui.clickButton("Guardar compra");
 

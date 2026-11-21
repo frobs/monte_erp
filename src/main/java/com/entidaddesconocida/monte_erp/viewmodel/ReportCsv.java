@@ -8,8 +8,6 @@ import com.entidaddesconocida.monte_erp.domain.model.Stock;
 import com.entidaddesconocida.monte_erp.domain.model.StockReportSummary;
 import com.entidaddesconocida.monte_erp.domain.service.StockReportCalculator;
 
-import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
@@ -24,7 +22,8 @@ import java.util.List;
  *   <li>semicolon ({@code ;}) as separator and a UTF-8 BOM at the beginning, so
  *       Excel in Spanish opens the columns and the accents correctly;</li>
  *   <li>{@code CRLF} line breaks and Spanish headers (the user facing text);</li>
- *   <li>money with two decimals and a comma (Spanish convention).</li>
+ *   <li>money with two decimals and a comma (Spanish convention), through
+ *       {@link Amounts#plain(java.math.BigDecimal)} so the CSV and the screen always agree.</li>
  * </ul>
  *
  * <p><strong>Hardening (D6):</strong> a cell starting with {@code = + - @}, a
@@ -57,7 +56,7 @@ public final class ReportCsv {
                 csv.append(escape(formatDate(lot.getEntryDate()))).append(SEPARATOR);
                 csv.append(lot.getInitialQuantity()).append(SEPARATOR);
                 csv.append(lot.getAvailableQuantity()).append(SEPARATOR);
-                csv.append(escape(money(lot.getPurchasePrice()))).append(SEPARATOR);
+                csv.append(escape(Amounts.plain(lot.getPurchasePrice()))).append(SEPARATOR);
                 csv.append(escape(purchaseLabel(lot.getPurchase()))).append(SEPARATOR);
                 csv.append(escape(ReportLabels.purchaseStatus(lot))).append(SEPARATOR);
                 csv.append(escape(ReportLabels.availabilityReason(lot))).append(LINE_BREAK);
@@ -69,7 +68,7 @@ public final class ReportCsv {
         appendRow(csv, "Lotes excluidos (devueltos o cancelados)",
                 String.valueOf(StockReportCalculator.excludedCount(lots)));
         appendRow(csv, "Unidades disponibles", String.valueOf(total.totalAvailableUnits()));
-        appendRow(csv, "Valor del stock", money(total.totalStockValue()));
+        appendRow(csv, "Valor del stock", Amounts.plain(total.totalStockValue()));
         return csv.toString();
     }
 
@@ -84,7 +83,7 @@ public final class ReportCsv {
                 csv.append(escape(product == null ? "" : product.getName())).append(SEPARATOR);
                 csv.append(escape(product == null ? "" : product.getSku())).append(SEPARATOR);
                 csv.append(row.getUnitsSold()).append(SEPARATOR);
-                csv.append(escape(money(row.getRevenue()))).append(SEPARATOR);
+                csv.append(escape(Amounts.plain(row.getRevenue()))).append(SEPARATOR);
                 csv.append(row.getCancelledUnits()).append(SEPARATOR);
                 csv.append(escape(ReportLabels.salesReason(row))).append(LINE_BREAK);
             }
@@ -95,7 +94,7 @@ public final class ReportCsv {
         appendRow(csv, "Pedidos cancelados", String.valueOf(total.cancelledOrderCount()));
         appendRow(csv, "Unidades vendidas", String.valueOf(total.totalUnits()));
         appendRow(csv, "Unidades canceladas", String.valueOf(total.cancelledUnits()));
-        appendRow(csv, "Facturación", money(total.totalRevenue()));
+        appendRow(csv, "Facturación", Amounts.plain(total.totalRevenue()));
         return csv.toString();
     }
 
@@ -123,11 +122,6 @@ public final class ReportCsv {
     private static boolean isFormulaTrigger(char first) {
         return first == '=' || first == '+' || first == '-' || first == '@'
                 || first == '\t' || first == '\r';
-    }
-
-    private static String money(BigDecimal amount) {
-        BigDecimal value = amount == null ? BigDecimal.ZERO : amount;
-        return value.setScale(2, RoundingMode.HALF_UP).toPlainString().replace('.', ',');
     }
 
     private static String formatDate(LocalDateTime moment) {

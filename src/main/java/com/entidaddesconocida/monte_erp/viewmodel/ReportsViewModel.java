@@ -26,8 +26,6 @@ import javafx.beans.property.StringProperty;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 
-import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.sql.SQLException;
 import java.time.LocalDate;
 import java.util.List;
@@ -293,14 +291,10 @@ public class ReportsViewModel implements ViewModel {
         stockTotals.set("Lotes: " + stock.lotCount()
                 + " · Excluidos: " + StockReportCalculator.excludedCount(stockLots)
                 + " · Unidades disponibles: " + stock.totalAvailableUnits()
-                + " · Valor del stock: " + money(stock.totalStockValue()));
+                + " · Valor del stock: " + Amounts.currency(stock.totalStockValue()));
         salesTotals.set("Pedidos: " + sales.orderCount()
                 + " · Pedidos cancelados: " + sales.cancelledOrderCount()
                 + " · Unidades vendidas: " + sales.totalUnits()
-                + " · Facturación: " + money(sales.totalRevenue()));
-    }
-
-    private static String money(BigDecimal amount) {
-        return amount.setScale(2, RoundingMode.HALF_UP).toPlainString().replace('.', ',') + " €";
+                + " · Facturación: " + Amounts.currency(sales.totalRevenue()));
     }
 }

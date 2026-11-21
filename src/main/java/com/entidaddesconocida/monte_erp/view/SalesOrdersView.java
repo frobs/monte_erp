@@ -7,6 +7,7 @@ import com.entidaddesconocida.monte_erp.domain.model.Product;
 import com.entidaddesconocida.monte_erp.domain.model.SalesOrder;
 import com.entidaddesconocida.monte_erp.domain.model.SalesOrderLine;
 import com.entidaddesconocida.monte_erp.domain.model.StockIssue;
+import com.entidaddesconocida.monte_erp.viewmodel.Amounts;
 import com.entidaddesconocida.monte_erp.viewmodel.SalesOrdersViewModel;
 
 import de.saxsys.mvvmfx.FxmlView;
@@ -30,11 +31,8 @@ import javafx.scene.control.TableView;
 import javafx.scene.control.TextField;
 import javafx.scene.layout.HBox;
 
-import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
-import java.util.Locale;
 
 /**
  * Code-behind of the sales-order FXML (RF-07 / CU-07).
@@ -198,7 +196,7 @@ public class SalesOrdersView implements FxmlView<SalesOrdersViewModel> {
         statusColumn.setCellValueFactory(cell ->
                 new ReadOnlyStringWrapper(cell.getValue().getStatusLabel()));
         totalColumn.setCellValueFactory(cell ->
-                new ReadOnlyStringWrapper(formatMoney(cell.getValue().getTotal())));
+                new ReadOnlyStringWrapper(Amounts.currency(cell.getValue().getTotal())));
 
         // The action column has no value: every row renders the buttons its own
         // status allows, so nothing can be clicked that the domain would reject.
@@ -209,9 +207,9 @@ public class SalesOrdersView implements FxmlView<SalesOrdersViewModel> {
         lineQuantityColumn.setCellValueFactory(cell -> new ReadOnlyStringWrapper(
                 String.valueOf(cell.getValue().getQuantity())));
         lineUnitPriceColumn.setCellValueFactory(cell ->
-                new ReadOnlyStringWrapper(formatMoney(cell.getValue().getUnitPrice())));
+                new ReadOnlyStringWrapper(Amounts.currency(cell.getValue().getUnitPrice())));
         lineSubtotalColumn.setCellValueFactory(cell ->
-                new ReadOnlyStringWrapper(formatMoney(cell.getValue().subtotal())));
+                new ReadOnlyStringWrapper(Amounts.currency(cell.getValue().subtotal())));
 
         // RF-15: which lot every unit of the order left from (FIFO traces).
         issueProductColumn.setCellValueFactory(cell -> new ReadOnlyStringWrapper(
@@ -232,9 +230,9 @@ public class SalesOrdersView implements FxmlView<SalesOrdersViewModel> {
         draftQuantityColumn.setCellValueFactory(cell -> new ReadOnlyStringWrapper(
                 String.valueOf(cell.getValue().getQuantity())));
         draftUnitPriceColumn.setCellValueFactory(cell ->
-                new ReadOnlyStringWrapper(formatMoney(cell.getValue().getUnitPrice())));
+                new ReadOnlyStringWrapper(Amounts.currency(cell.getValue().getUnitPrice())));
         draftSubtotalColumn.setCellValueFactory(cell ->
-                new ReadOnlyStringWrapper(formatMoney(cell.getValue().subtotal())));
+                new ReadOnlyStringWrapper(Amounts.currency(cell.getValue().subtotal())));
 
         ordersTable.setItems(viewModel.orders());
         orderLinesTable.setItems(viewModel.selectedOrderLines());
@@ -265,7 +263,7 @@ public class SalesOrdersView implements FxmlView<SalesOrdersViewModel> {
                 this::quantityUpperBound));
 
         totalLabel.textProperty().bind(Bindings.createStringBinding(
-                () -> "Total: " + formatMoney(viewModel.orderTotalProperty().get()),
+                () -> "Total: " + Amounts.currency(viewModel.orderTotalProperty().get()),
                 viewModel.orderTotalProperty()));
 
         countLabel.textProperty().bind(Bindings.size(viewModel.orders()).asString("%d pedidos"));
@@ -486,10 +484,5 @@ public class SalesOrdersView implements FxmlView<SalesOrdersViewModel> {
         }
         return product.getSku() == null || product.getSku().isBlank()
                 ? product.getName() : product.getName() + " (" + product.getSku() + ")";
-    }
-
-    private static String formatMoney(BigDecimal amount) {
-        return amount == null ? "" : String.format(Locale.ROOT, "%.2f €",
-                amount.setScale(2, RoundingMode.HALF_UP));
     }
 }

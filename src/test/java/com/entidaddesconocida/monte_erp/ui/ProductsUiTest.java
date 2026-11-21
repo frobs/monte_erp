@@ -85,7 +85,7 @@ class ProductsUiTest extends AbstractUiTest {
 
         ui.assertLabel("statusLabel", "Producto guardado correctamente.");
         ui.assertLabel("countLabel", "Productos: 24");
-        ui.assertRowContains("productsTable", "QA-001 | QA Producto Test | 10.50 € | Monitores | Activo");
+        ui.assertRowContains("productsTable", "QA-001 | QA Producto Test | 10,50 € | Monitores | Activo");
         assertEquals(1L, TestDatabase.longValue(
                 "SELECT COUNT(*) FROM PRODUCT WHERE sku = 'QA-001' AND active = 1"));
     }

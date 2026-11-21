@@ -6,6 +6,7 @@ import com.entidaddesconocida.monte_erp.domain.model.Purchase;
 import com.entidaddesconocida.monte_erp.domain.model.PurchaseStatus;
 import com.entidaddesconocida.monte_erp.domain.model.Stock;
 import com.entidaddesconocida.monte_erp.domain.model.Supplier;
+import com.entidaddesconocida.monte_erp.viewmodel.Amounts;
 import com.entidaddesconocida.monte_erp.viewmodel.PurchasesViewModel;
 
 import de.saxsys.mvvmfx.FxmlView;
@@ -29,11 +30,8 @@ import javafx.scene.control.TableView;
 import javafx.scene.control.TextField;
 import javafx.scene.layout.HBox;
 
-import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
-import java.util.Locale;
 
 /**
  * Code-behind of the purchase FXML (RF-14 / CU-10).
@@ -187,7 +185,7 @@ public class PurchasesView implements FxmlView<PurchasesViewModel> {
         statusColumn.setCellValueFactory(cell ->
                 new ReadOnlyStringWrapper(cell.getValue().getStatusLabel()));
         totalColumn.setCellValueFactory(cell ->
-                new ReadOnlyStringWrapper(formatMoney(cell.getValue().getTotal())));
+                new ReadOnlyStringWrapper(Amounts.currency(cell.getValue().getTotal())));
 
         // The action column has no value: every row renders the buttons its own
         // status allows, so nothing can be clicked that the domain would reject.
@@ -198,18 +196,18 @@ public class PurchasesView implements FxmlView<PurchasesViewModel> {
         lotQuantityColumn.setCellValueFactory(cell -> new ReadOnlyStringWrapper(
                 String.valueOf(cell.getValue().getInitialQuantity())));
         lotPurchasePriceColumn.setCellValueFactory(cell ->
-                new ReadOnlyStringWrapper(formatMoney(cell.getValue().getPurchasePrice())));
+                new ReadOnlyStringWrapper(Amounts.currency(cell.getValue().getPurchasePrice())));
         lotSubtotalColumn.setCellValueFactory(cell ->
-                new ReadOnlyStringWrapper(formatMoney(cell.getValue().subtotal())));
+                new ReadOnlyStringWrapper(Amounts.currency(cell.getValue().subtotal())));
 
         draftProductColumn.setCellValueFactory(cell -> new ReadOnlyStringWrapper(
                 productLabel(cell.getValue().getProduct())));
         draftQuantityColumn.setCellValueFactory(cell -> new ReadOnlyStringWrapper(
                 String.valueOf(cell.getValue().getInitialQuantity())));
         draftPurchasePriceColumn.setCellValueFactory(cell ->
-                new ReadOnlyStringWrapper(formatMoney(cell.getValue().getPurchasePrice())));
+                new ReadOnlyStringWrapper(Amounts.currency(cell.getValue().getPurchasePrice())));
         draftSubtotalColumn.setCellValueFactory(cell ->
-                new ReadOnlyStringWrapper(formatMoney(cell.getValue().subtotal())));
+                new ReadOnlyStringWrapper(Amounts.currency(cell.getValue().subtotal())));
 
         purchasesTable.setItems(viewModel.purchases());
         purchaseLotsTable.setItems(viewModel.selectedPurchaseLots());
@@ -231,7 +229,7 @@ public class PurchasesView implements FxmlView<PurchasesViewModel> {
         purchasePriceField.setTextFormatter(InputMasks.money(PRICE_MAX_DIGITS));
 
         totalLabel.textProperty().bind(Bindings.createStringBinding(
-                () -> "Total: " + formatMoney(viewModel.purchaseTotalProperty().get()),
+                () -> "Total: " + Amounts.currency(viewModel.purchaseTotalProperty().get()),
                 viewModel.purchaseTotalProperty()));
 
         countLabel.textProperty().bind(Bindings.size(viewModel.purchases()).asString("%d compras"));
@@ -451,10 +449,5 @@ public class PurchasesView implements FxmlView<PurchasesViewModel> {
         }
         return product.getSku() == null || product.getSku().isBlank()
                 ? product.getName() : product.getName() + " (" + product.getSku() + ")";
-    }
-
-    private static String formatMoney(BigDecimal amount) {
-        return amount == null ? "" : String.format(Locale.ROOT, "%.2f €",
-                amount.setScale(2, RoundingMode.HALF_UP));
     }
 }

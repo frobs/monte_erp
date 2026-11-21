@@ -3,6 +3,7 @@ package com.entidaddesconocida.monte_erp.view;
 import com.entidaddesconocida.monte_erp.app.AppShell;
 import com.entidaddesconocida.monte_erp.domain.model.Stock;
 import com.entidaddesconocida.monte_erp.domain.model.StockLevel;
+import com.entidaddesconocida.monte_erp.viewmodel.Amounts;
 import com.entidaddesconocida.monte_erp.viewmodel.StockViewModel;
 
 import de.saxsys.mvvmfx.FxmlView;
@@ -18,10 +19,7 @@ import javafx.scene.control.TableColumn;
 import javafx.scene.control.TableView;
 import javafx.scene.control.TextField;
 
-import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.time.format.DateTimeFormatter;
-import java.util.Locale;
 
 /**
  * Code-behind of the stock FXML (RF-09 / RF-10 / CU-08).
@@ -138,7 +136,7 @@ public class StockView implements FxmlView<StockViewModel> {
         lotAvailableColumn.setCellValueFactory(cell -> new ReadOnlyStringWrapper(
                 String.valueOf(cell.getValue().getAvailableQuantity())));
         lotPurchasePriceColumn.setCellValueFactory(cell ->
-                new ReadOnlyStringWrapper(formatMoney(cell.getValue().getPurchasePrice())));
+                new ReadOnlyStringWrapper(Amounts.currency(cell.getValue().getPurchasePrice())));
         lotPurchaseColumn.setCellValueFactory(cell -> new ReadOnlyStringWrapper(
                 cell.getValue().getPurchase() == null || cell.getValue().getPurchase().getId() == 0
                         ? "" : "#" + cell.getValue().getPurchase().getId()));
@@ -182,10 +180,5 @@ public class StockView implements FxmlView<StockViewModel> {
     @FXML
     private void onBack() {
         appShell.showMain();
-    }
-
-    private static String formatMoney(BigDecimal amount) {
-        return amount == null ? "" : String.format(Locale.ROOT, "%.2f €",
-                amount.setScale(2, RoundingMode.HALF_UP));
     }
 }
