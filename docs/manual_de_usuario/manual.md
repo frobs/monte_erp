@@ -219,8 +219,7 @@ datos cargados. Cambia lo que necesites y pulsa **Guardar**.
 ![Usuario desactivado](img/usuarios-desactivado.png)
 
 **Protecciones del administrador:** el administrador no puede desactivarse a sí
-mismo ni quitarse el rol de administrador (*No puedes quitarte el rol de
-administrador.*). Así nunca se queda la aplicación sin administrador.
+mismo ni quitarse el rol de administrador.
 
 > **Las bajas son lógicas.** Nunca se borran usuarios, productos, categorías,
 > proveedores ni clientes: se marcan como inactivos para no romper el histórico de
