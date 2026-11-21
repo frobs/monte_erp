@@ -3,6 +3,7 @@ package com.entidaddesconocida.monte_erp.domain.model;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 /**
@@ -156,9 +157,15 @@ public class SalesOrder {
      * Lines of the order; may be empty while the order is being drafted. The
      * constructors and {@link #setLines(List)} guarantee a non-null list, so no
      * defensive initialization is needed here.
+     *
+     * <p>The returned list is a read-only view of the internal one: a caller
+     * cannot add or remove lines behind the back of the aggregate. Mutations go
+     * through {@link #setLines(List)}, which copies.</p>
+     *
+     * @throws UnsupportedOperationException on any attempt to modify the view
      */
     public List<SalesOrderLine> getLines() {
-        return lines;
+        return Collections.unmodifiableList(lines);
     }
 
     public void setLines(List<SalesOrderLine> lines) {

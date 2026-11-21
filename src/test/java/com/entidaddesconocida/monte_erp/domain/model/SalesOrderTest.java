@@ -207,4 +207,30 @@ class SalesOrderTest {
         return new SalesOrder(1, LocalDateTime.now(), status, BigDecimal.ZERO,
                 customer(), user(), List.of());
     }
+
+    @Test
+    @DisplayName("getLines es de solo lectura: no se puede alterar el agregado por la puerta de atrás")
+    void getLinesIsReadOnly() {
+        SalesOrder order = new SalesOrder(customer(), user(),
+                List.of(line(2, "10.00", product(1, "Taladro", "10.00"))));
+
+        List<SalesOrderLine> lines = order.getLines();
+
+        assertThrows(UnsupportedOperationException.class, lines::clear);
+        assertThrows(UnsupportedOperationException.class, () -> lines.add(null));
+        assertThrows(UnsupportedOperationException.class, () -> lines.remove(0));
+        assertEquals(1, order.getLines().size());
+    }
+
+    @Test
+    @DisplayName("setLines sigue copiando y el total se recalcula sobre la lista nueva")
+    void setLinesCopiesAndFeedsCalculateTotal() {
+        SalesOrder order = new SalesOrder(customer(), user(), List.of());
+
+        order.setLines(List.of(line(2, "10.00", product(1, "Taladro", "10.00"))));
+
+        assertEquals(new BigDecimal("20.00"), order.calculateTotal());
+        assertThrows(UnsupportedOperationException.class,
+                () -> order.getLines().add(line(1, "10.00", product(2, "Sierra", "10.00"))));
+    }
 }

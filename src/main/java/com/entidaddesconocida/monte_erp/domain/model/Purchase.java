@@ -3,6 +3,7 @@ package com.entidaddesconocida.monte_erp.domain.model;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 /**
@@ -176,9 +177,15 @@ public class Purchase {
     /**
      * Lots (one per line) the purchase generates; never {@code null}, because the
      * constructors and {@link #setLots(List)} guarantee it.
+     *
+     * <p>The returned list is a read-only view of the internal one: a caller
+     * cannot add or remove lots behind the back of the aggregate. Mutations go
+     * through {@link #setLots(List)}, which copies.</p>
+     *
+     * @throws UnsupportedOperationException on any attempt to modify the view
      */
     public List<Stock> getLots() {
-        return lots;
+        return Collections.unmodifiableList(lots);
     }
 
     public void setLots(List<Stock> lots) {

@@ -200,4 +200,29 @@ class PurchaseTest {
         purchase.setLots(null);
         assertNotNull(purchase.getLots());
     }
+
+    @Test
+    @DisplayName("getLots es de solo lectura: no se puede alterar el agregado por la puerta de atrás")
+    void getLotsIsReadOnly() {
+        Purchase purchase = new Purchase(supplier(), user(), List.of(lot(1, 2, "10.00")));
+
+        List<Stock> lots = purchase.getLots();
+
+        assertThrows(UnsupportedOperationException.class, lots::clear);
+        assertThrows(UnsupportedOperationException.class, () -> lots.add(null));
+        assertThrows(UnsupportedOperationException.class, () -> lots.remove(0));
+        assertEquals(1, purchase.getLots().size());
+    }
+
+    @Test
+    @DisplayName("setLots sigue copiando y el total se recalcula sobre la lista nueva")
+    void setLotsCopiesAndFeedsCalculateTotal() {
+        Purchase purchase = new Purchase(supplier(), user(), List.of());
+
+        purchase.setLots(List.of(lot(1, 2, "10.00")));
+
+        assertEquals(0, new BigDecimal("20.00").compareTo(purchase.calculateTotal()));
+        assertThrows(UnsupportedOperationException.class,
+                () -> purchase.getLots().add(lot(2, 1, "10.00")));
+    }
 }

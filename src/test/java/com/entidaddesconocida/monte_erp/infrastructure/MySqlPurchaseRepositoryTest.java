@@ -24,6 +24,7 @@ import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
@@ -156,7 +157,7 @@ class MySqlPurchaseRepositoryTest {
     void insertRollsBackOnRuntimeFailure() {
         fake.withGeneratedKey(7).withRows(FakeJdbc.row("active", true));
         Purchase purchase = draftPurchase();
-        purchase.getLots().add(null);
+        purchase.setLots(Collections.singletonList(null));
 
         assertThrows(NullPointerException.class, () -> repository.insert(purchase));
 
