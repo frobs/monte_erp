@@ -3,7 +3,11 @@ package com.entidaddesconocida.monte_erp.view;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import java.util.regex.Pattern;
+
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -90,5 +94,46 @@ class InputMasksTest {
         assertFalse(InputMasks.acceptsPartialEmail("qa@@cliente.test", 100));
         assertFalse(InputMasks.acceptsPartialEmail("qa@cliente.tést", 100));
         assertFalse(InputMasks.acceptsPartialEmail("a".repeat(101) + "@example.com", 100));
+    }
+
+    @Test
+    @DisplayName("Los patrones dependientes del límite se compilan una sola vez por combinación")
+    void digitPatternsAreCompiledOncePerLimit() {
+        Pattern tenDigits = InputMasks.integerPattern(10);
+        Pattern tenDigitsAgain = InputMasks.integerPattern(10);
+        Pattern eightDigits = InputMasks.integerPattern(8);
+        assertSame(tenDigits, tenDigitsAgain, "mismo tope, misma instancia de Pattern");
+        assertNotSame(tenDigits, eightDigits, "topes distintos, patrones distintos");
+
+        Pattern money = InputMasks.decimalPattern(8, 2);
+        Pattern moneyAgain = InputMasks.decimalPattern(8, 2);
+        Pattern otherMoney = InputMasks.decimalPattern(8, 3);
+        assertSame(money, moneyAgain, "mismos límites, misma instancia de Pattern");
+        assertNotSame(money, otherMoney, "límites distintos, patrones distintos");
+
+        // El patrón cacheado se comporta como el literal de antes para cada tope.
+        assertTrue(tenDigits.matcher("1234567890").matches());
+        assertFalse(tenDigits.matcher("12345678901").matches());
+        assertTrue(eightDigits.matcher("12345678").matches());
+        assertFalse(eightDigits.matcher("123456789").matches());
+        assertTrue(money.matcher("99999999,99").matches());
+        assertFalse(money.matcher("99999999,999").matches());
+        assertTrue(otherMoney.matcher("1,234").matches());
+        assertFalse(otherMoney.matcher("1,2345").matches());
+    }
+
+    @Test
+    @DisplayName("El resultado no cambia al pedir la misma máscara muchas veces")
+    void masksAreStableAcrossRepeatedCalls() {
+        for (int round = 0; round < 100; round++) {
+            assertTrue(InputMasks.acceptsPartialInteger("999", 3));
+            assertFalse(InputMasks.acceptsPartialInteger("9999", 3));
+            assertTrue(InputMasks.acceptsPartialDecimal("12,34", 4, 2));
+            assertFalse(InputMasks.acceptsPartialDecimal("12,345", 4, 2));
+            assertTrue(InputMasks.acceptsPartialPhone("+34 600 333 444", 20));
+            assertFalse(InputMasks.acceptsPartialPhone("600333444A", 20));
+            assertTrue(InputMasks.acceptsPartialEmail("qa@cliente.test", 100));
+            assertFalse(InputMasks.acceptsPartialEmail("qa@@cliente.test", 100));
+        }
     }
 }

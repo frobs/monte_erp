@@ -2,7 +2,10 @@ package com.entidaddesconocida.monte_erp.view;
 
 import javafx.scene.control.TextFormatter;
 
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.IntSupplier;
+import java.util.regex.Pattern;
 
 /**
  * Input masks for the typed form fields (quantity, money, phone and email).
@@ -17,11 +20,56 @@ import java.util.function.IntSupplier;
  * <p>The predicates are pure and public so they can be tested with plain JUnit
  * and no JavaFX toolkit; the {@link TextFormatter} factories are the only UI
  * part and run in the View.</p>
+ *
+ * <p>Every predicate runs on each keystroke, so the regular expressions are
+ * compiled once: the fixed ones (phone and email alphabet) are constants and the
+ * ones that depend on a field limit are cached per limit. Compiling them on every
+ * change ({@code String.matches} does exactly that) would rebuild the same
+ * automaton dozens of times while the user types a single value.</p>
  */
 public final class InputMasks {
 
+    /** Phone alphabet: digits and the usual separators, never letters. */
+    private static final Pattern PHONE_CHARS = Pattern.compile("[0-9+()\\-\\s.]*");
+
+    /** Email alphabet accepted while the address is still half-typed. */
+    private static final Pattern EMAIL_CHARS = Pattern.compile("[A-Za-z0-9._%+\\-@]*");
+
+    /**
+     * Digit-only patterns keyed by the digit cap. The cap comes from the fixed
+     * constants of the Views ({@code QUANTITY_MAX_DIGITS}, {@code PRICE_MAX_DIGITS}…),
+     * so the map holds a handful of entries for the whole session.
+     */
+    private static final Map<Integer, Pattern> INTEGER_PATTERNS = new ConcurrentHashMap<>();
+
+    /** Money patterns keyed by their two limits; same bounded domain as above. */
+    private static final Map<DecimalShape, Pattern> DECIMAL_PATTERNS = new ConcurrentHashMap<>();
+
     private InputMasks() {
         // Utility class: never instantiated.
+    }
+
+    /** Shape of the money mask, so the pattern can be cached per limit pair. */
+    private record DecimalShape(int maxIntegerDigits, int decimalPlaces) {
+    }
+
+    /**
+     * Pattern for {@code maxDigits} digits, compiled once. Package-visible so the
+     * test can assert the cache hands back the same instance.
+     */
+    static Pattern integerPattern(int maxDigits) {
+        return INTEGER_PATTERNS.computeIfAbsent(maxDigits,
+                digits -> Pattern.compile("\\d{1," + digits + "}"));
+    }
+
+    /**
+     * Pattern for a money amount with the given limits, compiled once.
+     * Package-visible for the same reason as {@link #integerPattern(int)}.
+     */
+    static Pattern decimalPattern(int maxIntegerDigits, int decimalPlaces) {
+        return DECIMAL_PATTERNS.computeIfAbsent(new DecimalShape(maxIntegerDigits, decimalPlaces),
+                shape -> Pattern.compile("\\d{0," + shape.maxIntegerDigits()
+                        + "}([.,]\\d{0," + shape.decimalPlaces() + "})?"));
     }
 
     /**
@@ -30,7 +78,7 @@ public final class InputMasks {
      * a negative quantity cannot even be typed.
      */
     public static boolean acceptsPartialInteger(String text, int maxDigits) {
-        return text.isEmpty() || text.matches("\\d{1," + maxDigits + "}");
+        return text.isEmpty() || integerPattern(maxDigits).matcher(text).matches();
     }
 
     /**
@@ -60,8 +108,8 @@ public final class InputMasks {
      * decimals. No sign, so a negative price cannot even be typed.
      */
     public static boolean acceptsPartialDecimal(String text, int maxIntegerDigits, int decimalPlaces) {
-        return text.isEmpty() || text.matches("\\d{0," + maxIntegerDigits
-                + "}([.,]\\d{0," + decimalPlaces + "})?");
+        return text.isEmpty()
+                || decimalPattern(maxIntegerDigits, decimalPlaces).matcher(text).matches();
     }
 
     /** Digits only, no sign: blocks anything that could not be a quantity. */
@@ -100,7 +148,7 @@ public final class InputMasks {
      * holds text the ViewModel would reject.
      */
     public static boolean acceptsPartialPhone(String text, int maxLength) {
-        return text.length() <= maxLength && text.matches("[0-9+()\\-\\s.]*");
+        return text.length() <= maxLength && PHONE_CHARS.matcher(text).matches();
     }
 
     /**
@@ -111,7 +159,7 @@ public final class InputMasks {
      * still in progress.
      */
     public static boolean acceptsPartialEmail(String text, int maxLength) {
-        if (text.length() > maxLength || !text.matches("[A-Za-z0-9._%+\\-@]*")) {
+        if (text.length() > maxLength || !EMAIL_CHARS.matcher(text).matches()) {
             return false;
         }
         int at = text.indexOf('@');
