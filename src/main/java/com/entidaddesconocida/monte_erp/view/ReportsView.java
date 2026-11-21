@@ -268,6 +268,11 @@ public class ReportsView implements FxmlView<ReportsViewModel> {
 
     /** Asks for a destination file and writes the CSV; a cancel does nothing. */
     private void exportCsv(String defaultFileName, String content) {
+        // Without an active session the ViewModel returns an empty text and has
+        // already shown the reason, so no destination is asked for.
+        if (content.isEmpty()) {
+            return;
+        }
         File file = fileSaveDialog.choose(stockLotsTable.getScene().getWindow(),
                 "Guardar informe CSV", defaultFileName, "Archivos CSV", "*.csv");
         if (file == null) {
@@ -284,6 +289,10 @@ public class ReportsView implements FxmlView<ReportsViewModel> {
 
     /** Same flow for the PDF, whose bytes are already serialised by the ViewModel. */
     private void exportPdf(String defaultFileName, byte[] content) {
+        // Empty bytes mean "session expired": the ViewModel already reported it.
+        if (content.length == 0) {
+            return;
+        }
         File file = fileSaveDialog.choose(stockLotsTable.getScene().getWindow(),
                 "Guardar informe PDF", defaultFileName, "Archivos PDF", "*.pdf");
         if (file == null) {

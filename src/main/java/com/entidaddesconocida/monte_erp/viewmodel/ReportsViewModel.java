@@ -31,6 +31,7 @@ import java.math.RoundingMode;
 import java.sql.SQLException;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.function.Supplier;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -236,36 +237,42 @@ public class ReportsViewModel implements ViewModel {
         load();
     }
 
-    /** CSV text of the stock report currently loaded. */
+    /**
+     * CSV text of the stock report currently loaded, or an empty string when the
+     * session is no longer valid (the reason is already in {@link
+     * #errorMessageProperty()} and the report in memory was cleared).
+     */
     public String stockReportCsv() {
-        if (!ensureActiveSession()) {
-            return ReportCsv.stockReport(stockLots, stockSummary.get());
-        }
-        return ReportCsv.stockReport(stockLots, stockSummary.get());
+        return exportIfSessionActive("",
+                () -> ReportCsv.stockReport(stockLots, stockSummary.get()));
     }
 
-    /** CSV text of the sales report currently loaded. */
+    /** CSV text of the sales report currently loaded, or empty without session. */
     public String salesReportCsv() {
-        if (!ensureActiveSession()) {
-            return ReportCsv.salesReport(salesRows, salesSummary.get());
-        }
-        return ReportCsv.salesReport(salesRows, salesSummary.get());
+        return exportIfSessionActive("",
+                () -> ReportCsv.salesReport(salesRows, salesSummary.get()));
     }
 
-    /** PDF bytes of the stock report currently loaded. */
+    /** PDF bytes of the stock report, or an empty array without session. */
     public byte[] stockReportPdf() {
-        if (!ensureActiveSession()) {
-            return ReportPdf.stockReport(stockLots, stockSummary.get(), loadedPeriod());
-        }
-        return ReportPdf.stockReport(stockLots, stockSummary.get(), loadedPeriod());
+        return exportIfSessionActive(new byte[0],
+                () -> ReportPdf.stockReport(stockLots, stockSummary.get(), loadedPeriod()));
     }
 
-    /** PDF bytes of the sales report currently loaded. */
+    /** PDF bytes of the sales report, or an empty array without session. */
     public byte[] salesReportPdf() {
-        if (!ensureActiveSession()) {
-            return ReportPdf.salesReport(salesRows, salesSummary.get(), loadedPeriod());
-        }
-        return ReportPdf.salesReport(salesRows, salesSummary.get(), loadedPeriod());
+        return exportIfSessionActive(new byte[0],
+                () -> ReportPdf.salesReport(salesRows, salesSummary.get(), loadedPeriod()));
+    }
+
+    /**
+     * Runs an export only when the session is still active, so no report leaves
+     * the application after a deactivation or a demotion to nobody. The check
+     * clears the loaded report and fills {@link #errorMessageProperty()} by
+     * itself; the empty value is the exported contract the view must honour.
+     */
+    private <T> T exportIfSessionActive(T withoutSession, Supplier<T> export) {
+        return ensureActiveSession() ? export.get() : withoutSession;
     }
 
     /**

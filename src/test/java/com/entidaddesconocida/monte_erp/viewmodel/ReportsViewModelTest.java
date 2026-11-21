@@ -190,7 +190,7 @@ class ReportsViewModelTest {
     }
 
     @Test
-    @DisplayName("Una sesión desactivada no puede seguir exportando el informe cargado")
+    @DisplayName("Una sesión desactivada no puede exportar: las cuatro salidas llegan vacías")
     void deactivatedSessionCannotExportPreviouslyLoadedData() throws Exception {
         User current = new User("Ana", "ana", "hash", Role.EMPLOYEE, true);
         FakeUserRepository users = new FakeUserRepository().withUser(current);
@@ -199,13 +199,21 @@ class ReportsViewModelTest {
         ReportsViewModel guarded = new ReportsViewModel(salesOrderRepository, stockRepository,
                 new SessionValidator(session, users));
         guarded.load();
+        // With a live session the report is exported, so the empty result below
+        // comes from the guard and not from an empty screen.
         assertTrue(guarded.salesReportCsv().contains("Teclado"));
+        assertTrue(guarded.stockReportCsv().contains("Teclado"));
+        assertTrue(guarded.salesReportPdf().length > 0);
+        assertTrue(guarded.stockReportPdf().length > 0);
         users.deactivate(current.getId());
 
-        String csv = guarded.salesReportCsv();
-
-        assertFalse(csv.contains("Teclado"));
+        assertEquals("", guarded.salesReportCsv());
+        assertEquals("", guarded.stockReportCsv());
+        assertEquals(0, guarded.salesReportPdf().length);
+        assertEquals(0, guarded.stockReportPdf().length);
+        assertEquals(ViewMessages.SESSION_EXPIRED, guarded.errorMessageProperty().get());
         assertEquals(0, guarded.salesRows().size());
+        assertEquals(0, guarded.stockLots().size());
         assertEquals(null, session.currentUser());
     }
 
