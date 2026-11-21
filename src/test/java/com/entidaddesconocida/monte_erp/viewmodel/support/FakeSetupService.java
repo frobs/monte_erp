@@ -1,6 +1,7 @@
 package com.entidaddesconocida.monte_erp.viewmodel.support;
 
 import com.entidaddesconocida.monte_erp.domain.model.ConnectionSettings;
+import com.entidaddesconocida.monte_erp.domain.service.LoadedSetup;
 import com.entidaddesconocida.monte_erp.domain.service.SetupException;
 import com.entidaddesconocida.monte_erp.domain.service.SetupService;
 
@@ -13,7 +14,7 @@ import com.entidaddesconocida.monte_erp.domain.service.SetupService;
  */
 public class FakeSetupService implements SetupService {
 
-    private ConnectionSettings loaded = new ConnectionSettings(null, null, null);
+    private LoadedSetup loaded = new LoadedSetup(new ConnectionSettings(null, null, null), false);
     private boolean throwOnTestConnection;
     private boolean throwOnSave;
     private boolean throwOnProvision;
@@ -26,7 +27,13 @@ public class FakeSetupService implements SetupService {
     private String lastAdminPassword;
 
     public FakeSetupService withLoaded(ConnectionSettings settings) {
-        this.loaded = settings;
+        this.loaded = new LoadedSetup(settings, false);
+        return this;
+    }
+
+    /** Simulates a locked or unsupported keyring while loading. */
+    public FakeSetupService withKeyringUnavailable() {
+        this.loaded = new LoadedSetup(loaded.settings(), true);
         return this;
     }
 
@@ -71,7 +78,7 @@ public class FakeSetupService implements SetupService {
     }
 
     @Override
-    public ConnectionSettings load() {
+    public LoadedSetup loadSetup() {
         return loaded;
     }
 

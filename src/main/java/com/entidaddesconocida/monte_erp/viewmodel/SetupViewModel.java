@@ -2,6 +2,7 @@ package com.entidaddesconocida.monte_erp.viewmodel;
 
 import com.entidaddesconocida.monte_erp.app.BackgroundTasks;
 import com.entidaddesconocida.monte_erp.domain.model.ConnectionSettings;
+import com.entidaddesconocida.monte_erp.domain.service.LoadedSetup;
 import com.entidaddesconocida.monte_erp.domain.service.SetupService;
 import com.entidaddesconocida.monte_erp.infrastructure.config.DatabaseUrl;
 
@@ -35,6 +36,13 @@ public class SetupViewModel implements ViewModel {
     private static final String URL_CONTAINS_CREDENTIALS =
             "No incluyas credenciales en la URL JDBC; usa los campos de usuario y contraseña.";
 
+    /**
+     * Shown when the OS keyring could not be read: the saved password may still
+     * exist (or be lost), so the screen must not look like a fresh installation.
+     */
+    static final String KEYRING_UNAVAILABLE =
+            "No se pudo acceder al llavero del sistema; vuelve a introducir la contraseña.";
+
     /** Local shape check (host and database present); connectivity still needs the server. */
     private static final Pattern JDBC_URL_PATTERN =
             Pattern.compile("^jdbc:mysql://[^/\\s]+/[^\\s?]+(\\?\\S*)?$");
@@ -57,6 +65,12 @@ public class SetupViewModel implements ViewModel {
     /** Guards a save in flight: the migrations must not run twice on a double click. */
     private boolean saveInFlight;
 
+    /**
+     * Persistent warning about the keyring; unlike the transient errors it
+     * survives {@link #clearMessages()} so the view cannot hide it on init.
+     */
+    private final String keyringWarning;
+
     public SetupViewModel(SetupService setupService, boolean onboarding) {
         this(setupService, onboarding, BackgroundTasks.synchronous());
     }
@@ -73,8 +87,11 @@ public class SetupViewModel implements ViewModel {
         this.onboarding = onboarding;
         adminSectionVisible.set(onboarding);
 
-        ConnectionSettings current = setupService.load();
-        storedSettings = current == null ? new ConnectionSettings(null, null, null) : current;
+        LoadedSetup current = setupService.loadSetup();
+        storedSettings = current.settings();
+        // An unreadable keyring must not be presented as "nothing configured".
+        keyringWarning = current.credentialsUnavailable() ? KEYRING_UNAVAILABLE : "";
+        errorMessage.set(keyringWarning);
         url.set(orEmpty(storedSettings.url()));
         dbUser.set(orEmpty(storedSettings.user()));
         // Never expose the saved secret in a login-accessible configuration form.
@@ -198,9 +215,12 @@ public class SetupViewModel implements ViewModel {
                 });
     }
 
-    /** Clears the visible messages (useful on view initialisation). */
+    /**
+     * Clears the transient messages (useful on view initialisation). The keyring
+     * warning, when present, stays visible: it describes the current state.
+     */
     public void clearMessages() {
-        errorMessage.set("");
+        errorMessage.set(keyringWarning);
         statusMessage.set("");
     }
 

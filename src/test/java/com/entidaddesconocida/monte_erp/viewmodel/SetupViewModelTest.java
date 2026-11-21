@@ -236,6 +236,45 @@ class SetupViewModelTest {
     }
 
     @Test
+    @DisplayName("Configuración ausente y keyring legible: onboarding limpio, sin aviso")
+    void missingConfigurationShowsNoWarning() {
+        SetupViewModel vm = onboardingViewModel(new FakeSetupService());
+
+        assertEquals("", vm.errorMessageProperty().get());
+        assertEquals("", vm.statusMessageProperty().get());
+    }
+
+    @Test
+    @DisplayName("Keyring no disponible: avisa de que hay que reintroducir la contraseña")
+    void unavailableKeyringWarnsAboutThePassword() {
+        FakeSetupService service = new FakeSetupService()
+                .withLoaded(new ConnectionSettings("jdbc:mysql://localhost:3306/monte_erp", "erp_user", null))
+                .withKeyringUnavailable();
+
+        SetupViewModel vm = editViewModel(service);
+
+        assertEquals(SetupViewModel.KEYRING_UNAVAILABLE, vm.errorMessageProperty().get());
+        assertEquals("jdbc:mysql://localhost:3306/monte_erp", vm.urlProperty().get());
+        assertEquals("erp_user", vm.dbUserProperty().get());
+        assertEquals("", vm.dbPasswordProperty().get());
+    }
+
+    @Test
+    @DisplayName("El aviso del keyring sobrevive a clearMessages y a un error transitorio")
+    void keyringWarningSurvivesClearMessages() {
+        SetupViewModel vm = editViewModel(new FakeSetupService().withKeyringUnavailable());
+
+        vm.clearMessages();
+        assertEquals(SetupViewModel.KEYRING_UNAVAILABLE, vm.errorMessageProperty().get());
+
+        vm.save(); // formulario vacío: error transitorio
+        assertEquals("Introduce la URL, el usuario y la contraseña.", vm.errorMessageProperty().get());
+
+        vm.clearMessages();
+        assertEquals(SetupViewModel.KEYRING_UNAVAILABLE, vm.errorMessageProperty().get());
+    }
+
+    @Test
     @DisplayName("La configuración existente precarga URL y usuario pero oculta la contraseña")
     void prefillsNonSecretSettingsFromService() {
         FakeSetupService service = new FakeSetupService().withLoaded(VALID);

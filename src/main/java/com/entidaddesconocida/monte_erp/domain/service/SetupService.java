@@ -15,9 +15,22 @@ public interface SetupService {
 
     /**
      * Returns the configuration currently persisted, with {@code null} for any
-     * value that is missing or could not be read.
+     * value that is missing, plus whether the credential store could be read.
+     *
+     * <p>Callers that only need the values can use {@link #load()}.</p>
      */
-    ConnectionSettings load();
+    LoadedSetup loadSetup();
+
+    /**
+     * Returns the configuration currently persisted, with {@code null} for any
+     * value that is missing or could not be read.
+     *
+     * <p>It collapses "no credential" and "keyring unavailable" into
+     * {@code null}; use {@link #loadSetup()} when the difference matters.</p>
+     */
+    default ConnectionSettings load() {
+        return loadSetup().settings();
+    }
 
     /**
      * Verifies that the given settings can open a JDBC connection without

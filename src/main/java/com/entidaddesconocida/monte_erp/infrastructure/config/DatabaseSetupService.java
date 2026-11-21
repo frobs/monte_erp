@@ -4,6 +4,7 @@ import com.entidaddesconocida.monte_erp.domain.model.ConnectionSettings;
 import com.entidaddesconocida.monte_erp.domain.model.Role;
 import com.entidaddesconocida.monte_erp.domain.model.User;
 import com.entidaddesconocida.monte_erp.domain.repository.UserRepository;
+import com.entidaddesconocida.monte_erp.domain.service.LoadedSetup;
 import com.entidaddesconocida.monte_erp.domain.service.SetupException;
 import com.entidaddesconocida.monte_erp.domain.service.SetupService;
 import com.entidaddesconocida.monte_erp.security.PasswordHasher;
@@ -31,8 +32,9 @@ public final class DatabaseSetupService implements SetupService {
     }
 
     @Override
-    public ConnectionSettings load() {
-        return config.load();
+    public LoadedSetup loadSetup() {
+        DatabaseConfig.LoadedConfiguration loaded = config.loadWithStatus();
+        return new LoadedSetup(loaded.settings(), loaded.credentialsUnavailable());
     }
 
     @Override

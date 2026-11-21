@@ -11,6 +11,8 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.Locale;
 import java.util.Properties;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * Persistence of the database configuration.
@@ -30,11 +32,15 @@ import java.util.Properties;
  * live in the operating system keyring (through {@link CredentialStore}); they
  * never touch the properties file.</p>
  *
- * <p>Reads are lenient (missing values become {@code null}); writes surface the
- * failures so the setup screen can tell the user what happened.</p>
+ * <p>Reads are lenient (missing values become {@code null}), but they do not
+ * hide a broken keyring: {@link #loadWithStatus()} reports whether the
+ * credentials were unreadable, so the setup screen can say so instead of
+ * offering a clean onboarding (S4). Writes surface the failures so the setup
+ * screen can tell the user what happened.</p>
  */
 public final class DatabaseConfig {
 
+    private static final Logger LOGGER = Logger.getLogger(DatabaseConfig.class.getName());
     public static final String CONFIG_FILE_NAME = "application.properties";
     public static final String KEY_URL = "db.url";
 
@@ -125,14 +131,51 @@ public final class DatabaseConfig {
     }
 
     /**
+     * Settings read from disk plus what is known about the credential store.
+     *
+     * @param settings                the values that could be read; missing ones
+     *                                are {@code null}
+     * @param credentialsUnavailable  {@code true} when the keyring could not be
+     *                                read, so a missing user or password does
+     *                                <em>not</em> mean "not configured"
+     */
+    public record LoadedConfiguration(ConnectionSettings settings, boolean credentialsUnavailable) {
+
+        public LoadedConfiguration {
+            settings = settings == null
+                    ? new ConnectionSettings(null, null, null)
+                    : settings;
+        }
+    }
+
+    /**
      * Loads the persisted settings; missing or unreadable values are
      * {@code null} (never throws).
+     *
+     * <p>Use {@link #loadWithStatus()} when the caller must tell a missing
+     * credential from an unreachable keyring.</p>
      */
     public ConnectionSettings load() {
-        return new ConnectionSettings(
-                blankToNull(readUrl()),
-                blankToNull(credentialStore.get(ACCOUNT_USER)),
-                blankToNull(credentialStore.get(ACCOUNT_PASSWORD)));
+        return loadWithStatus().settings();
+    }
+
+    /**
+     * Loads the persisted settings, reporting whether the keyring could be read.
+     * Never throws: an unreadable credential file or keyring becomes
+     * {@code null} values plus {@code credentialsUnavailable}.
+     */
+    public LoadedConfiguration loadWithStatus() {
+        CredentialLookup user = credentialStore.lookup(ACCOUNT_USER);
+        CredentialLookup password = credentialStore.lookup(ACCOUNT_PASSWORD);
+        if (user.isUnavailable() || password.isUnavailable()) {
+            LOGGER.log(Level.FINE, "Keyring unavailable while loading the database credentials");
+        }
+        return new LoadedConfiguration(
+                new ConnectionSettings(
+                        blankToNull(readUrl()),
+                        blankToNull(user.value()),
+                        blankToNull(password.value())),
+                user.isUnavailable() || password.isUnavailable());
     }
 
     /**
@@ -146,8 +189,8 @@ public final class DatabaseConfig {
         if (settings != null && DatabaseUrl.containsCredentials(settings.url())) {
             throw new IllegalArgumentException("No incluyas credenciales en la URL JDBC.");
         }
-        String previousUser = credentialStore.get(ACCOUNT_USER);
-        String previousPassword = credentialStore.get(ACCOUNT_PASSWORD);
+        CredentialLookup previousUser = credentialStore.lookup(ACCOUNT_USER);
+        CredentialLookup previousPassword = credentialStore.lookup(ACCOUNT_PASSWORD);
         try {
             credentialStore.set(ACCOUNT_USER, settings.user());
             credentialStore.set(ACCOUNT_PASSWORD, settings.password());
@@ -203,12 +246,19 @@ public final class DatabaseConfig {
         }
     }
 
-    private void restoreCredential(String account, String previousValue, Throwable failure) {
+    private void restoreCredential(String account, CredentialLookup previous, Throwable failure) {
+        if (previous.isUnavailable()) {
+            // The previous value is unknown: restoring would delete a credential
+            // that may still be valid, so the keyring is left untouched.
+            LOGGER.log(Level.FINE,
+                    "Previous value of {0} is unknown (keyring unavailable): skipping rollback", account);
+            return;
+        }
         try {
-            if (previousValue == null) {
-                credentialStore.delete(account);
+            if (previous.isPresent()) {
+                credentialStore.set(account, previous.value());
             } else {
-                credentialStore.set(account, previousValue);
+                credentialStore.delete(account);
             }
         } catch (CredentialStoreException rollbackFailure) {
             failure.addSuppressed(rollbackFailure);

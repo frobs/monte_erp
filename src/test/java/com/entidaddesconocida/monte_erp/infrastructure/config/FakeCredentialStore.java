@@ -12,7 +12,9 @@ public class FakeCredentialStore implements CredentialStore {
 
     private final Map<String, String> values = new HashMap<>();
     private final Set<String> failingAccounts = new HashSet<>();
+    private final Set<String> unreadableAccounts = new HashSet<>();
     private boolean throwOnSet;
+    private boolean throwOnGet;
 
     public FakeCredentialStore with(String account, String value) {
         values.put(account, value);
@@ -21,6 +23,18 @@ public class FakeCredentialStore implements CredentialStore {
 
     public FakeCredentialStore throwOnSet() {
         this.throwOnSet = true;
+        return this;
+    }
+
+    /** Simulates a locked or unsupported keyring: every read fails. */
+    public FakeCredentialStore throwOnGet() {
+        this.throwOnGet = true;
+        return this;
+    }
+
+    /** Simulates a backend that fails only for one account. */
+    public FakeCredentialStore failOnGet(String account) {
+        unreadableAccounts.add(account);
         return this;
     }
 
@@ -35,8 +49,19 @@ public class FakeCredentialStore implements CredentialStore {
     }
 
     @Override
+    public CredentialLookup lookup(String account) {
+        if (throwOnGet || unreadableAccounts.contains(account)) {
+            return CredentialLookup.unavailable("Simulated keyring backend failure");
+        }
+        String value = values.get(account);
+        return value == null || value.isBlank()
+                ? CredentialLookup.missing()
+                : CredentialLookup.found(value);
+    }
+
+    @Override
     public String get(String account) {
-        return values.get(account);
+        return lookup(account).value();
     }
 
     @Override

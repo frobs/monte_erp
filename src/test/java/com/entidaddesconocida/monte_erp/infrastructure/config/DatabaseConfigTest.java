@@ -227,6 +227,54 @@ class DatabaseConfigTest {
     }
 
     @Test
+    @DisplayName("load distingue falta de credencial de backend no disponible")
+    void loadDistinguishesMissingFromUnavailable() {
+        DatabaseConfig missing = config(new FakeCredentialStore());
+        DatabaseConfig.LoadedConfiguration absent = missing.loadWithStatus();
+        assertFalse(absent.credentialsUnavailable());
+        assertNull(absent.settings().user());
+
+        DatabaseConfig unreadable = config(new FakeCredentialStore().throwOnGet());
+        DatabaseConfig.LoadedConfiguration unavailable = unreadable.loadWithStatus();
+        assertTrue(unavailable.credentialsUnavailable());
+        assertNull(unavailable.settings().user());
+        assertNull(unavailable.settings().password());
+    }
+
+    @Test
+    @DisplayName("Un fallo de lectura de una sola credencial marca el keyring como no disponible")
+    void oneUnreadableCredentialMarksTheKeyringUnavailable() {
+        FakeCredentialStore store = new FakeCredentialStore()
+                .with(ACCOUNT_USER, "erp_user")
+                .with(ACCOUNT_PASSWORD, "erp_pass")
+                .failOnGet(ACCOUNT_PASSWORD);
+
+        DatabaseConfig.LoadedConfiguration loaded = config(store).loadWithStatus();
+
+        assertTrue(loaded.credentialsUnavailable());
+        assertEquals("erp_user", loaded.settings().user());
+        assertNull(loaded.settings().password());
+    }
+
+    @Test
+    @DisplayName("save no borra las credenciales anteriores si no se pudieron leer")
+    void saveKeepsCredentialsWhenPreviousValueIsUnknown() {
+        FakeCredentialStore store = new FakeCredentialStore()
+                .with(ACCOUNT_USER, "old_user")
+                .with(ACCOUNT_PASSWORD, "old_password")
+                .throwOnGet()
+                .failOnSet(ACCOUNT_PASSWORD);
+        DatabaseConfig config = config(store);
+
+        assertThrows(CredentialStoreException.class, () -> config.save(new ConnectionSettings(
+                "jdbc:mysql://new-host/monte_erp", "new_user", "new_password")));
+
+        // The previous password could not be read, so the rollback leaves it alone
+        // instead of deleting a credential that may still be valid.
+        assertEquals("old_password", store.stored(ACCOUNT_PASSWORD));
+    }
+
+    @Test
     @DisplayName("Un fallo parcial del keyring restaura las credenciales y la URL anteriores")
     void saveRollsBackCredentialsWhenKeyringUpdateFails() throws IOException {
         FakeCredentialStore store = new FakeCredentialStore()

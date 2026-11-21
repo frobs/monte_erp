@@ -100,6 +100,33 @@ class DatabaseSetupServiceTest {
     }
 
     @Test
+    @DisplayName("loadSetup propaga que el keyring no se pudo leer")
+    void loadSetupReportsAnUnavailableKeyring() {
+        FakeCredentialStore store = new FakeCredentialStore()
+                .with("db.user", "erp_user")
+                .with("db.password", "erp_pass")
+                .throwOnGet();
+        DatabaseConfig config = new DatabaseConfig(store, tempDir.resolve("application.properties"));
+        DatabaseSetupService service = new DatabaseSetupService(config, new FakeUserRepository());
+
+        var loaded = service.loadSetup();
+
+        assertTrue(loaded.credentialsUnavailable());
+        assertFalse(loaded.settings().isComplete());
+    }
+
+    @Test
+    @DisplayName("loadSetup no marca nada cuando el keyring responde y no hay credenciales")
+    void loadSetupReportsMissingCredentialsAsConfiguredAbsence() {
+        DatabaseSetupService service = service(new FakeUserRepository());
+
+        var loaded = service.loadSetup();
+
+        assertFalse(loaded.credentialsUnavailable());
+        assertFalse(loaded.settings().isComplete());
+    }
+
+    @Test
     @DisplayName("save persiste la configuración y apunta la factoría a ella")
     void savePersistsAndConfiguresTheConnection() throws Exception {
         DatabaseSetupService service = service(new FakeUserRepository());
