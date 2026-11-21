@@ -214,6 +214,17 @@ class CrudViewModelTest {
     }
 
     @Test
+    @DisplayName("El contador se recalcula una sola vez por cambio en la lista")
+    void counterIsRecomputedOncePerListChange() {
+        viewModel.countTextCalls = 0;
+
+        viewModel.items.clear();
+
+        assertEquals(1, viewModel.countTextCalls);
+        assertEquals("Elementos: 0", viewModel.itemCountProperty().get());
+    }
+
+    @Test
     @DisplayName("La búsqueda acota la lista filtrada")
     void searchFiltersTheList() {
         repository.withItem(new FakeCrudItem("Dos"));
@@ -234,6 +245,9 @@ class CrudViewModelTest {
         private final FakeCrudRepository repository;
         private final StringProperty name = new SimpleStringProperty("");
         private final ReadOnlyStringWrapper nameError = new ReadOnlyStringWrapper("");
+
+        /** Invocations of {@link #countText()}; pins that it runs once per list change. */
+        private int countTextCalls;
 
         TestViewModel(FakeCrudRepository repository) {
             this.repository = repository;
@@ -352,6 +366,7 @@ class CrudViewModelTest {
 
         @Override
         protected String countText() {
+            countTextCalls++;
             return "Elementos: " + filteredItems.size();
         }
 

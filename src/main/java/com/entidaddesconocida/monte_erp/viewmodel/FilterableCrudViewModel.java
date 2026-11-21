@@ -8,7 +8,6 @@ import javafx.beans.property.SimpleBooleanProperty;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.beans.property.StringProperty;
 import javafx.beans.value.ObservableValue;
-import javafx.collections.ListChangeListener;
 import javafx.collections.transformation.FilteredList;
 
 import java.util.List;
@@ -87,8 +86,8 @@ public abstract class FilterableCrudViewModel<T> extends CrudViewModel<T> {
     }
 
     /**
-     * Registers the counter listeners and reloads the list whenever one of the
-     * given filter properties changes. Called by every subclass from its own
+     * Registers the counter and reloads the list whenever one of the given
+     * filter properties changes. Called by every subclass from its own
      * constructor, because the dependencies (search text, category filter, …)
      * are subclass fields.
      */
@@ -100,8 +99,9 @@ public abstract class FilterableCrudViewModel<T> extends CrudViewModel<T> {
                 }
             });
         }
-        items.addListener((ListChangeListener<T>) change -> updateCount());
-        filteredItems.addListener((ListChangeListener<T>) change -> updateCount());
+        // Only the master list is watched: filteredItems derives from it, so a
+        // listener on both would recompute the counter twice for every change.
+        watchItemsForCount();
     }
 
     /**
