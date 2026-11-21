@@ -82,38 +82,4 @@ public record PurchaseFilter(ReportPeriod period, Integer supplierId, PurchaseSt
         return !period.isEmpty() || supplierId != null || status != null;
     }
 
-    /**
-     * Spanish label for the user interface or diagnostics, e.g.
-     * {@code "01/01/2025 – 31/03/2025 · Proveedor #3 · Pendiente"}. The supplier
-     * is rendered by id because the filter only carries the foreign key.
-     */
-    public String label() {
-        if (!isFiltered()) {
-            return "Todo el histórico";
-        }
-        StringBuilder label = new StringBuilder();
-        if (!period.isEmpty()) {
-            label.append(period.label());
-        }
-        if (supplierId != null) {
-            appendSeparator(label);
-            label.append("Proveedor #").append(supplierId);
-        }
-        if (status != null) {
-            appendSeparator(label);
-            label.append(status.label());
-        }
-        return label.toString();
-    }
-
-    private static void appendSeparator(StringBuilder label) {
-        if (label.length() > 0) {
-            label.append(" · ");
-        }
-    }
-
-    @Override
-    public String toString() {
-        return "PurchaseFilter{" + label() + '}';
-    }
 }

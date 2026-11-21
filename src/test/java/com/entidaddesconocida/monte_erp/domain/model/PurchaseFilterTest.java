@@ -12,8 +12,8 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Unit tests for {@link PurchaseFilter} (RF-14 / CU-10): the optional criteria,
- * the rejection of an inverted range and the label used by the diagnostics.
+ * Unit tests for {@link PurchaseFilter} (RF-14 / CU-10): the optional criteria
+ * and the rejection of an inverted range.
  */
 class PurchaseFilterTest {
 
@@ -29,7 +29,6 @@ class PurchaseFilterTest {
         assertNull(filter.supplierId());
         assertNull(filter.status());
         assertFalse(filter.isFiltered());
-        assertEquals("Todo el histórico", filter.label());
         assertEquals(PurchaseFilter.all(), filter);
     }
 
@@ -43,7 +42,6 @@ class PurchaseFilterTest {
         assertEquals(TO, filter.period().to());
         assertNull(filter.supplierId());
         assertNull(filter.status());
-        assertEquals("01/01/2025 – 31/01/2025", filter.label());
     }
 
     @Test
@@ -60,14 +58,6 @@ class PurchaseFilterTest {
                 () -> PurchaseFilter.of(null, null, 0, null));
         assertThrows(IllegalArgumentException.class,
                 () -> PurchaseFilter.of(null, null, -3, null));
-    }
-
-    @Test
-    @DisplayName("La etiqueta compone período, proveedor y estado")
-    void labelComposesEveryCriterion() {
-        PurchaseFilter filter = PurchaseFilter.of(FROM, TO, 3, PurchaseStatus.PENDING);
-
-        assertEquals("01/01/2025 – 31/01/2025 · Proveedor #3 · Pendiente", filter.label());
     }
 
     @Test

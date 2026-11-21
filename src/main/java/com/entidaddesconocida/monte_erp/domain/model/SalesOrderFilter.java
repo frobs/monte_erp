@@ -63,38 +63,4 @@ public record SalesOrderFilter(ReportPeriod period, Integer customerId, OrderSta
         return !period.isEmpty() || customerId != null || status != null;
     }
 
-    /**
-     * Spanish label for the user interface or diagnostics, e.g.
-     * {@code "01/01/2025 – 31/03/2025 · Cliente #3 · Pendiente"}. The customer
-     * is rendered by id because the filter only carries the foreign key.
-     */
-    public String label() {
-        if (!isFiltered()) {
-            return "Todo el histórico";
-        }
-        StringBuilder label = new StringBuilder();
-        if (!period.isEmpty()) {
-            label.append(period.label());
-        }
-        if (customerId != null) {
-            appendSeparator(label);
-            label.append("Cliente #").append(customerId);
-        }
-        if (status != null) {
-            appendSeparator(label);
-            label.append(status.label());
-        }
-        return label.toString();
-    }
-
-    private static void appendSeparator(StringBuilder label) {
-        if (label.length() > 0) {
-            label.append(" · ");
-        }
-    }
-
-    @Override
-    public String toString() {
-        return "SalesOrderFilter{" + label() + '}';
-    }
 }
