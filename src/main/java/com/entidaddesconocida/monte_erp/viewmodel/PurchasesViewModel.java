@@ -1,6 +1,7 @@
 package com.entidaddesconocida.monte_erp.viewmodel;
 
 import com.entidaddesconocida.monte_erp.app.BackgroundTasks;
+import com.entidaddesconocida.monte_erp.app.SessionGuard;
 import com.entidaddesconocida.monte_erp.app.SessionUser;
 import com.entidaddesconocida.monte_erp.app.SessionValidator;
 import com.entidaddesconocida.monte_erp.domain.model.Product;
@@ -117,7 +118,7 @@ public class PurchasesViewModel implements ViewModel {
     private final PurchaseRepository purchaseRepository;
     private final SupplierRepository supplierRepository;
     private final SessionUser currentUser;
-    private final SessionValidator sessionValidator;
+    private final SessionGuard sessionGuard;
     private final BackgroundTasks backgroundTasks;
 
     private final Feedback feedback = new Feedback();
@@ -163,7 +164,8 @@ public class PurchasesViewModel implements ViewModel {
         this.purchaseRepository = purchaseRepository;
         this.supplierRepository = supplierRepository;
         this.currentUser = currentUser;
-        this.sessionValidator = sessionValidator;
+        this.sessionGuard = new SessionGuard(LOGGER, sessionValidator,
+                DATABASE_ERROR, SESSION_EXPIRED);
         this.backgroundTasks = backgroundTasks;
         this.draft = new PurchaseDraft(supplierRepository, productRepository, feedback);
         // Every filter change runs one query.
@@ -513,22 +515,13 @@ public class PurchasesViewModel implements ViewModel {
     }
 
     private boolean ensureActiveSession() {
-        if (sessionValidator == null) {
-            return true;
-        }
-        try {
-            if (sessionValidator.refresh()) {
-                return true;
-            }
-        } catch (SQLException e) {
-            LOGGER.log(Level.WARNING, "Could not revalidate the signed-in user", e);
-            feedback.fail(DATABASE_ERROR);
-            return false;
-        }
+        return sessionGuard.requireActive(this::clearSessionState, feedback::fail);
+    }
+
+    /** Drops the history, the selection and the draft of a session that is over. */
+    private void clearSessionState() {
         purchases.clear();
         clearSelection();
         draft.reset();
-        feedback.fail(SESSION_EXPIRED);
-        return false;
     }
 }

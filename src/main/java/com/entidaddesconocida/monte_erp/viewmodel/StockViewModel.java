@@ -1,6 +1,7 @@
 package com.entidaddesconocida.monte_erp.viewmodel;
 
 import com.entidaddesconocida.monte_erp.app.BackgroundTasks;
+import com.entidaddesconocida.monte_erp.app.SessionGuard;
 import com.entidaddesconocida.monte_erp.app.SessionValidator;
 import com.entidaddesconocida.monte_erp.domain.model.Stock;
 import com.entidaddesconocida.monte_erp.domain.model.StockLevel;
@@ -48,7 +49,7 @@ public class StockViewModel implements ViewModel {
     private static final String SESSION_EXPIRED = ViewMessages.SESSION_EXPIRED;
 
     private final StockRepository stockRepository;
-    private final SessionValidator sessionValidator;
+    private final SessionGuard sessionGuard;
     private final BackgroundTasks backgroundTasks;
 
     private final ObservableList<StockLevel> levels = FXCollections.observableArrayList();
@@ -82,7 +83,8 @@ public class StockViewModel implements ViewModel {
     public StockViewModel(StockRepository stockRepository, SessionValidator sessionValidator,
                           BackgroundTasks backgroundTasks) {
         this.stockRepository = stockRepository;
-        this.sessionValidator = sessionValidator;
+        this.sessionGuard = new SessionGuard(LOGGER, sessionValidator,
+                DATABASE_ERROR, SESSION_EXPIRED);
         this.backgroundTasks = backgroundTasks;
         searchText.addListener((observable, oldValue, newValue) -> reloadLevels());
         onlyBelowMinimum.addListener((observable, oldValue, newValue) -> reloadLevels());
@@ -176,29 +178,21 @@ public class StockViewModel implements ViewModel {
                 });
     }
 
-    /** Whether the level passes the text search and the "only below minimum" toggle. */
+    /**
+     * Revalidates the session before a query. A dead session or a database
+     * failure during the check empties the table, the detail and the counter.
+     */
     private boolean ensureActiveSession() {
-        if (sessionValidator == null) {
-            return true;
-        }
-        try {
-            if (sessionValidator.refresh()) {
-                return true;
-            }
-        } catch (SQLException e) {
-            LOGGER.log(Level.WARNING, "Could not revalidate the signed-in user", e);
-            levels.clear();
-            selectedLots.clear();
-            alertCount.set("Productos bajo mínimo: 0");
-            errorMessage.set(DATABASE_ERROR);
-            return false;
-        }
+        return sessionGuard.requireActive(this::clearStock, this::clearStock,
+                errorMessage::set);
+    }
+
+    /** Drops the levels, the selection and the alert counter of a dead session. */
+    private void clearStock() {
         levels.clear();
         selectedLevel.set(null);
         selectedLots.clear();
         alertCount.set("Productos bajo mínimo: 0");
-        errorMessage.set(SESSION_EXPIRED);
-        return false;
     }
 
     /**

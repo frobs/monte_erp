@@ -1,6 +1,7 @@
 package com.entidaddesconocida.monte_erp.viewmodel;
 
 import com.entidaddesconocida.monte_erp.app.BackgroundTasks;
+import com.entidaddesconocida.monte_erp.app.SessionGuard;
 import com.entidaddesconocida.monte_erp.app.SessionValidator;
 import com.entidaddesconocida.monte_erp.domain.model.ReportPeriod;
 import com.entidaddesconocida.monte_erp.domain.model.SalesReportLine;
@@ -62,7 +63,7 @@ public class ReportsViewModel implements ViewModel {
 
     private final SalesOrderRepository salesOrderRepository;
     private final StockRepository stockRepository;
-    private final SessionValidator sessionValidator;
+    private final SessionGuard sessionGuard;
     private final BackgroundTasks backgroundTasks;
 
     private final ObjectProperty<LocalDate> fromDate = new SimpleObjectProperty<>();
@@ -99,7 +100,8 @@ public class ReportsViewModel implements ViewModel {
                             BackgroundTasks backgroundTasks) {
         this.salesOrderRepository = salesOrderRepository;
         this.stockRepository = stockRepository;
-        this.sessionValidator = sessionValidator;
+        this.sessionGuard = new SessionGuard(LOGGER, sessionValidator,
+                DATABASE_ERROR, SESSION_EXPIRED);
         this.backgroundTasks = backgroundTasks;
         publish(StockReportSummary.empty(), SalesReportSummary.empty());
     }
@@ -209,23 +211,13 @@ public class ReportsViewModel implements ViewModel {
         publish(StockReportSummary.empty(), SalesReportSummary.empty());
     }
 
+    /**
+     * A read-only report must not survive a dead session nor a database failure
+     * during the check, so both failures clear the tables ({@link SessionGuard}).
+     */
     private boolean ensureActiveSession() {
-        if (sessionValidator == null) {
-            return true;
-        }
-        try {
-            if (sessionValidator.refresh()) {
-                return true;
-            }
-        } catch (SQLException e) {
-            LOGGER.log(Level.WARNING, "Could not revalidate the signed-in user", e);
-            clearReports();
-            errorMessage.set(DATABASE_ERROR);
-            return false;
-        }
-        clearReports();
-        errorMessage.set(SESSION_EXPIRED);
-        return false;
+        return sessionGuard.requireActive(this::clearReports, this::clearReports,
+                errorMessage::set);
     }
 
     /** Clears both dates (whole history) and reloads. */

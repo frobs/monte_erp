@@ -1,6 +1,7 @@
 package com.entidaddesconocida.monte_erp.viewmodel;
 
 import com.entidaddesconocida.monte_erp.app.BackgroundTasks;
+import com.entidaddesconocida.monte_erp.app.SessionGuard;
 import com.entidaddesconocida.monte_erp.app.SessionValidator;
 
 import de.saxsys.mvvmfx.ViewModel;
@@ -73,6 +74,7 @@ public abstract class CrudViewModel<T> implements ViewModel {
 
     private final CrudLabels<T> labels;
     private final SessionValidator sessionValidator;
+    private final SessionGuard sessionGuard;
     private final BackgroundTasks backgroundTasks;
 
     /** Master list currently loaded (active or inactive rows, depending on the subclass). */
@@ -133,6 +135,8 @@ public abstract class CrudViewModel<T> implements ViewModel {
                             BackgroundTasks backgroundTasks) {
         this.labels = labels;
         this.sessionValidator = sessionValidator;
+        this.sessionGuard = new SessionGuard(LOGGER, sessionValidator,
+                DATABASE_ERROR, SESSION_EXPIRED);
         this.backgroundTasks = backgroundTasks;
         // Selecting a row loads it into the form; clearing the selection resets
         // the form so a stale row can never be edited/saved by accident.
@@ -471,22 +475,13 @@ public abstract class CrudViewModel<T> implements ViewModel {
      * the constructor, so an override would read subclass fields too early.
      */
     protected final boolean ensureActiveSession() {
-        if (sessionValidator == null) {
-            return true;
-        }
-        try {
-            if (sessionValidator.refresh()) {
-                return true;
-            }
-        } catch (SQLException e) {
-            LOGGER.log(Level.WARNING, "Could not revalidate the signed-in user", e);
-            fail(DATABASE_ERROR);
-            return false;
-        }
+        return sessionGuard.requireActive(this::clearSessionState, this::fail);
+    }
+
+    /** Drops the master list and the form of a session that is over. */
+    private void clearSessionState() {
         items.clear();
         resetForm();
-        fail(SESSION_EXPIRED);
-        return false;
     }
 
     /**

@@ -1,6 +1,7 @@
 package com.entidaddesconocida.monte_erp.viewmodel;
 
 import com.entidaddesconocida.monte_erp.app.BackgroundTasks;
+import com.entidaddesconocida.monte_erp.app.SessionGuard;
 import com.entidaddesconocida.monte_erp.app.SessionUser;
 import com.entidaddesconocida.monte_erp.app.SessionValidator;
 import com.entidaddesconocida.monte_erp.domain.model.Customer;
@@ -126,7 +127,7 @@ public class SalesOrdersViewModel implements ViewModel {
     private final SalesOrderRepository salesOrderRepository;
     private final CustomerRepository customerRepository;
     private final SessionUser currentUser;
-    private final SessionValidator sessionValidator;
+    private final SessionGuard sessionGuard;
     private final BackgroundTasks backgroundTasks;
 
     private final Feedback feedback = new Feedback();
@@ -176,7 +177,8 @@ public class SalesOrdersViewModel implements ViewModel {
         this.salesOrderRepository = salesOrderRepository;
         this.customerRepository = customerRepository;
         this.currentUser = currentUser;
-        this.sessionValidator = sessionValidator;
+        this.sessionGuard = new SessionGuard(LOGGER, sessionValidator,
+                DATABASE_ERROR, SESSION_EXPIRED);
         this.backgroundTasks = backgroundTasks;
         this.draft = new SalesOrderDraft(customerRepository, productRepository, stockRepository,
                 backgroundTasks, feedback, this::ensureActiveSession);
@@ -531,23 +533,14 @@ public class SalesOrdersViewModel implements ViewModel {
     }
 
     private boolean ensureActiveSession() {
-        if (sessionValidator == null) {
-            return true;
-        }
-        try {
-            if (sessionValidator.refresh()) {
-                return true;
-            }
-        } catch (SQLException e) {
-            LOGGER.log(Level.WARNING, "Could not revalidate the signed-in user", e);
-            feedback.fail(DATABASE_ERROR);
-            return false;
-        }
+        return sessionGuard.requireActive(this::clearSessionState, feedback::fail);
+    }
+
+    /** Drops the history, the selection and the draft of a session that is over. */
+    private void clearSessionState() {
         orders.clear();
         clearSelection();
         draft.reset();
-        feedback.fail(SESSION_EXPIRED);
-        return false;
     }
 
     private SalesOrder findById(int id) {
