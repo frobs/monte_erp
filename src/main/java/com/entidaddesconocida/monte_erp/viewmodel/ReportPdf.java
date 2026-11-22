@@ -1,7 +1,6 @@
 package com.entidaddesconocida.monte_erp.viewmodel;
 
 import com.entidaddesconocida.monte_erp.domain.model.Product;
-import com.entidaddesconocida.monte_erp.domain.model.Purchase;
 import com.entidaddesconocida.monte_erp.domain.model.ReportPeriod;
 import com.entidaddesconocida.monte_erp.domain.model.SalesReportRow;
 import com.entidaddesconocida.monte_erp.domain.model.SalesReportSummary;
@@ -25,8 +24,6 @@ import com.lowagie.text.pdf.PdfWriter;
 import java.awt.Color;
 import java.io.ByteArrayOutputStream;
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.List;
 
 /**
@@ -45,9 +42,6 @@ import java.util.List;
  * {@link Amounts#currency(BigDecimal)}, the same text the tables show.</p>
  */
 public final class ReportPdf {
-
-    private static final DateTimeFormatter DATE_FORMAT =
-            DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm");
 
     private static final Color HEADER_BACKGROUND = new Color(0xE2, 0xE8, 0xF0);
     private static final Color EXCLUDED_BACKGROUND = new Color(0xFD, 0xE2, 0xE1);
@@ -85,11 +79,11 @@ public final class ReportPdf {
                     row(table, counts ? null : EXCLUDED_BACKGROUND,
                             product == null ? "" : product.getName(),
                             product == null ? "" : product.getSku(),
-                            formatDate(lot.getEntryDate()),
+                            ReportLabels.formatDate(lot.getEntryDate()),
                             String.valueOf(lot.getInitialQuantity()),
                             String.valueOf(lot.getAvailableQuantity()),
                             Amounts.currency(lot.getPurchasePrice()),
-                            purchaseLabel(lot.getPurchase()),
+                            ReportLabels.purchaseLabel(lot.getPurchase()),
                             ReportLabels.purchaseStatus(lot),
                             ReportLabels.availabilityReason(lot));
                 }
@@ -221,13 +215,5 @@ public final class ReportPdf {
         Font font = FontFactory.getFont(FontFactory.HELVETICA, BaseFont.WINANSI,
                 BaseFont.EMBEDDED, size, style, color);
         return font;
-    }
-
-    private static String formatDate(LocalDateTime moment) {
-        return moment == null ? "" : DATE_FORMAT.format(moment);
-    }
-
-    private static String purchaseLabel(Purchase purchase) {
-        return purchase == null || purchase.getId() == 0 ? "" : "#" + purchase.getId();
     }
 }

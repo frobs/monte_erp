@@ -1,15 +1,12 @@
 package com.entidaddesconocida.monte_erp.viewmodel;
 
 import com.entidaddesconocida.monte_erp.domain.model.Product;
-import com.entidaddesconocida.monte_erp.domain.model.Purchase;
 import com.entidaddesconocida.monte_erp.domain.model.SalesReportRow;
 import com.entidaddesconocida.monte_erp.domain.model.SalesReportSummary;
 import com.entidaddesconocida.monte_erp.domain.model.Stock;
 import com.entidaddesconocida.monte_erp.domain.model.StockReportSummary;
 import com.entidaddesconocida.monte_erp.domain.service.StockReportCalculator;
 
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.List;
 
 /**
@@ -36,8 +33,6 @@ public final class ReportCsv {
     private static final String BOM = "\uFEFF";
     private static final String SEPARATOR = ";";
     private static final String LINE_BREAK = "\r\n";
-    private static final DateTimeFormatter DATE_FORMAT =
-            DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm");
 
     private ReportCsv() {
         // Utility class: never instantiated.
@@ -53,11 +48,11 @@ public final class ReportCsv {
                 Product product = lot.getProduct();
                 csv.append(escape(product == null ? "" : product.getName())).append(SEPARATOR);
                 csv.append(escape(product == null ? "" : product.getSku())).append(SEPARATOR);
-                csv.append(escape(formatDate(lot.getEntryDate()))).append(SEPARATOR);
+                csv.append(escape(ReportLabels.formatDate(lot.getEntryDate()))).append(SEPARATOR);
                 csv.append(lot.getInitialQuantity()).append(SEPARATOR);
                 csv.append(lot.getAvailableQuantity()).append(SEPARATOR);
                 csv.append(escape(Amounts.plain(lot.getPurchasePrice()))).append(SEPARATOR);
-                csv.append(escape(purchaseLabel(lot.getPurchase()))).append(SEPARATOR);
+                csv.append(escape(ReportLabels.purchaseLabel(lot.getPurchase()))).append(SEPARATOR);
                 csv.append(escape(ReportLabels.purchaseStatus(lot))).append(SEPARATOR);
                 csv.append(escape(ReportLabels.availabilityReason(lot))).append(LINE_BREAK);
             }
@@ -122,14 +117,6 @@ public final class ReportCsv {
     private static boolean isFormulaTrigger(char first) {
         return first == '=' || first == '+' || first == '-' || first == '@'
                 || first == '\t' || first == '\r';
-    }
-
-    private static String formatDate(LocalDateTime moment) {
-        return moment == null ? "" : DATE_FORMAT.format(moment);
-    }
-
-    private static String purchaseLabel(Purchase purchase) {
-        return purchase == null || purchase.getId() == 0 ? "" : "#" + purchase.getId();
     }
 
     private static void appendRow(StringBuilder csv, String... cells) {

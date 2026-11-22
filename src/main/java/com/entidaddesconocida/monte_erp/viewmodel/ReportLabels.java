@@ -1,8 +1,12 @@
 package com.entidaddesconocida.monte_erp.viewmodel;
 
+import com.entidaddesconocida.monte_erp.domain.model.Purchase;
 import com.entidaddesconocida.monte_erp.domain.model.PurchaseStatus;
 import com.entidaddesconocida.monte_erp.domain.model.SalesReportRow;
 import com.entidaddesconocida.monte_erp.domain.model.Stock;
+
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 
 /**
  * User facing labels shared by both reports (RF-12 / CU-09).
@@ -25,9 +29,13 @@ import com.entidaddesconocida.monte_erp.domain.model.Stock;
  * <p>It is a stateless utility with no JavaFX and no database, so both the CSV
  * ({@link ReportCsv}), the PDF ({@link ReportPdf}) and the tables of the view
  * ({@code ReportsView}) print exactly the same text, and it is unit tested in
- * isolation.</p>
+ * isolation. The date format and the purchase reference also live here, so both
+ * serialisers share them instead of keeping a private copy.</p>
  */
 public final class ReportLabels {
+
+    private static final DateTimeFormatter DATE_FORMAT =
+            DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm");
 
     /** Reason of a lot whose purchase was given back to the supplier. */
     static final String REASON_RETURNED = "Devuelta al proveedor";
@@ -90,5 +98,21 @@ public final class ReportLabels {
             return "";
         }
         return row.countsInSalesReport() ? REASON_PARTLY_CANCELLED : REASON_ALL_ORDERS_CANCELLED;
+    }
+
+    /**
+     * Date of a report row as {@code dd/MM/yyyy HH:mm}, or an empty string for a
+     * {@code null} moment. Both serialisers print it identically.
+     */
+    public static String formatDate(LocalDateTime moment) {
+        return moment == null ? "" : DATE_FORMAT.format(moment);
+    }
+
+    /**
+     * Reference of the purchase a lot comes from ({@code "#12"}), or an empty
+     * string when the lot carries no purchase or it has no id yet.
+     */
+    public static String purchaseLabel(Purchase purchase) {
+        return purchase == null || purchase.getId() == 0 ? "" : "#" + purchase.getId();
     }
 }
