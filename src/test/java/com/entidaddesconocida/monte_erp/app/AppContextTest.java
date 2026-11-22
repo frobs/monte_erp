@@ -59,14 +59,28 @@ class AppContextTest {
     }
 
     private static AppContext context(SessionState session, FakeUserRepository repo) {
-        DatabaseConfig config = new DatabaseConfig(new FakeCredentialStore());
-        FakeSetupService setup = new FakeSetupService();
-        return new AppContext(session, new AppShell(session, repo), repo,
-                new FakeCategoryRepository(), new FakeSupplierRepository(), new FakeProductRepository(),
+        Repositories repositories = new Repositories(repo, new FakeCategoryRepository(),
+                new FakeSupplierRepository(), new FakeProductRepository(),
                 new FakeCustomerRepository(), new FakeSalesOrderRepository(),
-                new FakePurchaseRepository(), new FakeStockRepository(),
-                config, setup, () -> new DatabaseUrl("jdbc:test"),
+                new FakePurchaseRepository(), new FakeStockRepository());
+        AppServices services = new AppServices(new DatabaseConfig(new FakeCredentialStore()),
+                new FakeSetupService(), () -> new DatabaseUrl("jdbc:test"),
                 BackgroundTasks.synchronous());
+        return new AppContext(session, new AppShell(session, repo), repositories, services);
+    }
+
+    @Test
+    @DisplayName("Un puerto nulo en Repositories falla al construir el contenedor, con su nombre")
+    void nullRepositoryFailsFastWithItsName() {
+        AppContext context = context(new SessionState());
+        assertNotNull(context);
+
+        NullPointerException ex = assertThrows(NullPointerException.class,
+                () -> new Repositories(new FakeUserRepository(), null, new FakeSupplierRepository(),
+                        new FakeProductRepository(), new FakeCustomerRepository(),
+                        new FakeSalesOrderRepository(), new FakePurchaseRepository(),
+                        new FakeStockRepository()));
+        assertEquals("categories", ex.getMessage());
     }
 
     @Test

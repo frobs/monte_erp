@@ -1,8 +1,10 @@
 package com.entidaddesconocida.monte_erp.ui.support;
 
 import com.entidaddesconocida.monte_erp.app.AppContext;
+import com.entidaddesconocida.monte_erp.app.AppServices;
 import com.entidaddesconocida.monte_erp.app.BackgroundTasks;
 import com.entidaddesconocida.monte_erp.app.AppShell;
+import com.entidaddesconocida.monte_erp.app.Repositories;
 import com.entidaddesconocida.monte_erp.app.SessionState;
 import com.entidaddesconocida.monte_erp.domain.model.User;
 import com.entidaddesconocida.monte_erp.domain.repository.UserRepository;
@@ -49,16 +51,17 @@ public final class UiTestSupport {
         UserRepository userRepository = new MySqlUserRepository();
         this.appShell = new AppShell(session, userRepository);
         this.appShell.setStage(stage);
-        this.context = new AppContext(session, appShell, userRepository,
-                new MySqlCategoryRepository(), new MySqlSupplierRepository(),
-                new MySqlProductRepository(), new MySqlCustomerRepository(),
-                new MySqlSalesOrderRepository(), new MySqlPurchaseRepository(),
-                new MySqlStockRepository(), config, setupService,
+        Repositories repositories = new Repositories(userRepository, new MySqlCategoryRepository(),
+                new MySqlSupplierRepository(), new MySqlProductRepository(),
+                new MySqlCustomerRepository(), new MySqlSalesOrderRepository(),
+                new MySqlPurchaseRepository(), new MySqlStockRepository());
+        AppServices services = new AppServices(config, setupService,
                 () -> new DatabaseUrl(DatabaseConnection.getUrl()),
                 // Synchronous on purpose: TestFX drives the real window and asserts
                 // right after each click, so a background result would race the
                 // assertion. The virtual-thread runner is covered by unit tests.
                 BackgroundTasks.synchronous());
+        this.context = new AppContext(session, appShell, repositories, services);
         MvvmFX.setCustomDependencyInjector(this::create);
     }
 

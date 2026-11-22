@@ -1,8 +1,10 @@
 package com.entidaddesconocida.monte_erp;
 
 import com.entidaddesconocida.monte_erp.app.AppContext;
+import com.entidaddesconocida.monte_erp.app.AppServices;
 import com.entidaddesconocida.monte_erp.app.BackgroundTasks;
 import com.entidaddesconocida.monte_erp.app.AppShell;
+import com.entidaddesconocida.monte_erp.app.Repositories;
 import com.entidaddesconocida.monte_erp.app.SceneNavigator;
 import com.entidaddesconocida.monte_erp.app.SessionState;
 import com.entidaddesconocida.monte_erp.domain.model.ConnectionSettings;
@@ -95,11 +97,13 @@ public class MonteErpApplication extends Application {
 
         SessionState session = new SessionState();
         AppShell appShell = new AppShell(session, userRepository);
-        AppContext context = new AppContext(session, appShell, userRepository,
-                categoryRepository, supplierRepository, productRepository, customerRepository,
-                salesOrderRepository, purchaseRepository, stockRepository, databaseConfig,
-                setupService, () -> new DatabaseUrl(DatabaseConnection.getUrl()),
+        Repositories repositories = new Repositories(userRepository, categoryRepository,
+                supplierRepository, productRepository, customerRepository, salesOrderRepository,
+                purchaseRepository, stockRepository);
+        AppServices services = new AppServices(databaseConfig, setupService,
+                () -> new DatabaseUrl(DatabaseConnection.getUrl()),
                 BackgroundTasks.virtualThreads());
+        AppContext context = new AppContext(session, appShell, repositories, services);
 
         MvvmFX.setCustomDependencyInjector(context::create);
         appShell.setStage(stage);

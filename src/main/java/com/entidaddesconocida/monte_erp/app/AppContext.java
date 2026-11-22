@@ -64,26 +64,31 @@ public final class AppContext {
 
     private final Map<Class<?>, Supplier<?>> bindings = new HashMap<>();
 
-    public AppContext(SessionState session, AppShell appShell, UserRepository userRepository,
-                      CategoryRepository categoryRepository, SupplierRepository supplierRepository,
-                      ProductRepository productRepository, CustomerRepository customerRepository,
-                      SalesOrderRepository salesOrderRepository,
-                      PurchaseRepository purchaseRepository,
-                      StockRepository stockRepository,
-                      DatabaseConfig databaseConfig, SetupService setupService,
-                      Supplier<DatabaseUrl> databaseUrl, BackgroundTasks backgroundTasks) {
+    /**
+     * Creates the container around the session, the shell and the two dependency
+     * groups.
+     *
+     * <p>Receives {@link Repositories} and {@link AppServices} instead of a dozen
+     * loose parameters: every dependency keeps its name at the call site and two
+     * collaborators of the same type can no longer be swapped by accident.</p>
+     */
+    public AppContext(SessionState session, AppShell appShell, Repositories repositories,
+                      AppServices services) {
+        UserRepository userRepository = repositories.users();
+        Supplier<DatabaseUrl> databaseUrl = services.databaseUrl();
+        BackgroundTasks backgroundTasks = services.backgroundTasks();
         SessionValidator sessionValidator = new SessionValidator(session, userRepository);
         // Stateless resources: single instance for the whole application.
         bind(UserRepository.class, () -> userRepository);
-        bind(CategoryRepository.class, () -> categoryRepository);
-        bind(SupplierRepository.class, () -> supplierRepository);
-        bind(ProductRepository.class, () -> productRepository);
-        bind(CustomerRepository.class, () -> customerRepository);
-        bind(SalesOrderRepository.class, () -> salesOrderRepository);
-        bind(PurchaseRepository.class, () -> purchaseRepository);
-        bind(StockRepository.class, () -> stockRepository);
-        bind(DatabaseConfig.class, () -> databaseConfig);
-        bind(SetupService.class, () -> setupService);
+        bind(CategoryRepository.class, () -> repositories.categories());
+        bind(SupplierRepository.class, () -> repositories.suppliers());
+        bind(ProductRepository.class, () -> repositories.products());
+        bind(CustomerRepository.class, () -> repositories.customers());
+        bind(SalesOrderRepository.class, () -> repositories.salesOrders());
+        bind(PurchaseRepository.class, () -> repositories.purchases());
+        bind(StockRepository.class, () -> repositories.stock());
+        bind(DatabaseConfig.class, () -> services.databaseConfig());
+        bind(SetupService.class, () -> services.setupService());
         bind(DatabaseUrl.class, databaseUrl); // configuration (current JDBC URL)
 
         // Views (code-behind of the FXML): mvvmFX asks here. ALWAYS fresh instances.
@@ -108,29 +113,33 @@ public final class AppContext {
                 () -> new UsersViewModel(userRepository, session.requireCurrentUser(),
                         sessionValidator, backgroundTasks));
         bind(ProductsViewModel.class,
-                () -> new ProductsViewModel(productRepository, categoryRepository,
-                        supplierRepository, sessionValidator, backgroundTasks));
+                () -> new ProductsViewModel(repositories.products(), repositories.categories(),
+                        repositories.suppliers(), sessionValidator, backgroundTasks));
         bind(CategoriesViewModel.class,
-                () -> new CategoriesViewModel(categoryRepository, sessionValidator, backgroundTasks));
+                () -> new CategoriesViewModel(repositories.categories(), sessionValidator,
+                        backgroundTasks));
         bind(SuppliersViewModel.class,
-                () -> new SuppliersViewModel(supplierRepository, sessionValidator, backgroundTasks));
+                () -> new SuppliersViewModel(repositories.suppliers(), sessionValidator,
+                        backgroundTasks));
         bind(CustomersViewModel.class,
-                () -> new CustomersViewModel(customerRepository, sessionValidator, backgroundTasks));
+                () -> new CustomersViewModel(repositories.customers(), sessionValidator,
+                        backgroundTasks));
         bind(SalesOrdersViewModel.class,
-                () -> new SalesOrdersViewModel(salesOrderRepository, customerRepository,
-                        productRepository, stockRepository, session.requireCurrentUser(),
+                () -> new SalesOrdersViewModel(repositories.salesOrders(), repositories.customers(),
+                        repositories.products(), repositories.stock(), session.requireCurrentUser(),
                         sessionValidator, backgroundTasks));
         bind(PurchasesViewModel.class,
-                () -> new PurchasesViewModel(purchaseRepository, supplierRepository,
-                        productRepository, session.requireCurrentUser(), sessionValidator,
+                () -> new PurchasesViewModel(repositories.purchases(), repositories.suppliers(),
+                        repositories.products(), session.requireCurrentUser(), sessionValidator,
                         backgroundTasks));
         bind(StockViewModel.class,
-                () -> new StockViewModel(stockRepository, sessionValidator, backgroundTasks));
+                () -> new StockViewModel(repositories.stock(), sessionValidator, backgroundTasks));
         bind(ReportsViewModel.class,
-                () -> new ReportsViewModel(salesOrderRepository, stockRepository, sessionValidator,
-                        backgroundTasks));
+                () -> new ReportsViewModel(repositories.salesOrders(), repositories.stock(),
+                        sessionValidator, backgroundTasks));
         bind(SetupViewModel.class,
-                () -> new SetupViewModel(setupService, appShell.isOnboarding(), backgroundTasks));
+                () -> new SetupViewModel(services.setupService(), appShell.isOnboarding(),
+                        backgroundTasks));
     }
 
     /** Callback registered in mvvmFX via {@link de.saxsys.mvvmfx.MvvmFX#setCustomDependencyInjector}. */
