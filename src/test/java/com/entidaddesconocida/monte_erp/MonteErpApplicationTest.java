@@ -12,6 +12,12 @@ import org.junit.jupiter.api.io.TempDir;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.logging.Handler;
+import java.util.logging.Level;
+import java.util.logging.LogRecord;
+import java.util.logging.Logger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -67,8 +73,51 @@ class MonteErpApplicationTest {
     void unreachableDatabaseEndsOnTheConnectionScreen() {
         DatabaseConfig config = config(UNREACHABLE_URL);
 
-        assertEquals(MonteErpApplication.FirstScreen.SETUP,
-                MonteErpApplication.firstScreen(config, new FakeSetupService().withAdmin(true), connections));
+        // The failure is deliberately logged with its stack trace. Capture it so
+        // the expected trace does not flood the test output, and assert it too.
+        List<LogRecord> logs = captureApplicationLogs(() ->
+                assertEquals(MonteErpApplication.FirstScreen.SETUP,
+                        MonteErpApplication.firstScreen(config,
+                                new FakeSetupService().withAdmin(true), connections)));
+
+        assertTrue(logs.stream().anyMatch(record -> record.getLevel().equals(Level.SEVERE)
+                        && "Could not prepare the database".equals(record.getMessage())),
+                () -> "Expected the startup failure to be logged, got " + logs);
+    }
+
+    /**
+     * Runs {@code action} with the application logger detached from the console
+     * and returns the records it emitted.
+     */
+    private static List<LogRecord> captureApplicationLogs(Runnable action) {
+        Logger logger = Logger.getLogger(MonteErpApplication.class.getName());
+        List<LogRecord> records = new ArrayList<>();
+        Handler capture = new Handler() {
+            @Override
+            public void publish(LogRecord record) {
+                records.add(record);
+            }
+
+            @Override
+            public void flush() {
+                // Nothing to flush.
+            }
+
+            @Override
+            public void close() {
+                // Nothing to close.
+            }
+        };
+        boolean useParentHandlers = logger.getUseParentHandlers();
+        logger.addHandler(capture);
+        logger.setUseParentHandlers(false);
+        try {
+            action.run();
+        } finally {
+            logger.removeHandler(capture);
+            logger.setUseParentHandlers(useParentHandlers);
+        }
+        return records;
     }
 
     /**
