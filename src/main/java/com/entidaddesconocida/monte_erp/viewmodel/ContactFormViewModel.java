@@ -2,6 +2,7 @@ package com.entidaddesconocida.monte_erp.viewmodel;
 
 import com.entidaddesconocida.monte_erp.app.BackgroundTasks;
 import com.entidaddesconocida.monte_erp.app.SessionValidator;
+import com.entidaddesconocida.monte_erp.domain.Text;
 import com.entidaddesconocida.monte_erp.domain.model.Contact;
 import com.entidaddesconocida.monte_erp.domain.repository.ContactRepository;
 
@@ -158,9 +159,9 @@ public abstract class ContactFormViewModel<T extends Contact> extends Filterable
     @Override
     protected final Callable<Void> write() {
         String nameValue = trimmed(name.get());
-        String phoneValue = blankToNull(trimmed(phone.get()));
-        String emailValue = blankToNull(trimmed(email.get()));
-        String addressValue = blankToNull(trimmed(address.get()));
+        String phoneValue = Text.blankToNull(phone.get());
+        String emailValue = Text.blankToNull(email.get());
+        String addressValue = Text.blankToNull(address.get());
         T selected = selectedItem.get();
         if (selected == null) {
             T created = createContact(nameValue, phoneValue, emailValue, addressValue);
@@ -303,9 +304,5 @@ public abstract class ContactFormViewModel<T extends Contact> extends Filterable
 
     private static String valueOrEmpty(String value) {
         return value == null ? "" : value;
-    }
-
-    private static String blankToNull(String value) {
-        return value.isEmpty() ? null : value;
     }
 }

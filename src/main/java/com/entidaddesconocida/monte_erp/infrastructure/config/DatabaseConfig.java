@@ -1,5 +1,6 @@
 package com.entidaddesconocida.monte_erp.infrastructure.config;
 
+import com.entidaddesconocida.monte_erp.domain.Text;
 import com.entidaddesconocida.monte_erp.domain.model.ConnectionSettings;
 
 import java.io.IOException;
@@ -174,9 +175,9 @@ public final class DatabaseConfig {
         }
         return new LoadedConfiguration(
                 new ConnectionSettings(
-                        blankToNull(readUrl()),
-                        blankToNull(user.value()),
-                        blankToNull(password.value())),
+                        Text.blankToNull(readUrl()),
+                        Text.blankToNull(user.value()),
+                        Text.blankToNull(password.value())),
                 user.isUnavailable() || password.isUnavailable());
     }
 
@@ -275,9 +276,5 @@ public final class DatabaseConfig {
         } catch (CredentialStoreException rollbackFailure) {
             failure.addSuppressed(rollbackFailure);
         }
-    }
-
-    private static String blankToNull(String value) {
-        return value == null || value.isBlank() ? null : value.trim();
     }
 }

@@ -2,6 +2,7 @@ package com.entidaddesconocida.monte_erp.viewmodel;
 
 import com.entidaddesconocida.monte_erp.app.BackgroundTasks;
 import com.entidaddesconocida.monte_erp.app.SessionValidator;
+import com.entidaddesconocida.monte_erp.domain.Text;
 import com.entidaddesconocida.monte_erp.domain.model.Category;
 import com.entidaddesconocida.monte_erp.domain.model.Product;
 import com.entidaddesconocida.monte_erp.domain.model.ProductFilter;
@@ -303,7 +304,7 @@ public class ProductsViewModel extends FilterableCrudViewModel<Product> {
     protected Callable<Void> write() {
         String nameValue = trimmed(name.get());
         String skuValue = trimmed(sku.get());
-        String descriptionValue = blankToNull(trimmed(description.get()));
+        String descriptionValue = Text.blankToNull(description.get());
         BigDecimal priceValue = parsePrice(price.get());
         int minStockValue = parseMinStock(minStock.get());
         Product selected = selectedItem.get();
@@ -519,9 +520,5 @@ public class ProductsViewModel extends FilterableCrudViewModel<Product> {
     private static int parseMinStock(String value) {
         String trimmedValue = trimmed(value);
         return trimmedValue.isEmpty() ? 0 : Integer.parseInt(trimmedValue);
-    }
-
-    private static String blankToNull(String value) {
-        return value.isEmpty() ? null : value;
     }
 }
