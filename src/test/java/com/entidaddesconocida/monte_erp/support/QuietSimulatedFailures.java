@@ -16,9 +16,14 @@ import java.util.logging.Logger;
  * ({@code throwOnAccess()}, {@code failOn("update")}...) and assert the message
  * the screen shows. The production code logs those failures with their stack
  * trace, which is correct, but in the tests the trace is expected noise: the
- * assertion already proves the failure was handled. This extension drops only
- * the records whose exception is one of those simulated failures; a real
- * exception still reaches the console and {@code LogRecorder}.</p>
+ * assertion already proves the failure was handled. The duplicate-key tests do
+ * the same: they force a unique-key clash to check that the screen turns it into
+ * a field error, and the production code correctly logs it as a {@code WARNING}
+ * with its stack trace.</p>
+ *
+ * <p>This extension drops only the records whose exception is one of those
+ * expected failures; any other exception still reaches the console and
+ * {@code LogRecorder} (which reads its own handler, so it is unaffected).</p>
  *
  * <p>It is auto-detected through {@code junit-platform.properties} and the
  * {@code META-INF/services} file, so every test gets it without repeating an
@@ -27,6 +32,9 @@ import java.util.logging.Logger;
 public final class QuietSimulatedFailures implements BeforeAllCallback {
 
     private static final String MARKER = "Simulated database failure";
+
+    /** Message the fakes (and the real schema) raise on a unique-key clash. */
+    private static final String DUPLICATE_KEY_MARKER = "Duplicate entry";
 
     private static boolean installed;
 
@@ -49,12 +57,15 @@ public final class QuietSimulatedFailures implements BeforeAllCallback {
 
     private static boolean isSimulated(LogRecord record) {
         for (Throwable thrown = record.getThrown(); thrown != null; thrown = thrown.getCause()) {
-            if (thrown instanceof SQLException
-                    && thrown.getMessage() != null
-                    && thrown.getMessage().startsWith(MARKER)) {
+            if (thrown instanceof SQLException && isSimulatedMessage(thrown.getMessage())) {
                 return true;
             }
         }
         return false;
+    }
+
+    private static boolean isSimulatedMessage(String message) {
+        return message != null
+                && (message.startsWith(MARKER) || message.startsWith(DUPLICATE_KEY_MARKER));
     }
 }
