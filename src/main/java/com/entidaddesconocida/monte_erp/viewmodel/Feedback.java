@@ -62,4 +62,9 @@ public final class Feedback {
     public void clearError() {
         errorMessage.set("");
     }
+
+    /** Replaces the error summary leaving the status message alone. */
+    public void error(String message) {
+        errorMessage.set(message);
+    }
 }

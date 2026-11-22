@@ -105,7 +105,11 @@ public class UsersViewModel extends CrudViewModel<User> {
         this.userRepository = userRepository;
         this.currentUser = currentUser;
         watchItemsForCount();
-        watchFields(name, username, password);
+        form().field(nameError, this::validateName)
+                .field(usernameError, this::validateUsername)
+                .field(passwordError, this::validatePassword)
+                .summaryPolicy(FormModel.SummaryPolicy.FIRST)
+                .watch(name, username, password);
         updateCount();
     }
 
@@ -315,60 +319,23 @@ public class UsersViewModel extends CrudViewModel<User> {
 
     @Override
     protected void populateForm(User user) {
-        validateOnEdit = false;
         name.set(user.getName());
         username.set(user.getUsername());
         password.set("");
         roleLabel.set(user.getRoleLabel());
         setFormTitle(editFormTitle());
         passwordPrompt.set("Dejar en blanco para mantener la actual");
-        clearFieldErrors();
     }
 
     @Override
     protected void clearForm() {
-        validateOnEdit = false;
         name.set("");
         username.set("");
         password.set("");
         roleLabel.set(Role.EMPLOYEE.label());
         setFormTitle(newFormTitle());
         passwordPrompt.set("Contraseña");
-        clearFieldErrors();
         clearErrorMessage();
-    }
-
-    @Override
-    protected void refreshFieldErrors() {
-        nameError.set(validateName());
-        usernameError.set(validateUsername());
-        passwordError.set(validatePassword());
-    }
-
-    @Override
-    protected void clearFieldErrors() {
-        nameError.set("");
-        usernameError.set("");
-        passwordError.set("");
-    }
-
-    @Override
-    protected boolean hasFieldErrors() {
-        return !nameError.get().isBlank() || !usernameError.get().isBlank()
-                || !passwordError.get().isBlank();
-    }
-
-    /**
-     * The field messages are shown both decorated (ValidatorFX in the View) and
-     * as a summary. The first one wins so the message text stays exactly as it
-     * was before the refactor.
-     */
-    @Override
-    protected String fieldErrorsSummary() {
-        if (!nameError.get().isBlank()) {
-            return nameError.get();
-        }
-        return !usernameError.get().isBlank() ? usernameError.get() : passwordError.get();
     }
 
     @Override

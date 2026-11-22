@@ -83,7 +83,9 @@ public class CategoriesViewModel extends FilterableCrudViewModel<Category> {
         super(LABELS, sessionValidator, backgroundTasks);
         this.categoryRepository = categoryRepository;
         bindFilter(searchText);
-        watchFields(name, description);
+        form().field(nameError, this::validateName)
+                .field(descriptionError, this::validateDescription)
+                .watch(name, description);
         updateCount();
     }
 
@@ -205,44 +207,18 @@ public class CategoriesViewModel extends FilterableCrudViewModel<Category> {
 
     @Override
     protected void populateForm(Category category) {
-        validateOnEdit = false;
         name.set(category.getName());
         description.set(category.getDescription() == null ? "" : category.getDescription());
         setFormTitle(editFormTitle());
         clearErrorMessage();
-        clearFieldErrors();
     }
 
     @Override
     protected void clearForm() {
-        validateOnEdit = false;
         name.set("");
         description.set("");
         setFormTitle(newFormTitle());
-        clearFieldErrors();
         clearErrorMessage();
-    }
-
-    @Override
-    protected void refreshFieldErrors() {
-        nameError.set(validateName());
-        descriptionError.set(validateDescription());
-    }
-
-    @Override
-    protected void clearFieldErrors() {
-        nameError.set("");
-        descriptionError.set("");
-    }
-
-    @Override
-    protected boolean hasFieldErrors() {
-        return !nameError.get().isBlank() || !descriptionError.get().isBlank();
-    }
-
-    @Override
-    protected String fieldErrorsSummary() {
-        return joinedErrors(nameError.get(), descriptionError.get());
     }
 
     @Override

@@ -358,7 +358,7 @@ class CrudViewModelTest {
             super(LABELS, null, backgroundTasks);
             this.repository = repository;
             bindFilter(searchText);
-            watchFields(name);
+            form().field(nameError, this::validateName).watch(name);
             updateCount();
         }
 
@@ -440,40 +440,20 @@ class CrudViewModelTest {
 
         @Override
         protected void populateForm(FakeCrudItem item) {
-            validateOnEdit = false;
             name.set(item.getName());
             setFormTitle(editFormTitle());
-            clearFieldErrors();
             clearErrorMessage();
         }
 
         @Override
         protected void clearForm() {
-            validateOnEdit = false;
             name.set("");
             setFormTitle(newFormTitle());
-            clearFieldErrors();
             clearErrorMessage();
         }
 
-        @Override
-        protected void refreshFieldErrors() {
-            nameError.set(trimmed(name.get()).isEmpty() ? "Introduce el nombre del elemento." : "");
-        }
-
-        @Override
-        protected void clearFieldErrors() {
-            nameError.set("");
-        }
-
-        @Override
-        protected boolean hasFieldErrors() {
-            return !nameError.get().isBlank();
-        }
-
-        @Override
-        protected String fieldErrorsSummary() {
-            return nameError.get();
+        private String validateName() {
+            return trimmed(name.get()).isEmpty() ? "Introduce el nombre del elemento." : "";
         }
 
         @Override

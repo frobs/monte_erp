@@ -1,7 +1,7 @@
 package com.entidaddesconocida.monte_erp.view;
 
 import com.entidaddesconocida.monte_erp.app.AppShell;
-import com.entidaddesconocida.monte_erp.viewmodel.CrudViewModel;
+import com.entidaddesconocida.monte_erp.viewmodel.CrudScreen;
 
 import javafx.beans.value.ObservableValue;
 import javafx.scene.Node;
@@ -31,6 +31,11 @@ import net.synedra.validatorfx.Validator;
  * it through {@link #viewModel()}, and its own {@code initialize()} calls
  * {@link #initialize()} so the FXML controller stays the concrete class.</p>
  *
+ * <p>Since A3b {@link #viewModel()} returns the {@link CrudScreen} contract, not
+ * the {@code CrudViewModel} base class: a screen built by composition (a plain
+ * ViewModel with a {@code CrudActions}) can reuse this code-behind too. The five
+ * existing screens satisfy it through their ViewModel.</p>
+ *
  * <p>ValidatorFX lives in the View and only in the View: it needs the JavaFX
  * toolkit ({@code DefaultDecoration} loads an image in its static initializer),
  * so the rules stay in the ViewModel as plain error properties and this class
@@ -48,7 +53,7 @@ public abstract class CrudView<T> {
     }
 
     /** The concrete ViewModel, injected in the subclass with {@code @InjectViewModel}. */
-    protected abstract CrudViewModel<T> viewModel();
+    protected abstract CrudScreen<T> viewModel();
 
     /** Table bound to the master list (the filters travel to the query). */
     protected abstract TableView<T> table();

@@ -85,7 +85,11 @@ public class CustomersViewModel extends FilterableCrudViewModel<Customer> {
         super(LABELS, sessionValidator, backgroundTasks);
         this.customerRepository = customerRepository;
         bindFilter(searchText);
-        watchFields(name, phone, email, address);
+        form().field(nameError, this::validateName)
+                .field(phoneError, this::validatePhone)
+                .field(emailError, this::validateEmail)
+                .field(addressError, this::validateAddress)
+                .watch(name, phone, email, address);
         // The phone is the only field validated while typing (decision D1).
         watchLiveField(phone, this::validatePhone, phoneError);
         updateCount();
@@ -231,53 +235,22 @@ public class CustomersViewModel extends FilterableCrudViewModel<Customer> {
 
     @Override
     protected void populateForm(Customer customer) {
-        validateOnEdit = false;
         name.set(customer.getName());
         phone.set(customer.getPhone() == null ? "" : customer.getPhone());
         email.set(customer.getEmail() == null ? "" : customer.getEmail());
         address.set(customer.getAddress() == null ? "" : customer.getAddress());
         setFormTitle(editFormTitle());
         clearErrorMessage();
-        clearFieldErrors();
     }
 
     @Override
     protected void clearForm() {
-        validateOnEdit = false;
         name.set("");
         phone.set("");
         email.set("");
         address.set("");
         setFormTitle(newFormTitle());
-        clearFieldErrors();
         clearErrorMessage();
-    }
-
-    @Override
-    protected void refreshFieldErrors() {
-        nameError.set(validateName());
-        phoneError.set(validatePhone());
-        emailError.set(validateEmail());
-        addressError.set(validateAddress());
-    }
-
-    @Override
-    protected void clearFieldErrors() {
-        nameError.set("");
-        phoneError.set("");
-        emailError.set("");
-        addressError.set("");
-    }
-
-    @Override
-    protected boolean hasFieldErrors() {
-        return !nameError.get().isBlank() || !phoneError.get().isBlank()
-                || !emailError.get().isBlank() || !addressError.get().isBlank();
-    }
-
-    @Override
-    protected String fieldErrorsSummary() {
-        return joinedErrors(nameError.get(), phoneError.get(), emailError.get(), addressError.get());
     }
 
     @Override

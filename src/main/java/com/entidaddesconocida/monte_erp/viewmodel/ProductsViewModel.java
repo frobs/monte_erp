@@ -128,7 +128,13 @@ public class ProductsViewModel extends FilterableCrudViewModel<Product> {
         this.categoryRepository = categoryRepository;
         this.supplierRepository = supplierRepository;
         bindFilter(searchText, categoryFilter, supplierFilter);
-        watchFields(name, sku, description, price, minStock, category);
+        form().field(nameError, this::validateName)
+                .field(skuError, this::validateSku)
+                .field(descriptionError, this::validateDescription)
+                .field(priceError, this::validatePrice)
+                .field(minStockError, this::validateMinStock)
+                .field(categoryError, this::validateCategory)
+                .watch(name, sku, description, price, minStock, category);
         updateCount();
     }
 
@@ -364,7 +370,6 @@ public class ProductsViewModel extends FilterableCrudViewModel<Product> {
 
     @Override
     protected void populateForm(Product product) {
-        validateOnEdit = false;
         name.set(product.getName());
         sku.set(product.getSku());
         description.set(product.getDescription() == null ? "" : product.getDescription());
@@ -373,12 +378,10 @@ public class ProductsViewModel extends FilterableCrudViewModel<Product> {
         category.set(optionForCategory(product.getCategory()));
         setFormTitle(editFormTitle());
         clearErrorMessage();
-        clearFieldErrors();
     }
 
     @Override
     protected void clearForm() {
-        validateOnEdit = false;
         name.set("");
         sku.set("");
         description.set("");
@@ -386,41 +389,7 @@ public class ProductsViewModel extends FilterableCrudViewModel<Product> {
         minStock.set("");
         category.set(null);
         setFormTitle(newFormTitle());
-        clearFieldErrors();
         clearErrorMessage();
-    }
-
-    @Override
-    protected void refreshFieldErrors() {
-        nameError.set(validateName());
-        skuError.set(validateSku());
-        descriptionError.set(validateDescription());
-        priceError.set(validatePrice());
-        minStockError.set(validateMinStock());
-        categoryError.set(validateCategory());
-    }
-
-    @Override
-    protected void clearFieldErrors() {
-        nameError.set("");
-        skuError.set("");
-        descriptionError.set("");
-        priceError.set("");
-        minStockError.set("");
-        categoryError.set("");
-    }
-
-    @Override
-    protected boolean hasFieldErrors() {
-        return !nameError.get().isBlank() || !skuError.get().isBlank()
-                || !descriptionError.get().isBlank() || !priceError.get().isBlank()
-                || !minStockError.get().isBlank() || !categoryError.get().isBlank();
-    }
-
-    @Override
-    protected String fieldErrorsSummary() {
-        return joinedErrors(nameError.get(), skuError.get(), descriptionError.get(),
-                priceError.get(), minStockError.get(), categoryError.get());
     }
 
     @Override
