@@ -45,6 +45,7 @@ class SetupUiTest {
     @BeforeEach
     void createEmptySchema() {
         TestDatabase.createSchema(SCHEMA);
+        TestDatabase.configureConnection();
     }
 
     @AfterEach
@@ -83,6 +84,7 @@ class SetupUiTest {
 
         // The database is migrated and the administrator created: login shows up.
         ui.assertTitle("Monte ERP · Iniciar sesión");
+        TestDatabase.configureConnection(TestDatabase.jdbcUrl(SCHEMA));
         assertEquals("admin.qa", TestDatabase.stringValue(
                 "SELECT username FROM USER WHERE username = 'admin.qa'"));
         assertEquals(TestDatabase.username(), credentials.stored("db.user"));

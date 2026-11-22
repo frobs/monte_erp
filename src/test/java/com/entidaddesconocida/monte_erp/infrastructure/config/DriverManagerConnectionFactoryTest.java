@@ -18,66 +18,62 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Unit tests for {@link DatabaseConnection}, the JDBC entry point.
+ * Unit tests for {@link DriverManagerConnectionFactory}, the JDBC entry point.
  *
  * <p>The double {@link FakeJdbc} is registered in the global
  * {@link java.sql.DriverManager} and serves the {@code jdbc:fake:} URLs, so no
- * MySQL instance is needed. Because the class holds static state, every test
- * resets it.</p>
+ * MySQL instance is needed. The settings belong to each factory instance (A7),
+ * so the tests create their own and never touch shared state.</p>
  *
  * <p>The contract under test is "one connection per operation": no connection is
- * shared, so {@link DatabaseConnection#open()} never hands out a stale one and
+ * shared, so {@link ConnectionFactory#open()} never hands out a stale one and
  * the transactional helper always starts from a clean, committed connection.</p>
  */
-class DatabaseConnectionTest {
+class DriverManagerConnectionFactoryTest {
 
     private FakeJdbc fake;
+    private DriverManagerConnectionFactory connections;
 
     @BeforeEach
     void setUp() {
-        DatabaseConnection.configure(null, null, null);
         fake = new FakeJdbc().install();
+        connections = new DriverManagerConnectionFactory();
     }
 
     @AfterEach
     void tearDown() {
-        DatabaseConnection.configure(null, null, null);
         fake.uninstall();
+    }
+
+    private static DriverManagerConnectionFactory configured(String url) {
+        return new DriverManagerConnectionFactory(url, "erp_user", "erp_pass");
     }
 
     @Test
     @DisplayName("Sin configuración, open falla con un SQLException explícito")
     void openWithoutConfigurationFails() {
-        SQLException ex = assertThrows(SQLException.class, DatabaseConnection::open);
+        SQLException ex = assertThrows(SQLException.class, connections::open);
         assertTrue(ex.getMessage().contains("no está disponible"));
     }
 
     @Test
     @DisplayName("URL o usuario en blanco, o contraseña vacía, se rechazan")
     void incompleteConfigurationIsRejected() {
-        DatabaseConnection.configure("", "erp_user", "erp_pass");
-        assertThrows(SQLException.class, DatabaseConnection::open);
-
-        DatabaseConnection.configure("   ", "erp_user", "erp_pass");
-        assertThrows(SQLException.class, DatabaseConnection::open);
-
-        DatabaseConnection.configure(FakeJdbc.URL, "", "erp_pass");
-        assertThrows(SQLException.class, DatabaseConnection::open);
-
-        DatabaseConnection.configure(FakeJdbc.URL, "erp_user", "");
-        assertThrows(SQLException.class, DatabaseConnection::open);
-
-        DatabaseConnection.configure(FakeJdbc.URL, "erp_user", null);
-        assertThrows(SQLException.class, DatabaseConnection::open);
+        assertThrows(SQLException.class, () -> configured("").open());
+        assertThrows(SQLException.class, () -> configured("   ").open());
+        assertThrows(SQLException.class,
+                () -> new DriverManagerConnectionFactory(FakeJdbc.URL, "", "erp_pass").open());
+        assertThrows(SQLException.class,
+                () -> new DriverManagerConnectionFactory(FakeJdbc.URL, "erp_user", "").open());
+        assertThrows(SQLException.class,
+                () -> new DriverManagerConnectionFactory(FakeJdbc.URL, "erp_user", null).open());
     }
 
     @Test
     @DisplayName("Cada open entrega una conexión nueva, nunca una compartida")
     void openReturnsAFreshConnection() throws SQLException {
-        DatabaseConnection.configure(FakeJdbc.URL, "erp_user", "erp_pass");
-
-        try (Connection first = DatabaseConnection.open();
-             Connection second = DatabaseConnection.open()) {
+        try (Connection first = configured(FakeJdbc.URL).open();
+             Connection second = configured(FakeJdbc.URL).open()) {
             assertNotSame(first, second);
         }
     }
@@ -85,10 +81,8 @@ class DatabaseConnectionTest {
     @Test
     @DisplayName("withConnection cierra la conexión al terminar")
     void withConnectionClosesTheConnection() throws SQLException {
-        DatabaseConnection.configure(FakeJdbc.URL, "erp_user", "erp_pass");
-
         Connection[] used = new Connection[1];
-        String result = DatabaseConnection.withConnection(connection -> {
+        String result = configured(FakeJdbc.URL).withConnection(connection -> {
             used[0] = connection;
             return "ok";
         });
@@ -100,10 +94,8 @@ class DatabaseConnectionTest {
     @Test
     @DisplayName("withConnection propaga el error y cierra la conexión")
     void withConnectionClosesOnFailure() {
-        DatabaseConnection.configure(FakeJdbc.URL, "erp_user", "erp_pass");
-
         SQLException ex = assertThrows(SQLException.class, () ->
-                DatabaseConnection.withConnection(connection -> {
+                configured(FakeJdbc.URL).withConnection(connection -> {
                     throw new SQLException("boom");
                 }));
 
@@ -113,10 +105,8 @@ class DatabaseConnectionTest {
     @Test
     @DisplayName("withTransaction confirma y cierra la conexión")
     void withTransactionCommits() throws SQLException {
-        DatabaseConnection.configure(FakeJdbc.URL, "erp_user", "erp_pass");
-
         Connection[] used = new Connection[1];
-        DatabaseConnection.withTransaction(connection -> {
+        configured(FakeJdbc.URL).withTransaction(connection -> {
             used[0] = connection;
             return null;
         });
@@ -130,10 +120,8 @@ class DatabaseConnectionTest {
     @Test
     @DisplayName("withTransaction deshace y propaga el error de dominio")
     void withTransactionRollsBackOnDomainFailure() {
-        DatabaseConnection.configure(FakeJdbc.URL, "erp_user", "erp_pass");
-
         IllegalStateException ex = assertThrows(IllegalStateException.class, () ->
-                DatabaseConnection.withTransaction(connection -> {
+                configured(FakeJdbc.URL).withTransaction(connection -> {
                     throw new IllegalStateException("dominio");
                 }));
 
@@ -144,16 +132,15 @@ class DatabaseConnectionTest {
     }
 
     @Test
-    @DisplayName("getUrl devuelve la URL configurada")
-    void getUrlReturnsConfiguredUrl() {
-        DatabaseConnection.configure(FakeJdbc.URL, "erp_user", "erp_pass");
-        assertEquals(FakeJdbc.URL, DatabaseConnection.getUrl());
+    @DisplayName("url devuelve la URL configurada en esa instancia")
+    void urlReturnsConfiguredUrl() {
+        assertEquals(FakeJdbc.URL, configured(FakeJdbc.URL).url());
     }
 
     @Test
     @DisplayName("testConnection abre y cierra una conexión propia")
     void testConnectionOpensAndClosesItsOwnConnection() throws SQLException {
-        DatabaseConnection.testConnection(FakeJdbc.URL, "erp_user", "erp_pass");
+        DriverManagerConnectionFactory.testConnection(FakeJdbc.URL, "erp_user", "erp_pass");
 
         assertTrue(fake.lastConnection().isClosed());
     }
@@ -162,18 +149,18 @@ class DatabaseConnectionTest {
     @DisplayName("testConnection con una URL inválida propaga el SQLException")
     void testConnectionWithInvalidUrlFails() {
         assertThrows(SQLException.class,
-                () -> DatabaseConnection.testConnection("", "erp_user", "erp_pass"));
+                () -> DriverManagerConnectionFactory.testConnection("", "erp_user", "erp_pass"));
     }
 
     @Test
     @DisplayName("Bloquear en el trabajo no filtra la conexión a otros hilos")
     void connectionIsNotSharedAcrossThreads() throws Exception {
-        DatabaseConnection.configure(FakeJdbc.URL, "erp_user", "erp_pass");
+        DriverManagerConnectionFactory factory = configured(FakeJdbc.URL);
 
         AtomicBoolean distinct = new AtomicBoolean(false);
-        try (Connection main = DatabaseConnection.open()) {
+        try (Connection main = factory.open()) {
             Thread worker = Thread.ofVirtual().start(() -> {
-                try (Connection other = DatabaseConnection.open()) {
+                try (Connection other = factory.open()) {
                     distinct.set(other != main);
                 } catch (SQLException e) {
                     throw new IllegalStateException(e);
@@ -182,5 +169,23 @@ class DatabaseConnectionTest {
             worker.join();
         }
         assertTrue(distinct.get());
+    }
+
+    @Test
+    @DisplayName("A7: dos fábricas mantienen configuraciones independientes")
+    void twoFactoriesDoNotInterfere() throws SQLException {
+        DriverManagerConnectionFactory first = configured("jdbc:fake:primera");
+        DriverManagerConnectionFactory second =
+                new DriverManagerConnectionFactory("jdbc:fake:segunda", "otro", "secreto");
+
+        try (Connection ignoredFirst = first.open();
+             Connection ignoredSecond = second.open()) {
+            // Both opened with their own settings.
+        }
+        assertEquals(List.of("jdbc:fake:primera", "jdbc:fake:segunda"), fake.connectUrls());
+
+        first.configure("jdbc:fake:tercera", "tercero", "otra");
+        assertEquals("jdbc:fake:tercera", first.url());
+        assertEquals("jdbc:fake:segunda", second.url());
     }
 }

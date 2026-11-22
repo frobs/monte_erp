@@ -3,7 +3,6 @@ package com.entidaddesconocida.monte_erp.infrastructure;
 import com.entidaddesconocida.monte_erp.domain.model.Role;
 import com.entidaddesconocida.monte_erp.domain.model.User;
 import com.entidaddesconocida.monte_erp.domain.repository.UserRepository;
-import com.entidaddesconocida.monte_erp.infrastructure.config.DatabaseConnection;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -12,6 +11,7 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * JDBC implementation of {@link UserRepository} for the {@code USER} table.
@@ -21,6 +21,12 @@ import java.util.List;
  * the E-R diagram.</p>
  */
 public class MySqlUserRepository implements UserRepository {
+
+    private final ConnectionFactory connections;
+
+    public MySqlUserRepository(ConnectionFactory connections) {
+        this.connections = Objects.requireNonNull(connections, "connections");
+    }
 
     private static final String COLUMNS = "id, name, username, password_hash, role, active";
     private static final String SELECT_ALL = "SELECT " + COLUMNS + " FROM USER";
@@ -33,7 +39,7 @@ public class MySqlUserRepository implements UserRepository {
     @Override
     public User findByUsername(String username) throws SQLException {
         String sql = SELECT_ALL + " WHERE username = ?";
-        try (Connection connection = DatabaseConnection.open();
+        try (Connection connection = connections.open();
              PreparedStatement ps = connection.prepareStatement(sql)) {
             ps.setString(1, username);
             try (ResultSet rs = ps.executeQuery()) {
@@ -45,7 +51,7 @@ public class MySqlUserRepository implements UserRepository {
     @Override
     public List<User> findAll() throws SQLException {
         List<User> users = new ArrayList<>();
-        try (Connection connection = DatabaseConnection.open();
+        try (Connection connection = connections.open();
              Statement statement = connection.createStatement();
              ResultSet rs = statement.executeQuery(SELECT_ALL + " ORDER BY username")) {
             while (rs.next()) {
@@ -57,7 +63,7 @@ public class MySqlUserRepository implements UserRepository {
 
     @Override
     public int insert(User user) throws SQLException {
-        try (Connection connection = DatabaseConnection.open();
+        try (Connection connection = connections.open();
              PreparedStatement ps = connection
                      .prepareStatement(INSERT_USER, Statement.RETURN_GENERATED_KEYS)) {
             ps.setString(1, user.getName());
@@ -76,7 +82,7 @@ public class MySqlUserRepository implements UserRepository {
 
     @Override
     public void update(User user) throws SQLException {
-        try (Connection connection = DatabaseConnection.open();
+        try (Connection connection = connections.open();
              PreparedStatement ps = connection.prepareStatement(UPDATE_USER)) {
             ps.setString(1, user.getName());
             ps.setString(2, user.getUsername());
@@ -90,7 +96,7 @@ public class MySqlUserRepository implements UserRepository {
 
     @Override
     public void deactivate(int id) throws SQLException {
-        try (Connection connection = DatabaseConnection.open();
+        try (Connection connection = connections.open();
              PreparedStatement ps = connection.prepareStatement(DEACTIVATE_USER)) {
             ps.setInt(1, id);
             ps.executeUpdate();

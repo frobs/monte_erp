@@ -18,8 +18,8 @@ import com.entidaddesconocida.monte_erp.infrastructure.MySqlStockRepository;
 import com.entidaddesconocida.monte_erp.infrastructure.MySqlSupplierRepository;
 import com.entidaddesconocida.monte_erp.infrastructure.MySqlUserRepository;
 import com.entidaddesconocida.monte_erp.infrastructure.config.DatabaseConfig;
-import com.entidaddesconocida.monte_erp.infrastructure.config.DatabaseConnection;
 import com.entidaddesconocida.monte_erp.infrastructure.config.DatabaseSetupService;
+import com.entidaddesconocida.monte_erp.infrastructure.config.DriverManagerConnectionFactory;
 import com.entidaddesconocida.monte_erp.infrastructure.config.DatabaseUrl;
 import com.entidaddesconocida.monte_erp.infrastructure.config.FakeCredentialStore;
 import com.entidaddesconocida.monte_erp.view.ReportsView;
@@ -46,17 +46,20 @@ public final class UiTestSupport {
     private final AppContext context;
     private final FakeFileSaveDialog fileSaveDialog = new FakeFileSaveDialog();
 
-    private UiTestSupport(Stage stage, DatabaseConfig config, SetupService setupService) {
+    private UiTestSupport(Stage stage, DatabaseConfig config,
+                          DriverManagerConnectionFactory connections) {
         this.stage = stage;
-        UserRepository userRepository = new MySqlUserRepository();
+        UserRepository userRepository = new MySqlUserRepository(connections);
         this.appShell = new AppShell(session, userRepository);
         this.appShell.setStage(stage);
-        Repositories repositories = new Repositories(userRepository, new MySqlCategoryRepository(),
-                new MySqlSupplierRepository(), new MySqlProductRepository(),
-                new MySqlCustomerRepository(), new MySqlSalesOrderRepository(),
-                new MySqlPurchaseRepository(), new MySqlStockRepository());
+        Repositories repositories = new Repositories(userRepository,
+                new MySqlCategoryRepository(connections), new MySqlSupplierRepository(connections),
+                new MySqlProductRepository(connections), new MySqlCustomerRepository(connections),
+                new MySqlSalesOrderRepository(connections), new MySqlPurchaseRepository(connections),
+                new MySqlStockRepository(connections));
+        SetupService setupService = new DatabaseSetupService(config, userRepository, connections);
         AppServices services = new AppServices(config, setupService,
-                () -> new DatabaseUrl(DatabaseConnection.getUrl()),
+                () -> new DatabaseUrl(connections.url()),
                 // Synchronous on purpose: TestFX drives the real window and asserts
                 // right after each click, so a background result would race the
                 // assertion. The virtual-thread runner is covered by unit tests.
@@ -69,12 +72,14 @@ public final class UiTestSupport {
     public static UiTestSupport forSeedDatabase(Stage stage) {
         TestDatabase.provision();
         TestDatabase.configureConnection();
+        DriverManagerConnectionFactory connections = new DriverManagerConnectionFactory(
+                TestDatabase.jdbcUrl(), TestDatabase.username(), TestDatabase.password());
         Path properties = TempFiles.propertiesFile("application.properties", TestDatabase.jdbcUrl());
         FakeCredentialStore credentials = new FakeCredentialStore()
                 .with("db.user", TestDatabase.username())
                 .with("db.password", TestDatabase.password());
         DatabaseConfig config = new DatabaseConfig(credentials, properties);
-        return new UiTestSupport(stage, config, new DatabaseSetupService(config, new MySqlUserRepository()));
+        return new UiTestSupport(stage, config, connections);
     }
 
     /**
@@ -84,7 +89,8 @@ public final class UiTestSupport {
     public static UiTestSupport forOnboarding(Stage stage, Path propertiesFile,
                                               FakeCredentialStore credentials) {
         DatabaseConfig config = new DatabaseConfig(credentials, propertiesFile);
-        return new UiTestSupport(stage, config, new DatabaseSetupService(config, new MySqlUserRepository()));
+        // Unconfigured on purpose: saving the setup screen points it at the chosen database.
+        return new UiTestSupport(stage, config, new DriverManagerConnectionFactory());
     }
 
     /** Shows the login screen and makes the window usable by the robot. */

@@ -2,7 +2,7 @@ package com.entidaddesconocida.monte_erp.infrastructure;
 
 import com.entidaddesconocida.monte_erp.domain.model.Role;
 import com.entidaddesconocida.monte_erp.domain.model.User;
-import com.entidaddesconocida.monte_erp.infrastructure.config.DatabaseConnection;
+import com.entidaddesconocida.monte_erp.infrastructure.config.DriverManagerConnectionFactory;
 import com.entidaddesconocida.monte_erp.infrastructure.support.FakeJdbc;
 
 import org.junit.jupiter.api.AfterEach;
@@ -37,13 +37,12 @@ class MySqlUserRepositoryTest {
     @BeforeEach
     void setUp() {
         fake = new FakeJdbc().install();
-        DatabaseConnection.configure(FakeJdbc.URL, "erp_user", "erp_pass");
-        repository = new MySqlUserRepository();
+        repository = new MySqlUserRepository(
+                new DriverManagerConnectionFactory(FakeJdbc.URL, "erp_user", "erp_pass"));
     }
 
     @AfterEach
     void tearDown() {
-        DatabaseConnection.configure(null, null, null);
         fake.uninstall();
     }
 

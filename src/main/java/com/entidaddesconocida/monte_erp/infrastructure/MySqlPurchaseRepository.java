@@ -10,7 +10,6 @@ import com.entidaddesconocida.monte_erp.domain.model.Supplier;
 import com.entidaddesconocida.monte_erp.domain.repository.PurchaseRepository;
 import com.entidaddesconocida.monte_erp.domain.service.InactiveEntityException;
 import com.entidaddesconocida.monte_erp.domain.service.PurchaseStockConsumedException;
-import com.entidaddesconocida.monte_erp.infrastructure.config.DatabaseConnection;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -21,17 +20,18 @@ import java.sql.Types;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * JDBC implementation of {@link PurchaseRepository} for the {@code PURCHASE} and
  * {@code STOCK} tables (RF-14 / CU-10).
  *
  * <p>No business logic: it only translates between the entities and the table
- * rows. {@link #insert(Purchase)} is <strong>transactional</strong> over the
- * shared {@link DatabaseConnection} connection: the header and every lot are
- * committed together, and any failure rolls the whole purchase back (decision D5).
- * The previous {@code autoCommit} value is restored in a {@code finally} so the
- * singleton connection is left as it was found.</p>
+ * rows. {@link #insert(Purchase)} is <strong>transactional</strong> inside a
+ * connection opened through the injected {@link ConnectionFactory}: the header and
+ * every lot are committed together, and any failure rolls the whole purchase back
+ * (decision D5). The connection is closed afterwards, so no state leaks to the next
+ * operation.</p>
  *
  * <p>A purchase is created {@code pending}, so each lot is inserted with
  * {@code available_quantity = 0}: the stock only counts when the purchase is
@@ -60,6 +60,12 @@ import java.util.List;
  * projection remains available for callers that need the relation explicitly.</p>
  */
 public class MySqlPurchaseRepository implements PurchaseRepository {
+
+    private final ConnectionFactory connections;
+
+    public MySqlPurchaseRepository(ConnectionFactory connections) {
+        this.connections = Objects.requireNonNull(connections, "connections");
+    }
 
     private static final String INSERT_PURCHASE =
             "INSERT INTO PURCHASE (status, total, supplier_id, user_id) VALUES (?, ?, ?, ?)";
@@ -115,7 +121,7 @@ public class MySqlPurchaseRepository implements PurchaseRepository {
 
     @Override
     public int insert(Purchase purchase) throws SQLException {
-        int id = DatabaseConnection.withTransaction(connection -> {
+        int id = connections.withTransaction(connection -> {
             requireActive(connection, SELECT_ACTIVE_SUPPLIER_FOR_UPDATE,
                     purchase.getSupplier().getId(), "proveedor");
             int purchaseId = insertPurchase(connection, purchase);
@@ -133,7 +139,7 @@ public class MySqlPurchaseRepository implements PurchaseRepository {
     @Override
     public List<Purchase> findAll(PurchaseFilter filter) throws SQLException {
         List<Purchase> purchases = new ArrayList<>();
-        try (Connection connection = DatabaseConnection.open();
+        try (Connection connection = connections.open();
              PreparedStatement ps = connection
                      .prepareStatement(SELECT_PURCHASES)) {
             // Both placeholders of each guard receive the same value, so a null
@@ -158,7 +164,7 @@ public class MySqlPurchaseRepository implements PurchaseRepository {
     @Override
     public List<Stock> findLots(int purchaseId) throws SQLException {
         List<Stock> lots = new ArrayList<>();
-        try (Connection connection = DatabaseConnection.open();
+        try (Connection connection = connections.open();
              PreparedStatement ps = connection.prepareStatement(SELECT_LOTS)) {
             ps.setInt(1, purchaseId);
             try (ResultSet rs = ps.executeQuery()) {
@@ -173,7 +179,7 @@ public class MySqlPurchaseRepository implements PurchaseRepository {
     @Override
     public List<ProductSupplier> findProductSuppliers() throws SQLException {
         List<ProductSupplier> pairs = new ArrayList<>();
-        try (Connection connection = DatabaseConnection.open();
+        try (Connection connection = connections.open();
              Statement statement = connection.createStatement();
              ResultSet rs = statement.executeQuery(SELECT_PRODUCT_SUPPLIERS)) {
             while (rs.next()) {
@@ -186,7 +192,7 @@ public class MySqlPurchaseRepository implements PurchaseRepository {
     @Override
     public int changeStatus(int id, PurchaseStatus currentStatus, PurchaseStatus newStatus)
             throws SQLException, PurchaseStockConsumedException {
-        return DatabaseConnection.withTransaction(connection -> {
+        return connections.withTransaction(connection -> {
             int updated = updateStatus(connection, id, currentStatus, newStatus);
             if (updated == 0) {
                 // Someone else moved the purchase: nothing to apply.

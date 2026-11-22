@@ -4,7 +4,6 @@ import com.entidaddesconocida.monte_erp.domain.model.Category;
 import com.entidaddesconocida.monte_erp.domain.model.Product;
 import com.entidaddesconocida.monte_erp.domain.model.ProductFilter;
 import com.entidaddesconocida.monte_erp.domain.repository.ProductRepository;
-import com.entidaddesconocida.monte_erp.infrastructure.config.DatabaseConnection;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -14,6 +13,7 @@ import java.sql.Statement;
 import java.sql.Types;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * JDBC implementation of {@link ProductRepository} for the {@code PRODUCT}
@@ -30,6 +30,12 @@ import java.util.List;
  * {@code ON DELETE RESTRICT} and the recorded purchase/sales history.</p>
  */
 public class MySqlProductRepository implements ProductRepository {
+
+    private final ConnectionFactory connections;
+
+    public MySqlProductRepository(ConnectionFactory connections) {
+        this.connections = Objects.requireNonNull(connections, "connections");
+    }
 
     private static final String COLUMNS = """
             p.id, p.name, p.sku, p.description, p.price, p.min_stock, p.active,
@@ -95,7 +101,7 @@ public class MySqlProductRepository implements ProductRepository {
     @Override
     public Product findBySku(String sku) throws SQLException {
         String sql = SELECT_ALL + " WHERE p.sku = ?";
-        try (Connection connection = DatabaseConnection.open();
+        try (Connection connection = connections.open();
              PreparedStatement ps = connection.prepareStatement(sql)) {
             ps.setString(1, sku);
             try (ResultSet rs = ps.executeQuery()) {
@@ -106,7 +112,7 @@ public class MySqlProductRepository implements ProductRepository {
 
     @Override
     public int insert(Product product) throws SQLException {
-        try (Connection connection = DatabaseConnection.open();
+        try (Connection connection = connections.open();
              PreparedStatement ps = connection
                      .prepareStatement(INSERT_PRODUCT, Statement.RETURN_GENERATED_KEYS)) {
             bindCommon(ps, product);
@@ -122,7 +128,7 @@ public class MySqlProductRepository implements ProductRepository {
 
     @Override
     public void update(Product product) throws SQLException {
-        try (Connection connection = DatabaseConnection.open();
+        try (Connection connection = connections.open();
              PreparedStatement ps = connection.prepareStatement(UPDATE_PRODUCT)) {
             bindCommon(ps, product);
             ps.setBoolean(7, product.isActive());
@@ -142,7 +148,7 @@ public class MySqlProductRepository implements ProductRepository {
     }
 
     private void setActive(String sql, int id) throws SQLException {
-        try (Connection connection = DatabaseConnection.open();
+        try (Connection connection = connections.open();
              PreparedStatement ps = connection.prepareStatement(sql)) {
             ps.setInt(1, id);
             ps.executeUpdate();
@@ -170,7 +176,7 @@ public class MySqlProductRepository implements ProductRepository {
 
     private List<Product> query(String sql) throws SQLException {
         List<Product> products = new ArrayList<>();
-        try (Connection connection = DatabaseConnection.open();
+        try (Connection connection = connections.open();
              Statement statement = connection.createStatement();
              ResultSet rs = statement.executeQuery(sql)) {
             while (rs.next()) {
@@ -183,7 +189,7 @@ public class MySqlProductRepository implements ProductRepository {
     private List<Product> queryFiltered(ProductFilter filter, boolean active) throws SQLException {
         List<Product> products = new ArrayList<>();
         String pattern = SqlSearch.likePattern(filter.search());
-        try (Connection connection = DatabaseConnection.open();
+        try (Connection connection = connections.open();
              PreparedStatement ps = connection.prepareStatement(SELECT_FILTERED)) {
             ps.setBoolean(1, active);
             bindString(ps, 2, pattern);

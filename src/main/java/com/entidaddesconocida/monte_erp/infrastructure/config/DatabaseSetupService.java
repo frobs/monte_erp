@@ -17,7 +17,7 @@ import java.sql.SQLException;
  *
  * <p>It composes the pieces the domain layer must not know about: the
  * properties file and the keyring ({@link DatabaseConfig}), the JDBC
- * connection factory ({@link DatabaseConnection}), the migration engine
+ * connection factory ({@link DriverManagerConnectionFactory}), the migration engine
  * ({@link MigrationRunner}) and the {@link UserRepository} for the
  * administrator user.</p>
  */
@@ -25,10 +25,13 @@ public final class DatabaseSetupService implements SetupService {
 
     private final DatabaseConfig config;
     private final UserRepository userRepository;
+    private final DriverManagerConnectionFactory connections;
 
-    public DatabaseSetupService(DatabaseConfig config, UserRepository userRepository) {
+    public DatabaseSetupService(DatabaseConfig config, UserRepository userRepository,
+                                DriverManagerConnectionFactory connections) {
         this.config = config;
         this.userRepository = userRepository;
+        this.connections = connections;
     }
 
     @Override
@@ -40,7 +43,8 @@ public final class DatabaseSetupService implements SetupService {
     @Override
     public void testConnection(ConnectionSettings settings) throws SetupException {
         try {
-            DatabaseConnection.testConnection(settings.url(), settings.user(), settings.password());
+            DriverManagerConnectionFactory.testConnection(
+                    settings.url(), settings.user(), settings.password());
         } catch (SQLException e) {
             throw new SetupException(rootMessage(e), e);
         }
@@ -56,7 +60,7 @@ public final class DatabaseSetupService implements SetupService {
                           String adminPassword) throws SetupException {
         persist(settings);
         try {
-            MigrationRunner.migrate();
+            MigrationRunner.migrate(connections);
         } catch (SQLException | IOException e) {
             throw new SetupException(rootMessage(e), e);
         }
@@ -78,7 +82,7 @@ public final class DatabaseSetupService implements SetupService {
         } catch (IOException | CredentialStoreException | IllegalArgumentException e) {
             throw new SetupException(rootMessage(e), e);
         }
-        DatabaseConnection.configure(settings.url(), settings.user(), settings.password());
+        connections.configure(settings.url(), settings.user(), settings.password());
     }
 
     private void createAdminUser(String name, String username, String password) throws SetupException {

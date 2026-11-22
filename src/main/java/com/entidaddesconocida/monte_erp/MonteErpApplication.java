@@ -17,6 +17,7 @@ import com.entidaddesconocida.monte_erp.domain.repository.StockRepository;
 import com.entidaddesconocida.monte_erp.domain.repository.SupplierRepository;
 import com.entidaddesconocida.monte_erp.domain.repository.UserRepository;
 import com.entidaddesconocida.monte_erp.domain.service.SetupService;
+import com.entidaddesconocida.monte_erp.infrastructure.ConnectionFactory;
 import com.entidaddesconocida.monte_erp.infrastructure.MySqlCategoryRepository;
 import com.entidaddesconocida.monte_erp.infrastructure.MySqlCustomerRepository;
 import com.entidaddesconocida.monte_erp.infrastructure.MySqlProductRepository;
@@ -26,7 +27,7 @@ import com.entidaddesconocida.monte_erp.infrastructure.MySqlStockRepository;
 import com.entidaddesconocida.monte_erp.infrastructure.MySqlSupplierRepository;
 import com.entidaddesconocida.monte_erp.infrastructure.MySqlUserRepository;
 import com.entidaddesconocida.monte_erp.infrastructure.config.DatabaseConfig;
-import com.entidaddesconocida.monte_erp.infrastructure.config.DatabaseConnection;
+import com.entidaddesconocida.monte_erp.infrastructure.config.DriverManagerConnectionFactory;
 import com.entidaddesconocida.monte_erp.infrastructure.config.DatabaseUrl;
 import com.entidaddesconocida.monte_erp.infrastructure.config.DatabaseSetupService;
 import com.entidaddesconocida.monte_erp.infrastructure.config.KeyringCredentialStore;
@@ -51,7 +52,7 @@ import java.util.logging.Logger;
  * Monte ERP JavaFX application.
  *
  * <p>Every database operation opens and closes its own connection
- * ({@code DatabaseConnection}), so there is no resource to release on shutdown;
+ * (through the injected {@link ConnectionFactory}), so there is no resource to release on shutdown;
  * the blocking queries run on virtual threads ({@code BackgroundTasks}).</p>
  *
  * <p>On startup it decides which screen to show. If the configuration (URL in a
@@ -85,15 +86,16 @@ public class MonteErpApplication extends Application {
     @Override
     public void start(Stage stage) {
         DatabaseConfig databaseConfig = new DatabaseConfig(new KeyringCredentialStore());
-        UserRepository userRepository = new MySqlUserRepository();
-        CategoryRepository categoryRepository = new MySqlCategoryRepository();
-        SupplierRepository supplierRepository = new MySqlSupplierRepository();
-        ProductRepository productRepository = new MySqlProductRepository();
-        CustomerRepository customerRepository = new MySqlCustomerRepository();
-        SalesOrderRepository salesOrderRepository = new MySqlSalesOrderRepository();
-        PurchaseRepository purchaseRepository = new MySqlPurchaseRepository();
-        StockRepository stockRepository = new MySqlStockRepository();
-        SetupService setupService = new DatabaseSetupService(databaseConfig, userRepository);
+        DriverManagerConnectionFactory connections = new DriverManagerConnectionFactory();
+        UserRepository userRepository = new MySqlUserRepository(connections);
+        CategoryRepository categoryRepository = new MySqlCategoryRepository(connections);
+        SupplierRepository supplierRepository = new MySqlSupplierRepository(connections);
+        ProductRepository productRepository = new MySqlProductRepository(connections);
+        CustomerRepository customerRepository = new MySqlCustomerRepository(connections);
+        SalesOrderRepository salesOrderRepository = new MySqlSalesOrderRepository(connections);
+        PurchaseRepository purchaseRepository = new MySqlPurchaseRepository(connections);
+        StockRepository stockRepository = new MySqlStockRepository(connections);
+        SetupService setupService = new DatabaseSetupService(databaseConfig, userRepository, connections);
 
         SessionState session = new SessionState();
         AppShell appShell = new AppShell(session, userRepository);
@@ -101,7 +103,7 @@ public class MonteErpApplication extends Application {
                 supplierRepository, productRepository, customerRepository, salesOrderRepository,
                 purchaseRepository, stockRepository);
         AppServices services = new AppServices(databaseConfig, setupService,
-                () -> new DatabaseUrl(DatabaseConnection.getUrl()),
+                () -> new DatabaseUrl(connections.url()),
                 BackgroundTasks.virtualThreads());
         AppContext context = new AppContext(session, appShell, repositories, services);
 
@@ -115,7 +117,7 @@ public class MonteErpApplication extends Application {
         stage.show();
 
         Thread.startVirtualThread(() -> {
-            FirstScreen first = firstScreen(databaseConfig, setupService);
+            FirstScreen first = firstScreen(databaseConfig, setupService, connections);
             // Loading a view touches the JavaFX scene graph: back to the UI thread.
             Platform.runLater(() -> show(appShell, first));
         });
@@ -129,7 +131,8 @@ public class MonteErpApplication extends Application {
      * JavaFX thread. It always returns a screen to show, so a failure leaves the
      * user in the setup screen with its message instead of a dead window.</p>
      */
-    static FirstScreen firstScreen(DatabaseConfig databaseConfig, SetupService setupService) {
+    static FirstScreen firstScreen(DatabaseConfig databaseConfig, SetupService setupService,
+                                   DriverManagerConnectionFactory connections) {
         ConnectionSettings settings;
         try {
             databaseConfig.ensureFileExists();
@@ -142,8 +145,8 @@ public class MonteErpApplication extends Application {
             return FirstScreen.ONBOARDING;
         }
         try {
-            DatabaseConnection.configure(settings.url(), settings.user(), settings.password());
-            MigrationRunner.migrate();
+            connections.configure(settings.url(), settings.user(), settings.password());
+            MigrationRunner.migrate(connections);
             return setupService.hasAdminUser() ? FirstScreen.LOGIN : FirstScreen.ONBOARDING;
         } catch (Exception e) {
             LOGGER.log(Level.SEVERE, "Could not prepare the database", e);

@@ -15,7 +15,6 @@ import com.entidaddesconocida.monte_erp.domain.repository.SalesOrderRepository;
 import com.entidaddesconocida.monte_erp.domain.service.FifoAllocator;
 import com.entidaddesconocida.monte_erp.domain.service.InactiveEntityException;
 import com.entidaddesconocida.monte_erp.domain.service.InsufficientStockException;
-import com.entidaddesconocida.monte_erp.infrastructure.config.DatabaseConnection;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -26,6 +25,7 @@ import java.sql.Types;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * JDBC implementation of {@link SalesOrderRepository} for the
@@ -34,8 +34,8 @@ import java.util.List;
  *
  * <p>No business logic: it only translates between the entities and the table
  * rows; the FIFO rule lives in {@link FifoAllocator}. {@link #insert(SalesOrder)}
- * is <strong>transactional</strong> over the shared
- * {@link DatabaseConnection} connection: the header, every line and the stock
+ * is <strong>transactional</strong> inside a connection opened through the
+ * injected {@link ConnectionFactory}: the header, every line and the stock
  * consumption are committed together. Per line it reads the available lots with
  * {@code FOR UPDATE} (row lock: two concurrent sales cannot allocate the same
  * units), asks {@code FifoAllocator} for the split, inserts one
@@ -54,6 +54,12 @@ import java.util.List;
  * since been given up.</p>
  */
 public class MySqlSalesOrderRepository implements SalesOrderRepository {
+
+    private final ConnectionFactory connections;
+
+    public MySqlSalesOrderRepository(ConnectionFactory connections) {
+        this.connections = Objects.requireNonNull(connections, "connections");
+    }
 
     private static final String INSERT_ORDER =
             "INSERT INTO SALES_ORDER (status, total, customer_id, user_id) VALUES (?, ?, ?, ?)";
@@ -152,7 +158,7 @@ public class MySqlSalesOrderRepository implements SalesOrderRepository {
 
     @Override
     public int insert(SalesOrder order) throws SQLException, InsufficientStockException {
-        int id = DatabaseConnection.withTransaction(connection -> {
+        int id = connections.withTransaction(connection -> {
             requireActive(connection, SELECT_ACTIVE_CUSTOMER_FOR_UPDATE,
                     order.getCustomer().getId(), "cliente");
             int orderId = insertOrder(connection, order);
@@ -169,7 +175,7 @@ public class MySqlSalesOrderRepository implements SalesOrderRepository {
     @Override
     public List<SalesOrder> findAll(SalesOrderFilter filter) throws SQLException {
         List<SalesOrder> orders = new ArrayList<>();
-        try (Connection connection = DatabaseConnection.open();
+        try (Connection connection = connections.open();
              PreparedStatement ps = connection
                      .prepareStatement(SELECT_ORDERS)) {
             // Both placeholders of each guard receive the same value, so a null
@@ -194,7 +200,7 @@ public class MySqlSalesOrderRepository implements SalesOrderRepository {
     @Override
     public List<SalesOrderLine> findLines(int salesOrderId) throws SQLException {
         List<SalesOrderLine> lines = new ArrayList<>();
-        try (Connection connection = DatabaseConnection.open();
+        try (Connection connection = connections.open();
              PreparedStatement ps = connection.prepareStatement(SELECT_LINES)) {
             ps.setInt(1, salesOrderId);
             try (ResultSet rs = ps.executeQuery()) {
@@ -209,7 +215,7 @@ public class MySqlSalesOrderRepository implements SalesOrderRepository {
     @Override
     public List<StockIssue> findIssues(int salesOrderId) throws SQLException {
         List<StockIssue> issues = new ArrayList<>();
-        try (Connection connection = DatabaseConnection.open();
+        try (Connection connection = connections.open();
              PreparedStatement ps = connection.prepareStatement(SELECT_ISSUES)) {
             ps.setInt(1, salesOrderId);
             try (ResultSet rs = ps.executeQuery()) {
@@ -224,7 +230,7 @@ public class MySqlSalesOrderRepository implements SalesOrderRepository {
     @Override
     public List<SalesReportLine> findReportLines(ReportPeriod period) throws SQLException {
         List<SalesReportLine> lines = new ArrayList<>();
-        try (Connection connection = DatabaseConnection.open();
+        try (Connection connection = connections.open();
              PreparedStatement ps = connection
                      .prepareStatement(SELECT_REPORT_LINES)) {
             bindDate(ps, 1, period.from());
@@ -274,7 +280,7 @@ public class MySqlSalesOrderRepository implements SalesOrderRepository {
             throws SQLException {
         // No business logic: the transition was already validated by the domain.
         if (newStatus != OrderStatus.CANCELLED) {
-            try (Connection connection = DatabaseConnection.open();
+            try (Connection connection = connections.open();
                  PreparedStatement ps = connection.prepareStatement(UPDATE_STATUS)) {
                 ps.setString(1, newStatus.dbValue());
                 ps.setInt(2, id);
@@ -291,7 +297,7 @@ public class MySqlSalesOrderRepository implements SalesOrderRepository {
      * order, so nothing is touched.
      */
     private int cancelAndRestoreStock(int id, OrderStatus currentStatus) throws SQLException {
-        return DatabaseConnection.withTransaction(connection -> {
+        return connections.withTransaction(connection -> {
             int updated = updateStatus(connection, id, currentStatus, OrderStatus.CANCELLED);
             if (updated == 0) {
                 // Someone else moved the order: nothing to give back.

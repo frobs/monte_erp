@@ -1,6 +1,6 @@
 package com.entidaddesconocida.monte_erp.ui.support;
 
-import com.entidaddesconocida.monte_erp.infrastructure.config.DatabaseConnection;
+import com.entidaddesconocida.monte_erp.infrastructure.config.DriverManagerConnectionFactory;
 import com.entidaddesconocida.monte_erp.infrastructure.config.MigrationRunner;
 
 import java.io.IOException;
@@ -55,6 +55,9 @@ public final class TestDatabase {
 
     private static final long STARTUP_TIMEOUT_MILLIS = 180_000;
 
+    private static final DriverManagerConnectionFactory CONNECTIONS =
+            new DriverManagerConnectionFactory();
+
     private static String container;
     private static String jdbcUrl;
     private static boolean provisioned;
@@ -88,7 +91,7 @@ public final class TestDatabase {
         waitForJdbc();
         configureConnection();
         try {
-            MigrationRunner.migrate();
+            MigrationRunner.migrate(CONNECTIONS);
         } catch (SQLException | IOException e) {
             throw new IllegalStateException("Could not apply the migrations on the UI-test database", e);
         }
@@ -127,9 +130,14 @@ public final class TestDatabase {
         return jdbcUrl().replace("/" + DATABASE, "/" + schema);
     }
 
-    /** Points the application's shared connection at the container. */
+    /** Points the test-support connection factory at the seeded demo schema. */
     public static void configureConnection() {
-        DatabaseConnection.configure(jdbcUrl(), USERNAME, PASSWORD);
+        configureConnection(jdbcUrl());
+    }
+
+    /** Points the test-support connection factory at another schema of the container. */
+    public static void configureConnection(String url) {
+        CONNECTIONS.configure(url, USERNAME, PASSWORD);
     }
 
     public static String jdbcUrl() {
@@ -148,7 +156,7 @@ public final class TestDatabase {
     // ---------------------------------------------------------------- queries
 
     public static long longValue(String sql) {
-        try (Connection connection = DatabaseConnection.open();
+        try (Connection connection = CONNECTIONS.open();
              Statement statement = connection.createStatement();
              ResultSet rs = statement.executeQuery(sql)) {
             return rs.next() ? rs.getLong(1) : -1;
@@ -158,7 +166,7 @@ public final class TestDatabase {
     }
 
     public static String stringValue(String sql) {
-        try (Connection connection = DatabaseConnection.open();
+        try (Connection connection = CONNECTIONS.open();
              Statement statement = connection.createStatement();
              ResultSet rs = statement.executeQuery(sql)) {
             return rs.next() ? rs.getString(1) : null;
@@ -169,7 +177,7 @@ public final class TestDatabase {
 
     public static List<Map<String, Object>> rows(String sql) {
         List<Map<String, Object>> rows = new ArrayList<>();
-        try (Connection connection = DatabaseConnection.open();
+        try (Connection connection = CONNECTIONS.open();
              Statement statement = connection.createStatement();
              ResultSet rs = statement.executeQuery(sql)) {
             ResultSetMetaData meta = rs.getMetaData();
@@ -187,7 +195,7 @@ public final class TestDatabase {
     }
 
     public static void execute(String sql) {
-        try (Connection connection = DatabaseConnection.open();
+        try (Connection connection = CONNECTIONS.open();
              Statement statement = connection.createStatement()) {
             statement.execute(sql);
         } catch (SQLException e) {
@@ -209,7 +217,7 @@ public final class TestDatabase {
         SQLException last = null;
         while (System.currentTimeMillis() < deadline) {
             try {
-                DatabaseConnection.testConnection(jdbcUrl, USERNAME, PASSWORD);
+                DriverManagerConnectionFactory.testConnection(jdbcUrl, USERNAME, PASSWORD);
                 return;
             } catch (SQLException notReady) {
                 last = notReady;

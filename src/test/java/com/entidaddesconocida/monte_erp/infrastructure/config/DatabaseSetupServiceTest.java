@@ -27,8 +27,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <p>{@code hasAdminUser} and {@code load} are tested with fakes only. The
  * write paths ({@code save}, {@code provision}, {@code testConnection}) are also
- * unit tested thanks to {@link FakeJdbc}, which serves the static
- * {@link DatabaseConnection} and {@link MigrationRunner} without MySQL.</p>
+ * unit tested thanks to {@link FakeJdbc}, which serves the injected
+ * {@link DriverManagerConnectionFactory} and {@link MigrationRunner} without MySQL.</p>
  */
 class DatabaseSetupServiceTest {
 
@@ -39,22 +39,23 @@ class DatabaseSetupServiceTest {
     Path tempDir;
 
     private FakeJdbc fake;
+    private DriverManagerConnectionFactory connections;
 
     @BeforeEach
     void installFakeDriver() {
         fake = new FakeJdbc().install();
+        connections = new DriverManagerConnectionFactory();
     }
 
     @AfterEach
-    void resetDatabaseConnection() {
-        DatabaseConnection.configure(null, null, null);
+    void uninstallFakeDriver() {
         fake.uninstall();
     }
 
     private DatabaseSetupService service(FakeUserRepository repo) {
         FakeCredentialStore store = new FakeCredentialStore();
         DatabaseConfig config = new DatabaseConfig(store, tempDir.resolve("application.properties"));
-        return new DatabaseSetupService(config, repo);
+        return new DatabaseSetupService(config, repo, connections);
     }
 
     @Test
@@ -90,7 +91,7 @@ class DatabaseSetupServiceTest {
         DatabaseConfig config = new DatabaseConfig(store, tempDir.resolve("application.properties"));
         config.save(new ConnectionSettings("jdbc:mysql://localhost/monte_erp", "erp_user", "erp_pass"));
 
-        DatabaseSetupService service = new DatabaseSetupService(config, new FakeUserRepository());
+        DatabaseSetupService service = new DatabaseSetupService(config, new FakeUserRepository(), connections);
         ConnectionSettings loaded = service.load();
 
         assertTrue(loaded.isComplete());
@@ -107,7 +108,7 @@ class DatabaseSetupServiceTest {
                 .with("db.password", "erp_pass")
                 .throwOnGet();
         DatabaseConfig config = new DatabaseConfig(store, tempDir.resolve("application.properties"));
-        DatabaseSetupService service = new DatabaseSetupService(config, new FakeUserRepository());
+        DatabaseSetupService service = new DatabaseSetupService(config, new FakeUserRepository(), connections);
 
         var loaded = service.loadSetup();
 
@@ -133,8 +134,8 @@ class DatabaseSetupServiceTest {
 
         service.save(SETTINGS);
 
-        assertEquals(FakeJdbc.URL, DatabaseConnection.getUrl());
-        assertNotNull(DatabaseConnection.open());
+        assertEquals(FakeJdbc.URL, connections.url());
+        assertNotNull(connections.open());
     }
 
     @Test
@@ -215,7 +216,7 @@ class DatabaseSetupServiceTest {
             }
         };
         DatabaseConfig config = new DatabaseConfig(failing, tempDir.resolve("application.properties"));
-        DatabaseSetupService service = new DatabaseSetupService(config, new FakeUserRepository());
+        DatabaseSetupService service = new DatabaseSetupService(config, new FakeUserRepository(), connections);
 
         SetupException ex = assertThrows(SetupException.class, () -> service.save(SETTINGS));
 

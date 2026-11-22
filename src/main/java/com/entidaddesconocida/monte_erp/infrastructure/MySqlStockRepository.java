@@ -7,7 +7,6 @@ import com.entidaddesconocida.monte_erp.domain.model.ReportPeriod;
 import com.entidaddesconocida.monte_erp.domain.model.Stock;
 import com.entidaddesconocida.monte_erp.domain.model.StockLevel;
 import com.entidaddesconocida.monte_erp.domain.repository.StockRepository;
-import com.entidaddesconocida.monte_erp.infrastructure.config.DatabaseConnection;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -18,6 +17,7 @@ import java.sql.Types;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * JDBC implementation of {@link StockRepository} over {@code STOCK} and
@@ -35,6 +35,12 @@ import java.util.List;
  * it feeds the allocation.</p>
  */
 public class MySqlStockRepository implements StockRepository {
+
+    private final ConnectionFactory connections;
+
+    public MySqlStockRepository(ConnectionFactory connections) {
+        this.connections = Objects.requireNonNull(connections, "connections");
+    }
 
     private static final String SELECT_LEVELS = """
             SELECT p.id, p.name, p.sku, p.min_stock,
@@ -118,7 +124,7 @@ public class MySqlStockRepository implements StockRepository {
     @Override
     public List<StockLevel> findLevels() throws SQLException {
         List<StockLevel> levels = new ArrayList<>();
-        try (Connection connection = DatabaseConnection.open();
+        try (Connection connection = connections.open();
              Statement statement = connection.createStatement();
              ResultSet rs = statement.executeQuery(SELECT_LEVELS)) {
             while (rs.next()) {
@@ -136,7 +142,7 @@ public class MySqlStockRepository implements StockRepository {
             return findLevels();
         }
         List<StockLevel> levels = new ArrayList<>();
-        try (Connection connection = DatabaseConnection.open();
+        try (Connection connection = connections.open();
              PreparedStatement ps = connection.prepareStatement(SELECT_LEVELS_FILTERED)) {
             ps.setString(1, pattern);
             ps.setString(2, pattern);
@@ -153,7 +159,7 @@ public class MySqlStockRepository implements StockRepository {
 
     @Override
     public int countBelowMinimum() throws SQLException {
-        try (Connection connection = DatabaseConnection.open();
+        try (Connection connection = connections.open();
              Statement statement = connection.createStatement();
              ResultSet rs = statement.executeQuery(COUNT_BELOW_MINIMUM)) {
             return rs.next() ? rs.getInt("total") : 0;
@@ -173,7 +179,7 @@ public class MySqlStockRepository implements StockRepository {
     @Override
     public List<Stock> findAllLots(ReportPeriod period) throws SQLException {
         List<Stock> lots = new ArrayList<>();
-        try (Connection connection = DatabaseConnection.open();
+        try (Connection connection = connections.open();
              PreparedStatement ps = connection.prepareStatement(SELECT_ALL_LOTS)) {
             // Both placeholders of the lower bound (the IS NULL guard and the
             // comparison) receive the same date, and the same for the upper one.
@@ -202,7 +208,7 @@ public class MySqlStockRepository implements StockRepository {
 
     private List<Stock> findLots(String sql, int productId) throws SQLException {
         List<Stock> lots = new ArrayList<>();
-        try (Connection connection = DatabaseConnection.open();
+        try (Connection connection = connections.open();
              PreparedStatement ps = connection.prepareStatement(sql)) {
             ps.setInt(1, productId);
             try (ResultSet rs = ps.executeQuery()) {

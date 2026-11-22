@@ -1,11 +1,10 @@
 package com.entidaddesconocida.monte_erp;
 
 import com.entidaddesconocida.monte_erp.infrastructure.config.DatabaseConfig;
-import com.entidaddesconocida.monte_erp.infrastructure.config.DatabaseConnection;
+import com.entidaddesconocida.monte_erp.infrastructure.config.DriverManagerConnectionFactory;
 import com.entidaddesconocida.monte_erp.infrastructure.config.FakeCredentialStore;
 import com.entidaddesconocida.monte_erp.viewmodel.support.FakeSetupService;
 
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -39,11 +38,9 @@ class MonteErpApplicationTest {
     @TempDir
     Path directory;
 
-    @AfterEach
-    void resetConnection() {
-        // firstScreen() configures the global connection factory: leave it clean.
-        DatabaseConnection.configure(null, null, null);
-    }
+    /** Each test gets its own factory: no shared connection state to reset. */
+    private final DriverManagerConnectionFactory connections =
+            new DriverManagerConnectionFactory();
 
     @Test
     @DisplayName("A1c: sin fichero de configuración se abre el asistente inicial")
@@ -51,7 +48,7 @@ class MonteErpApplicationTest {
         DatabaseConfig config = config(null);
 
         assertEquals(MonteErpApplication.FirstScreen.ONBOARDING,
-                MonteErpApplication.firstScreen(config, new FakeSetupService()));
+                MonteErpApplication.firstScreen(config, new FakeSetupService(), connections));
         // ensureFileExists() ran on the background thread, not before the window.
         assertTrue(Files.exists(config.configFile()));
     }
@@ -62,7 +59,7 @@ class MonteErpApplicationTest {
         DatabaseConfig config = config("");
 
         assertEquals(MonteErpApplication.FirstScreen.ONBOARDING,
-                MonteErpApplication.firstScreen(config, new FakeSetupService()));
+                MonteErpApplication.firstScreen(config, new FakeSetupService(), connections));
     }
 
     @Test
@@ -71,7 +68,7 @@ class MonteErpApplicationTest {
         DatabaseConfig config = config(UNREACHABLE_URL);
 
         assertEquals(MonteErpApplication.FirstScreen.SETUP,
-                MonteErpApplication.firstScreen(config, new FakeSetupService().withAdmin(true)));
+                MonteErpApplication.firstScreen(config, new FakeSetupService().withAdmin(true), connections));
     }
 
     /**

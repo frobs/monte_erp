@@ -2,7 +2,6 @@ package com.entidaddesconocida.monte_erp.infrastructure;
 
 import com.entidaddesconocida.monte_erp.domain.model.Supplier;
 import com.entidaddesconocida.monte_erp.domain.repository.SupplierRepository;
-import com.entidaddesconocida.monte_erp.infrastructure.config.DatabaseConnection;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -11,6 +10,7 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * JDBC implementation of {@link SupplierRepository} for the {@code SUPPLIER}
@@ -23,6 +23,12 @@ import java.util.List;
  * {@code ON DELETE RESTRICT}.</p>
  */
 public class MySqlSupplierRepository implements SupplierRepository {
+
+    private final ConnectionFactory connections;
+
+    public MySqlSupplierRepository(ConnectionFactory connections) {
+        this.connections = Objects.requireNonNull(connections, "connections");
+    }
 
     private static final String COLUMNS = "id, name, phone, email, address, active";
     private static final String SELECT_ALL = "SELECT " + COLUMNS + " FROM SUPPLIER";
@@ -75,7 +81,7 @@ public class MySqlSupplierRepository implements SupplierRepository {
     @Override
     public Supplier findByName(String name) throws SQLException {
         String sql = SELECT_ALL + " WHERE name = ?";
-        try (Connection connection = DatabaseConnection.open();
+        try (Connection connection = connections.open();
              PreparedStatement ps = connection.prepareStatement(sql)) {
             ps.setString(1, name);
             try (ResultSet rs = ps.executeQuery()) {
@@ -86,7 +92,7 @@ public class MySqlSupplierRepository implements SupplierRepository {
 
     @Override
     public int insert(Supplier supplier) throws SQLException {
-        try (Connection connection = DatabaseConnection.open();
+        try (Connection connection = connections.open();
              PreparedStatement ps = connection
                      .prepareStatement(INSERT_SUPPLIER, Statement.RETURN_GENERATED_KEYS)) {
             ps.setString(1, supplier.getName());
@@ -105,7 +111,7 @@ public class MySqlSupplierRepository implements SupplierRepository {
     @Override
     public void update(Supplier supplier) throws SQLException {
         // The active flag is deliberately absent: only deactivate/activate change it.
-        try (Connection connection = DatabaseConnection.open();
+        try (Connection connection = connections.open();
              PreparedStatement ps = connection.prepareStatement(UPDATE_SUPPLIER)) {
             ps.setString(1, supplier.getName());
             ps.setString(2, supplier.getPhone());
@@ -127,7 +133,7 @@ public class MySqlSupplierRepository implements SupplierRepository {
     }
 
     private void setActive(String sql, int id) throws SQLException {
-        try (Connection connection = DatabaseConnection.open();
+        try (Connection connection = connections.open();
              PreparedStatement ps = connection.prepareStatement(sql)) {
             ps.setInt(1, id);
             ps.executeUpdate();
@@ -137,7 +143,7 @@ public class MySqlSupplierRepository implements SupplierRepository {
     private List<Supplier> query(String sql, String... parameters) throws SQLException {
         List<Supplier> suppliers = new ArrayList<>();
         if (parameters.length == 0) {
-            try (Connection connection = DatabaseConnection.open();
+            try (Connection connection = connections.open();
                  Statement statement = connection.createStatement();
                  ResultSet rs = statement.executeQuery(sql)) {
                 while (rs.next()) {
@@ -146,7 +152,7 @@ public class MySqlSupplierRepository implements SupplierRepository {
             }
             return suppliers;
         }
-        try (Connection connection = DatabaseConnection.open();
+        try (Connection connection = connections.open();
              PreparedStatement ps = connection.prepareStatement(sql)) {
             for (int index = 0; index < parameters.length; index++) {
                 ps.setString(index + 1, parameters[index]);

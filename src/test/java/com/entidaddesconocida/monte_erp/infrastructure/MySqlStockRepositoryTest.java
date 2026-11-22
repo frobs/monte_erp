@@ -4,7 +4,7 @@ import com.entidaddesconocida.monte_erp.domain.model.PurchaseStatus;
 import com.entidaddesconocida.monte_erp.domain.model.ReportPeriod;
 import com.entidaddesconocida.monte_erp.domain.model.Stock;
 import com.entidaddesconocida.monte_erp.domain.model.StockLevel;
-import com.entidaddesconocida.monte_erp.infrastructure.config.DatabaseConnection;
+import com.entidaddesconocida.monte_erp.infrastructure.config.DriverManagerConnectionFactory;
 import com.entidaddesconocida.monte_erp.infrastructure.support.FakeJdbc;
 
 import org.junit.jupiter.api.AfterEach;
@@ -40,13 +40,12 @@ class MySqlStockRepositoryTest {
     @BeforeEach
     void setUp() {
         fake = new FakeJdbc().install();
-        DatabaseConnection.configure(FakeJdbc.URL, "erp_user", "erp_pass");
-        repository = new MySqlStockRepository();
+        repository = new MySqlStockRepository(
+                new DriverManagerConnectionFactory(FakeJdbc.URL, "erp_user", "erp_pass"));
     }
 
     @AfterEach
     void tearDown() {
-        DatabaseConnection.configure(null, null, null);
         fake.uninstall();
     }
 
@@ -221,8 +220,9 @@ class MySqlStockRepositoryTest {
     @Test
     @DisplayName("Un SQLException de la base de datos se propaga")
     void sqlExceptionIsPropagated() {
-        DatabaseConnection.configure(null, null, null);
+        MySqlStockRepository unconfigured =
+                new MySqlStockRepository(new DriverManagerConnectionFactory());
 
-        assertThrows(SQLException.class, () -> repository.findLevels());
+        assertThrows(SQLException.class, unconfigured::findLevels);
     }
 }

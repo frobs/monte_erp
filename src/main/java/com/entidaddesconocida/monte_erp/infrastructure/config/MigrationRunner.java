@@ -1,5 +1,7 @@
 package com.entidaddesconocida.monte_erp.infrastructure.config;
 
+import com.entidaddesconocida.monte_erp.infrastructure.ConnectionFactory;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
@@ -64,17 +66,18 @@ public final class MigrationRunner {
     /**
      * Applies the pending migrations.
      *
+     * @param connections factory used to open the connection that runs the scripts
      * @return the number of scripts applied during this run
      * @throws SQLException when a statement fails
      * @throws IOException  when the scripts cannot be read
      */
-    public static int migrate() throws SQLException, IOException {
+    public static int migrate(ConnectionFactory connections) throws SQLException, IOException {
         List<String> scripts = discoverScripts();
         if (scripts.isEmpty()) {
             throw new IllegalStateException("No .sql script found in /" + MIGRATION_DIR);
         }
 
-        try (Connection connection = DatabaseConnection.open()) {
+        try (Connection connection = connections.open()) {
             ensureMigrationsTable(connection);
             Set<String> applied = appliedVersions(connection);
 

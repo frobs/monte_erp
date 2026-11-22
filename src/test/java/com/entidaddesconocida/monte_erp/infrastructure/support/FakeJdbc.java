@@ -24,7 +24,7 @@ import java.util.logging.Logger;
 
 /**
  * In-memory JDBC double built with dynamic proxies, so the infrastructure
- * adapters ({@code MySqlUserRepository}, {@code DatabaseConnection}) can be unit
+ * adapters ({@code MySqlUserRepository}, {@code DriverManagerConnectionFactory}) can be unit
  * tested without MySQL and without adding a database dependency.
  *
  * <p>It is a real {@link Driver} registered through {@link DriverManager}: any
@@ -46,6 +46,7 @@ public final class FakeJdbc implements Driver {
     private final List<String> preparedSql = new ArrayList<>();
     private final List<Map<Integer, Object>> boundParameters = new ArrayList<>();
     private final List<String> executedStatements = new ArrayList<>();
+    private final List<String> connectUrls = new ArrayList<>();
     private final List<String> transactionCalls = new ArrayList<>();
 
     private List<Row> rows = List.of();
@@ -79,7 +80,7 @@ public final class FakeJdbc implements Driver {
 
     /**
      * Makes the most recently opened connection report itself as closed, which
-     * is how a dropped JDBC connection looks to {@code DatabaseConnection}.
+     * is how a dropped JDBC connection looks to the connection factory.
      */
     public void markConnectionClosed() {
         if (lastConnection != null) {
@@ -131,6 +132,11 @@ public final class FakeJdbc implements Driver {
         return executedStatements;
     }
 
+    /** URLs passed to {@link #connect(String, Properties)}, in call order. */
+    public List<String> connectUrls() {
+        return connectUrls;
+    }
+
     /** Transaction calls in order: {@code setAutoCommit(x)}, {@code commit()}, {@code rollback()}. */
     public List<String> transactionCalls() {
         return transactionCalls;
@@ -158,6 +164,7 @@ public final class FakeJdbc implements Driver {
         if (!acceptsURL(url)) {
             return null;
         }
+        connectUrls.add(url);
         Connection connection = connectionProxy();
         lastConnection = connection;
         return connection;
