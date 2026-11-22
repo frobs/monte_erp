@@ -7,7 +7,7 @@ package com.entidaddesconocida.monte_erp.domain.model;
  * like {@link User}, {@link Product}, {@link Category} and {@link Supplier}.
  * RF-07 will read customers to select the customer of a sales order.</p>
  */
-public class Customer {
+public class Customer implements Contact {
 
     /** User facing label of an active customer. */
     public static final String ACTIVE_LABEL = "Activo";
@@ -50,6 +50,7 @@ public class Customer {
         this.active = active;
     }
 
+    @Override
     public int getId() {
         return id;
     }

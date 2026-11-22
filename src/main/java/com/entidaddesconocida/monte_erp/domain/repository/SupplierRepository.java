@@ -17,7 +17,7 @@ import java.util.List;
  * just flags the row, because {@code PURCHASE} references {@code SUPPLIER} with
  * {@code ON DELETE RESTRICT}.</p>
  */
-public interface SupplierRepository {
+public interface SupplierRepository extends ContactRepository<Supplier> {
 
     /** Returns every supplier (active and inactive), ordered by name. */
     List<Supplier> findAll() throws SQLException;

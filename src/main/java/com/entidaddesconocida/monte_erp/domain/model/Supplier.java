@@ -8,7 +8,7 @@ package com.entidaddesconocida.monte_erp.domain.model;
  * {@link User}, {@link Product} and {@link Category}. Like {@link Customer}, a
  * supplier carries an optional {@code address}.</p>
  */
-public class Supplier {
+public class Supplier implements Contact {
 
     /** User facing label of an active supplier. */
     public static final String ACTIVE_LABEL = "Activo";
@@ -51,6 +51,7 @@ public class Supplier {
         this.active = active;
     }
 
+    @Override
     public int getId() {
         return id;
     }

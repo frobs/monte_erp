@@ -17,7 +17,7 @@ import java.util.List;
  * just flags the row, because {@code SALES_ORDER} references {@code CUSTOMER} with
  * {@code ON DELETE RESTRICT}.</p>
  */
-public interface CustomerRepository {
+public interface CustomerRepository extends ContactRepository<Customer> {
 
     /** Returns every customer (active and inactive), ordered by name. */
     List<Customer> findAll() throws SQLException;
