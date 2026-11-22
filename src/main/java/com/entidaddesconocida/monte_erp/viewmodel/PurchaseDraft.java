@@ -40,29 +40,12 @@ import java.sql.SQLException;
  */
 public final class PurchaseDraft {
 
-    /** Largest total the {@code DECIMAL(10,2)} column can store. */
-    static final BigDecimal MAX_STORED_TOTAL = new BigDecimal("99999999.99");
-
-    /** Shown when the resulting total does not fit in the stored column. */
-    static final String TOTAL_LIMIT_ERROR =
-            "El total de la compra no puede superar 99.999.999,99 €.";
-
     /** No supplier chosen when saving a purchase. */
     static final String SUPPLIER_REQUIRED = "Selecciona un proveedor.";
-
-    /** No product chosen when adding a lot. */
-    static final String PRODUCT_REQUIRED = "Selecciona un producto.";
-
-    /** Quantity is empty, not an integer or not positive. */
-    static final String QUANTITY_INVALID =
-            "La cantidad debe ser un número entero mayor que 0.";
 
     /** Purchase price is empty, not a number or negative. */
     static final String PRICE_INVALID =
             "El precio de compra debe ser un número mayor o igual que 0.";
-
-    /** A product can only appear once in the purchase (decision D2). */
-    static final String DUPLICATED_PRODUCT = "El producto ya está en la compra.";
 
     /** A purchase needs at least one lot to be saved. */
     static final String LOTS_REQUIRED = "Añade al menos un lote a la compra.";
@@ -78,7 +61,7 @@ public final class PurchaseDraft {
     private final StringProperty quantity = new SimpleStringProperty("");
     private final StringProperty purchasePrice = new SimpleStringProperty("");
 
-    private final DraftEditor<Stock> draft = new DraftEditor<>(MAX_STORED_TOTAL,
+    private final DraftEditor<Stock> draft = new DraftEditor<>(ViewMessages.MAX_STORED_TOTAL,
             lot -> lot.getProduct() == null ? -1 : lot.getProduct().getId(),
             Stock::subtotal);
 
@@ -218,12 +201,12 @@ public final class PurchaseDraft {
 
         Product product = selectedProduct.get();
         if (product == null) {
-            productError.set(PRODUCT_REQUIRED);
+            productError.set(ViewMessages.PRODUCT_REQUIRED);
         }
 
         Integer parsedQuantity = parseQuantity();
         if (parsedQuantity == null || parsedQuantity <= 0) {
-            quantityError.set(QUANTITY_INVALID);
+            quantityError.set(ViewMessages.QUANTITY_INVALID);
         }
 
         BigDecimal parsedPrice = parsePrice();
@@ -232,7 +215,7 @@ public final class PurchaseDraft {
         }
 
         if (product != null && draft.containsProduct(product.getId())) {
-            productError.set(DUPLICATED_PRODUCT);
+            productError.set(ViewMessages.duplicatedProduct("la compra"));
         }
 
         if (hasFieldErrors()) {
@@ -243,7 +226,7 @@ public final class PurchaseDraft {
 
         Stock lot = new Stock(product, parsedQuantity, parsedPrice);
         if (!draft.add(lot)) {
-            feedback.fail(TOTAL_LIMIT_ERROR);
+            feedback.fail(ViewMessages.totalLimitError("de la compra"));
             return;
         }
         clearFieldErrors();

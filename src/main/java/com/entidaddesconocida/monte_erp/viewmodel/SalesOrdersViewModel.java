@@ -81,26 +81,26 @@ public class SalesOrdersViewModel implements ViewModel {
     protected static final String DATABASE_ERROR = ViewMessages.DATABASE_ERROR;
     private static final String SESSION_EXPIRED = ViewMessages.SESSION_EXPIRED;
     private static final String SAVE_RELOAD_ERROR =
-            "Pedido #%d guardado, pero no se pudo actualizar el histórico. Pulsa 'Actualizar'.";
+            ViewMessages.saveReloadError("Pedido", "guardado", "histórico");
 
     /** Message shown when the "desde" date is after the "hasta" date. */
     protected static final String PERIOD_ERROR = ViewMessages.PERIOD_ERROR;
 
     /** Shown when the order was saved but the filter hides the history. */
     private static final String SAVED_WITH_BAD_FILTER =
-            "Pedido #%d guardado correctamente. Corrige el filtro para verlo en el histórico.";
+            ViewMessages.savedWithBadFilter("Pedido", "guardado", "histórico", "lo");
 
     /** No customer chosen when saving an order. */
     protected static final String CUSTOMER_REQUIRED = SalesOrderDraft.CUSTOMER_REQUIRED;
 
     /** No product chosen when adding a line. */
-    protected static final String PRODUCT_REQUIRED = SalesOrderDraft.PRODUCT_REQUIRED;
+    protected static final String PRODUCT_REQUIRED = ViewMessages.PRODUCT_REQUIRED;
 
     /** Quantity is empty, not an integer or not positive. */
-    protected static final String QUANTITY_INVALID = SalesOrderDraft.QUANTITY_INVALID;
+    protected static final String QUANTITY_INVALID = ViewMessages.QUANTITY_INVALID;
 
     /** A product can only appear once in the order (decision D3). */
-    protected static final String DUPLICATED_PRODUCT = SalesOrderDraft.DUPLICATED_PRODUCT;
+    protected static final String DUPLICATED_PRODUCT = ViewMessages.duplicatedProduct("el pedido");
 
     /** Prefix of the stock pre-warning message (RF-09, decision D4). */
     protected static final String STOCK_INSUFFICIENT = SalesOrderDraft.STOCK_INSUFFICIENT;
@@ -112,12 +112,10 @@ public class SalesOrdersViewModel implements ViewModel {
     protected static final String ORDER_REQUIRED = "Selecciona un pedido.";
 
     /** RF-08: the transition is not allowed by the domain (origin, target). */
-    protected static final String INVALID_TRANSITION =
-            "El pedido no puede pasar de \"%s\" a \"%s\".";
+    protected static final String INVALID_TRANSITION = ViewMessages.invalidTransition("El pedido");
 
     /** RF-08: the optimistic guard did not match; someone else moved the order. */
-    protected static final String CONFLICT =
-            "El pedido ha cambiado desde que se cargó; se ha actualizado el histórico.";
+    protected static final String CONFLICT = ViewMessages.conflict("El pedido", "histórico");
 
     /** Texts of the RF-08 pipeline, so the in-memory and the stored order agree. */
     private static final StatusChanger.Messages<OrderStatus> STATUS_MESSAGES =
@@ -445,7 +443,7 @@ public class SalesOrdersViewModel implements ViewModel {
             return;
         }
         if (!draft.totalWithinLimit()) {
-            feedback.fail(SalesOrderDraft.TOTAL_LIMIT_ERROR);
+            feedback.fail(ViewMessages.totalLimitError("del pedido"));
             return;
         }
 

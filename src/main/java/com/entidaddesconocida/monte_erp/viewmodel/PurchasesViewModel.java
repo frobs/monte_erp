@@ -72,29 +72,29 @@ public class PurchasesViewModel implements ViewModel {
     protected static final String DATABASE_ERROR = ViewMessages.DATABASE_ERROR;
     private static final String SESSION_EXPIRED = ViewMessages.SESSION_EXPIRED;
     private static final String SAVE_RELOAD_ERROR =
-            "Compra #%d guardada, pero no se pudo actualizar el historial. Pulsa 'Actualizar'.";
+            ViewMessages.saveReloadError("Compra", "guardada", "historial");
 
     /** Message shown when the "desde" date is after the "hasta" date. */
     protected static final String PERIOD_ERROR = ViewMessages.PERIOD_ERROR;
 
     /** Shown when the purchase was saved but the filter hides the history. */
     private static final String SAVED_WITH_BAD_FILTER =
-            "Compra #%d guardada correctamente. Corrige el filtro para verla en el historial.";
+            ViewMessages.savedWithBadFilter("Compra", "guardada", "historial", "la");
 
     /** No supplier chosen when saving a purchase. */
     protected static final String SUPPLIER_REQUIRED = PurchaseDraft.SUPPLIER_REQUIRED;
 
     /** No product chosen when adding a lot. */
-    protected static final String PRODUCT_REQUIRED = PurchaseDraft.PRODUCT_REQUIRED;
+    protected static final String PRODUCT_REQUIRED = ViewMessages.PRODUCT_REQUIRED;
 
     /** Quantity is empty, not an integer or not positive. */
-    protected static final String QUANTITY_INVALID = PurchaseDraft.QUANTITY_INVALID;
+    protected static final String QUANTITY_INVALID = ViewMessages.QUANTITY_INVALID;
 
     /** Purchase price is empty, not a number or negative. */
     protected static final String PRICE_INVALID = PurchaseDraft.PRICE_INVALID;
 
     /** A product can only appear once in the purchase (decision D2). */
-    protected static final String DUPLICATED_PRODUCT = PurchaseDraft.DUPLICATED_PRODUCT;
+    protected static final String DUPLICATED_PRODUCT = ViewMessages.duplicatedProduct("la compra");
 
     /** A purchase needs at least one lot to be saved. */
     protected static final String LOTS_REQUIRED = PurchaseDraft.LOTS_REQUIRED;
@@ -103,12 +103,10 @@ public class PurchasesViewModel implements ViewModel {
     protected static final String PURCHASE_REQUIRED = "Selecciona una compra.";
 
     /** The transition is not allowed by the domain (origin, target). */
-    protected static final String INVALID_TRANSITION =
-            "La compra no puede pasar de \"%s\" a \"%s\".";
+    protected static final String INVALID_TRANSITION = ViewMessages.invalidTransition("La compra");
 
     /** The optimistic guard did not match; someone else moved the purchase. */
-    protected static final String CONFLICT =
-            "La compra ha cambiado desde que se cargó; se ha actualizado el historial.";
+    protected static final String CONFLICT = ViewMessages.conflict("La compra", "historial");
 
     /** Texts of the RF-14 pipeline. */
     private static final StatusChanger.Messages<PurchaseStatus> STATUS_MESSAGES =
@@ -417,7 +415,7 @@ public class PurchasesViewModel implements ViewModel {
             return;
         }
         if (!draft.totalWithinLimit()) {
-            feedback.fail(PurchaseDraft.TOTAL_LIMIT_ERROR);
+            feedback.fail(ViewMessages.totalLimitError("de la compra"));
             return;
         }
 

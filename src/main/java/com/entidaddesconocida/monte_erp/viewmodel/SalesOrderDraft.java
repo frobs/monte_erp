@@ -55,25 +55,8 @@ public final class SalesOrderDraft {
 
     private static final Logger LOGGER = Logger.getLogger(SalesOrderDraft.class.getName());
 
-    /** Largest total the {@code DECIMAL(10,2)} column can store. */
-    static final BigDecimal MAX_STORED_TOTAL = new BigDecimal("99999999.99");
-
-    /** Shown when the resulting total does not fit in the stored column. */
-    static final String TOTAL_LIMIT_ERROR =
-            "El total del pedido no puede superar 99.999.999,99 €.";
-
     /** No customer chosen when saving an order. */
     static final String CUSTOMER_REQUIRED = "Selecciona un cliente.";
-
-    /** No product chosen when adding a line. */
-    static final String PRODUCT_REQUIRED = "Selecciona un producto.";
-
-    /** Quantity is empty, not an integer or not positive. */
-    static final String QUANTITY_INVALID =
-            "La cantidad debe ser un número entero mayor que 0.";
-
-    /** A product can only appear once in the order (decision D3). */
-    static final String DUPLICATED_PRODUCT = "El producto ya está en el pedido.";
 
     /** Prefix of the stock pre-warning message (RF-09, decision D4). */
     static final String STOCK_INSUFFICIENT = "Stock insuficiente";
@@ -102,7 +85,7 @@ public final class SalesOrderDraft {
     /** Available units of the selected product, refreshed when the selection changes (RF-09). */
     private final ReadOnlyIntegerWrapper availableStock = new ReadOnlyIntegerWrapper(0);
 
-    private final DraftEditor<SalesOrderLine> draft = new DraftEditor<>(MAX_STORED_TOTAL,
+    private final DraftEditor<SalesOrderLine> draft = new DraftEditor<>(ViewMessages.MAX_STORED_TOTAL,
             line -> line.getProduct() == null ? -1 : line.getProduct().getId(),
             SalesOrderLine::subtotal);
 
@@ -271,16 +254,16 @@ public final class SalesOrderDraft {
 
         Product product = selectedProduct.get();
         if (product == null) {
-            productError.set(PRODUCT_REQUIRED);
+            productError.set(ViewMessages.PRODUCT_REQUIRED);
         }
 
         Integer parsedQuantity = parseQuantity();
         if (parsedQuantity == null || parsedQuantity <= 0) {
-            quantityError.set(QUANTITY_INVALID);
+            quantityError.set(ViewMessages.QUANTITY_INVALID);
         }
 
         if (product != null && draft.containsProduct(product.getId())) {
-            productError.set(DUPLICATED_PRODUCT);
+            productError.set(ViewMessages.duplicatedProduct("el pedido"));
         }
 
         if (hasFieldErrors()) {
@@ -316,8 +299,8 @@ public final class SalesOrderDraft {
      */
     private void onStockChecked(Product product, int requested, int available) {
         if (draft.containsProduct(product.getId())) {
-            productError.set(DUPLICATED_PRODUCT);
-            feedback.fail(DUPLICATED_PRODUCT);
+            productError.set(ViewMessages.duplicatedProduct("el pedido"));
+            feedback.fail(ViewMessages.duplicatedProduct("el pedido"));
             return;
         }
         if (available < requested) {
@@ -329,7 +312,7 @@ public final class SalesOrderDraft {
         }
         SalesOrderLine line = new SalesOrderLine(requested, product.getPrice(), product);
         if (!draft.add(line)) {
-            feedback.fail(TOTAL_LIMIT_ERROR);
+            feedback.fail(ViewMessages.totalLimitError("del pedido"));
             return;
         }
         clearFieldErrors();
