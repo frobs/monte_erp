@@ -242,6 +242,25 @@ class CrudViewModelTest {
     }
 
     @Test
+    @DisplayName("Una recarga antigua no pisa las filas de la más reciente")
+    void staleReloadIsDiscarded() {
+        repository.withItem(new FakeCrudItem("Dos"));
+        Deque<Runnable> pending = new ArrayDeque<>();
+        TestViewModel deferred = new TestViewModel(repository, deferredTasks(pending));
+
+        // Two searches whose answers have different sizes, so the two results are
+        // distinguishable when they arrive out of order.
+        deferred.searchTextProperty().set("uno");
+        deferred.searchTextProperty().set("o");
+
+        // The first search resolves last: the newest rows must stay.
+        pending.removeLast().run();
+        pending.removeFirst().run();
+
+        assertEquals(2, deferred.items.size());
+    }
+
+    @Test
     @DisplayName("save() encola la escritura: el bloqueo ocurre en el callback, no en el hilo de UI")
     void saveRunsTheWriteInTheBackground() {
         Deque<Runnable> pending = new ArrayDeque<>();

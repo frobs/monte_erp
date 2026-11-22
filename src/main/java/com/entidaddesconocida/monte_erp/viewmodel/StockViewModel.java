@@ -1,6 +1,7 @@
 package com.entidaddesconocida.monte_erp.viewmodel;
 
 import com.entidaddesconocida.monte_erp.app.BackgroundTasks;
+import com.entidaddesconocida.monte_erp.app.LatestQuery;
 import com.entidaddesconocida.monte_erp.app.SessionGuard;
 import com.entidaddesconocida.monte_erp.app.SessionValidator;
 import com.entidaddesconocida.monte_erp.domain.model.Stock;
@@ -61,11 +62,11 @@ public class StockViewModel implements ViewModel {
     private final StringProperty errorMessage = new SimpleStringProperty("");
 
     /**
-     * Sequence of the level queries. Only the newest submission is applied: with
-     * the asynchronous reload a slow query for a previous search text could
-     * otherwise overwrite the rows of the current one.
+     * Level queries. Only the newest submission is applied: with the asynchronous
+     * reload a slow query for a previous search text could otherwise overwrite
+     * the rows of the current one.
      */
-    private long levelQueryGeneration;
+    private final LatestQuery levelQueries;
 
     public StockViewModel(StockRepository stockRepository) {
         this(stockRepository, null, BackgroundTasks.synchronous());
@@ -86,6 +87,7 @@ public class StockViewModel implements ViewModel {
         this.sessionGuard = new SessionGuard(LOGGER, sessionValidator,
                 DATABASE_ERROR, SESSION_EXPIRED);
         this.backgroundTasks = backgroundTasks;
+        this.levelQueries = new LatestQuery(backgroundTasks);
         searchText.addListener((observable, oldValue, newValue) -> reloadLevels());
         onlyBelowMinimum.addListener((observable, oldValue, newValue) -> reloadLevels());
     }
@@ -135,24 +137,16 @@ public class StockViewModel implements ViewModel {
         String search = searchText.get();
         boolean onlyBelowMin = onlyBelowMinimum.get();
         // The queries run off the UI thread; only the state update comes back.
-        long generation = ++levelQueryGeneration;
-        backgroundTasks.submit(
+        levelQueries.submit(
                 () -> new LevelSnapshot(stockRepository.findLevels(search, onlyBelowMin),
                         stockRepository.countBelowMinimum()),
                 snapshot -> {
-                    if (generation != levelQueryGeneration) {
-                        return;
-                    }
                     levels.setAll(snapshot.levels());
                     alertCount.set("Productos bajo mínimo: " + snapshot.belowMinimum());
                     selectedLevel.set(null);
                     selectedLots.clear();
                 },
-                failure -> {
-                    if (generation == levelQueryGeneration) {
-                        reportLoadFailure(failure);
-                    }
-                });
+                this::reportLoadFailure);
     }
 
     /**
@@ -207,13 +201,9 @@ public class StockViewModel implements ViewModel {
         }
         String search = searchText.get();
         boolean onlyBelowMin = onlyBelowMinimum.get();
-        long generation = ++levelQueryGeneration;
-        backgroundTasks.submit(
+        levelQueries.submit(
                 () -> stockRepository.findLevels(search, onlyBelowMin),
                 loaded -> {
-                    if (generation != levelQueryGeneration) {
-                        return;
-                    }
                     levels.setAll(loaded);
                     StockLevel selected = selectedLevel.get();
                     if (selected != null
@@ -223,9 +213,6 @@ public class StockViewModel implements ViewModel {
                     }
                 },
                 failure -> {
-                    if (generation != levelQueryGeneration) {
-                        return;
-                    }
                     LOGGER.log(Level.SEVERE, "Could not reload the filtered stock levels", failure);
                     errorMessage.set(DATABASE_ERROR);
                 });

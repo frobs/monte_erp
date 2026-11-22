@@ -1,6 +1,7 @@
 package com.entidaddesconocida.monte_erp.viewmodel;
 
 import com.entidaddesconocida.monte_erp.app.BackgroundTasks;
+import com.entidaddesconocida.monte_erp.app.LatestQuery;
 import com.entidaddesconocida.monte_erp.app.SessionGuard;
 
 import javafx.beans.property.ObjectProperty;
@@ -124,11 +125,10 @@ public final class CrudActions<T> implements CrudScreen<T> {
     private final WriteGuard writeGuard = new WriteGuard();
 
     /**
-     * Sequence of the list queries. Only the newest submission is applied: with
-     * the asynchronous reload a slow query for a previous search text could
-     * otherwise overwrite the rows of the current one.
+     * List queries: only the newest submission is applied, so a slow query for a
+     * previous search text cannot overwrite the rows of the current one.
      */
-    private long queryGeneration;
+    private final LatestQuery rowsQueries;
 
     public CrudActions(Entity<T> entity, FormModel<T> form, CrudLabels<T> labels,
                        Feedback feedback, SessionGuard sessionGuard,
@@ -139,6 +139,7 @@ public final class CrudActions<T> implements CrudScreen<T> {
         this.feedback = feedback;
         this.sessionGuard = sessionGuard;
         this.backgroundTasks = backgroundTasks;
+        this.rowsQueries = new LatestQuery(backgroundTasks);
         // Selecting a row loads it into the form; clearing the selection resets
         // the form so a stale row can never be edited/saved by accident.
         selectedItem.addListener((observable, oldValue, newValue) -> {
@@ -397,19 +398,7 @@ public final class CrudActions<T> implements CrudScreen<T> {
      * submitted since, so a stale result never replaces fresher rows.
      */
     private void submitRows(Consumer<List<T>> onSuccess, Consumer<Throwable> onFailure) {
-        long generation = ++queryGeneration;
-        backgroundTasks.submit(
-                entity.rowsQuery(),
-                loaded -> {
-                    if (generation == queryGeneration) {
-                        onSuccess.accept(loaded);
-                    }
-                },
-                failure -> {
-                    if (generation == queryGeneration) {
-                        onFailure.accept(failure);
-                    }
-                });
+        rowsQueries.submit(entity.rowsQuery(), onSuccess, onFailure);
     }
 
     /**

@@ -1,6 +1,7 @@
 package com.entidaddesconocida.monte_erp.viewmodel;
 
 import com.entidaddesconocida.monte_erp.app.BackgroundTasks;
+import com.entidaddesconocida.monte_erp.app.LatestQuery;
 import com.entidaddesconocida.monte_erp.domain.model.Customer;
 import com.entidaddesconocida.monte_erp.domain.model.Product;
 import com.entidaddesconocida.monte_erp.domain.model.SalesOrder;
@@ -112,10 +113,10 @@ public final class SalesOrderDraft {
     private boolean lineCheckInFlight;
 
     /**
-     * Sequence of the available-stock queries: the response of a product the
-     * user has already left behind is discarded.
+     * Available-stock queries: the response of a product the user has already left
+     * behind is discarded.
      */
-    private long stockGeneration;
+    private final LatestQuery availableStockQueries;
 
     private final ReadOnlyStringWrapper customerError = new ReadOnlyStringWrapper("");
     private final ReadOnlyStringWrapper productError = new ReadOnlyStringWrapper("");
@@ -134,6 +135,7 @@ public final class SalesOrderDraft {
         this.productRepository = productRepository;
         this.stockRepository = stockRepository;
         this.backgroundTasks = backgroundTasks;
+        this.availableStockQueries = new LatestQuery(backgroundTasks);
         this.feedback = feedback;
         this.sessionActive = sessionActive;
         // The view shows the available units of the chosen product and caps the
@@ -371,27 +373,18 @@ public final class SalesOrderDraft {
      * line is added.
      */
     private void refreshAvailableStock(Product product) {
-        long generation = ++stockGeneration;
-        if (product == null) {
-            availableStock.set(0);
-            return;
-        }
-        if (!sessionActive.getAsBoolean()) {
+        if (product == null || !sessionActive.getAsBoolean()) {
+            // The query in flight belongs to the product the user just left, so it
+            // must not bring its stock back.
+            availableStockQueries.invalidate();
             availableStock.set(0);
             return;
         }
         int productId = product.getId();
-        backgroundTasks.submit(
+        availableStockQueries.submit(
                 () -> FifoAllocator.availableTotal(stockRepository.findAvailable(productId)),
-                available -> {
-                    if (generation == stockGeneration) {
-                        applyAvailableStock(available);
-                    }
-                },
+                this::applyAvailableStock,
                 failure -> {
-                    if (generation != stockGeneration) {
-                        return;
-                    }
                     LOGGER.log(Level.SEVERE, "Could not load the available stock", failure);
                     availableStock.set(0);
                     feedback.fail(ViewMessages.DATABASE_ERROR);
