@@ -96,13 +96,14 @@ public class StockView implements FxmlView<StockViewModel> {
 
     @FXML
     private void initialize() {
-        setupFields();
+        bindTables();
+        bindFilters();
         bindSelection();
         bindMessages();
         viewModel.load();
     }
 
-    private void setupFields() {
+    private void bindTables() {
         levelProductColumn.setCellValueFactory(cell -> new ReadOnlyStringWrapper(
                 cell.getValue().getProduct() == null ? "" : cell.getValue().getProduct().getName()));
         levelSkuColumn.setCellValueFactory(cell -> new ReadOnlyStringWrapper(
@@ -143,7 +144,9 @@ public class StockView implements FxmlView<StockViewModel> {
 
         levelsTable.setItems(viewModel.levels());
         lotsTable.setItems(viewModel.selectedLots());
+    }
 
+    private void bindFilters() {
         searchField.textProperty().bindBidirectional(viewModel.searchTextProperty());
         onlyBelowMinimumCheck.selectedProperty()
                 .bindBidirectional(viewModel.onlyBelowMinimumProperty());

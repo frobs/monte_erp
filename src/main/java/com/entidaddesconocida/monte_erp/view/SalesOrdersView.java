@@ -178,14 +178,16 @@ public class SalesOrdersView implements FxmlView<SalesOrdersViewModel> {
 
     @FXML
     private void initialize() {
-        setupFields();
+        bindTables();
+        bindForm();
+        bindFilters();
         bindSelection();
         bindMessages();
         viewModel.load();
         refreshFilterCombos();
     }
 
-    private void setupFields() {
+    private void bindTables() {
         orderIdColumn.setCellValueFactory(cell -> new ReadOnlyStringWrapper(
                 cell.getValue().getId() == 0 ? "" : "#" + cell.getValue().getId()));
         orderDateColumn.setCellValueFactory(cell -> new ReadOnlyStringWrapper(
@@ -238,7 +240,10 @@ public class SalesOrdersView implements FxmlView<SalesOrdersViewModel> {
         orderLinesTable.setItems(viewModel.selectedOrderLines());
         consumedLotsTable.setItems(viewModel.selectedOrderIssues());
         draftLinesTable.setItems(viewModel.draftLines());
+        countLabel.textProperty().bind(Bindings.size(viewModel.orders()).asString("%d pedidos"));
+    }
 
+    private void bindForm() {
         customerCombo.setItems(viewModel.customers());
         SearchableCombos.install(customerCombo,
                 customer -> customer == null ? "" : customer.getName());
@@ -265,9 +270,9 @@ public class SalesOrdersView implements FxmlView<SalesOrdersViewModel> {
         totalLabel.textProperty().bind(Bindings.createStringBinding(
                 () -> "Total: " + Amounts.currency(viewModel.orderTotalProperty().get()),
                 viewModel.orderTotalProperty()));
+    }
 
-        countLabel.textProperty().bind(Bindings.size(viewModel.orders()).asString("%d pedidos"));
-
+    private void bindFilters() {
         fromDatePicker.valueProperty().bindBidirectional(viewModel.fromDateProperty());
         toDatePicker.valueProperty().bindBidirectional(viewModel.toDateProperty());
 

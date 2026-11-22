@@ -167,14 +167,16 @@ public class PurchasesView implements FxmlView<PurchasesViewModel> {
 
     @FXML
     private void initialize() {
-        setupFields();
+        bindTables();
+        bindForm();
+        bindFilters();
         bindSelection();
         bindMessages();
         viewModel.load();
         refreshFilterCombos();
     }
 
-    private void setupFields() {
+    private void bindTables() {
         purchaseIdColumn.setCellValueFactory(cell -> new ReadOnlyStringWrapper(
                 cell.getValue().getId() == 0 ? "" : "#" + cell.getValue().getId()));
         purchaseDateColumn.setCellValueFactory(cell -> new ReadOnlyStringWrapper(
@@ -212,7 +214,10 @@ public class PurchasesView implements FxmlView<PurchasesViewModel> {
         purchasesTable.setItems(viewModel.purchases());
         purchaseLotsTable.setItems(viewModel.selectedPurchaseLots());
         draftLotsTable.setItems(viewModel.draftLots());
+        countLabel.textProperty().bind(Bindings.size(viewModel.purchases()).asString("%d compras"));
+    }
 
+    private void bindForm() {
         supplierCombo.setItems(viewModel.suppliers());
         SearchableCombos.install(supplierCombo,
                 supplier -> supplier == null ? "" : supplier.getName());
@@ -231,9 +236,9 @@ public class PurchasesView implements FxmlView<PurchasesViewModel> {
         totalLabel.textProperty().bind(Bindings.createStringBinding(
                 () -> "Total: " + Amounts.currency(viewModel.purchaseTotalProperty().get()),
                 viewModel.purchaseTotalProperty()));
+    }
 
-        countLabel.textProperty().bind(Bindings.size(viewModel.purchases()).asString("%d compras"));
-
+    private void bindFilters() {
         fromDatePicker.valueProperty().bindBidirectional(viewModel.fromDateProperty());
         toDatePicker.valueProperty().bindBidirectional(viewModel.toDateProperty());
 
