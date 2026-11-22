@@ -22,6 +22,8 @@
  *       and locate the companion {@code .fxml} resource).</li>
  *   <li>The {@code viewmodel} package is opened to {@code de.saxsys.mvvmfx} so
  *       the framework can instantiate ViewModels and inject {@code @InjectViewModel}.</li>
+ *   <li>{@code java.desktop} is required because OpenPDF (PDF export) and the
+ *       report image handling touch {@code java.awt}.</li>
  *   <li>{@code com.github.librepdf.openpdf} is an <em>automatic module</em> used
  *       only to export the reports as PDF; it declares
  *       {@code Automatic-Module-Name: com.github.librepdf.openpdf} in its
@@ -31,14 +33,9 @@
 module com.entidaddesconocida.monte_erp {
     requires javafx.controls;
     requires javafx.fxml;
-    requires javafx.web;
 
     requires org.controlsfx.controls;
-    requires com.dlsc.formsfx;
     requires net.synedra.validatorfx;
-    requires org.kordamp.ikonli.javafx;
-    requires org.kordamp.bootstrapfx.core;
-    requires eu.hansolo.tilesfx;
 
     requires java.sql;
     requires java.desktop;

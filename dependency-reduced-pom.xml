@@ -128,6 +128,18 @@
   </profiles>
   <dependencies>
     <dependency>
+      <groupId>org.openjfx</groupId>
+      <artifactId>javafx-swing</artifactId>
+      <version>21.0.6</version>
+      <scope>test</scope>
+      <exclusions>
+        <exclusion>
+          <artifactId>javafx-swing</artifactId>
+          <groupId>org.openjfx</groupId>
+        </exclusion>
+      </exclusions>
+    </dependency>
+    <dependency>
       <groupId>org.junit.jupiter</groupId>
       <artifactId>junit-jupiter-api</artifactId>
       <version>5.12.1</version>
